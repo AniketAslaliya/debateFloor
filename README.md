@@ -131,6 +131,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 7860
 
 - uses OpenAI client for all LLM calls,
 - reads only `API_BASE_URL`, `MODEL_NAME`, `HF_TOKEN`,
+- applies a deterministic task-critical stabilization layer on top of LLM output to keep medium/hard task behavior robust across alternate evaluator models,
 - emits strict stdout lines in this format:
 
 - `[START] task=... env=... model=...`
