@@ -195,12 +195,10 @@ def run_task(task_name: str) -> Dict[str, Any]:
         last_error = str(exc)
     finally:
         rewards_str = ",".join(f"{r:.2f}" for r in rewards)
-        final_score = float(observation.get("reward", 0.0) if isinstance(observation, dict) else 0.0)
         print(
-            "[END] success={} steps={} score={:.2f} rewards=[{}]".format(
+            "[END] success={} steps={} rewards={}".format(
                 _format_bool(success),
                 step_idx,
-                final_score,
                 rewards_str,
             )
         )
@@ -215,10 +213,8 @@ def run_task(task_name: str) -> Dict[str, Any]:
 
 
 def main() -> None:
-    results = [run_task(task) for task in TASKS]
-    mean_score = sum(item["score"] for item in results) / max(len(results), 1)
-    # Keep extra summary minimal; judge parser uses [START]/[STEP]/[END] lines.
-    print(json.dumps({"benchmark": "insurance_claim_triage_fraud_env", "mean_score": round(mean_score, 4), "results": results}))
+    for task in TASKS:
+        run_task(task)
 
 
 if __name__ == "__main__":

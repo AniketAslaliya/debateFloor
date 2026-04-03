@@ -26,6 +26,16 @@ _env = InsuranceClaimEnvironment()
 _lock = Lock()
 
 
+@app.get("/")
+def index() -> dict:
+    return {
+        "name": "insurance_claim_triage_fraud_env",
+        "status": "ok",
+        "docs": "/docs",
+        "health": "/health",
+    }
+
+
 @app.post("/reset")
 def reset(body: ResetBody = ResetBody()) -> dict:
     with _lock:
