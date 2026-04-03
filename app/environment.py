@@ -14,8 +14,11 @@ from .models import (
 )
 from .tasks import (
     TASKS,
+    RuntimeTask,
+    build_runtime_task,
     build_initial_payload,
     compute_reward_breakdown,
+    get_evidence_keyword_hints,
     get_task_definition,
 )
 
@@ -31,20 +34,33 @@ class InsuranceClaimEnvironment(Environment[InsuranceClaimAction, InsuranceClaim
         self._found_signals: List[str] = []
         self._false_flags: int = 0
         self._investigation_targets: List[str] = []
+        self._evidence_hits: int = 0
+        self._evidence_total: int = 0
+        self._exploit_penalty: float = 0.0
+        self._request_info_streak: int = 0
+        self._last_progress_step: int = 0
+        self._runtime_task: RuntimeTask | None = None
         self._last_message = "Environment initialized"
 
     def reset(self, task_id: Optional[str] = None, seed: Optional[int] = None, episode_id: Optional[str] = None) -> InsuranceClaimObservation:
-        del seed  # deterministic hardcoded fixtures by design
         selected_task = task_id or "clean_claim"
-        task = get_task_definition(selected_task)
+        task = build_runtime_task(selected_task, seed=seed)
+        self._runtime_task = task
 
-        self._payload = build_initial_payload(task.task_id)
+        self._payload = build_initial_payload(task)
         self._action_history = []
         self._flags_raised = []
         self._found_signals = []
         self._false_flags = 0
         self._investigation_targets = []
-        self._last_message = f"Task '{task.task_id}' loaded. Start investigation."
+        self._evidence_hits = 0
+        self._evidence_total = 0
+        self._exploit_penalty = 0.0
+        self._request_info_streak = 0
+        self._last_progress_step = 0
+        self._last_message = (
+            f"Task '{task.task_id}' loaded (variant={task.variant_id}). Start investigation."
+        )
 
         self._state = InsuranceClaimState(
             episode_id=episode_id or str(uuid4()),
@@ -94,6 +110,9 @@ class InsuranceClaimEnvironment(Environment[InsuranceClaimAction, InsuranceClaim
             }
         )
 
+        if not self._state.done and (self._state.step_number - self._last_progress_step) >= 4:
+            self._exploit_penalty += 0.01
+
         if self._state.step_number >= self._state.max_steps and not self._state.done:
             self._state.done = True
             self._state.status = ClaimStatus.CLOSED
@@ -108,7 +127,16 @@ class InsuranceClaimEnvironment(Environment[InsuranceClaimAction, InsuranceClaim
         return self._state
 
     def _apply_action(self, action: InsuranceClaimAction) -> str:
-        task = get_task_definition(self._state.task_id)
+        task = self._runtime_task or build_runtime_task(self._state.task_id)
+
+        if action.action_type == "request_information":
+            self._request_info_streak += 1
+            if self._request_info_streak > 2:
+                self._exploit_penalty += 0.03
+            self._state.penalty_total += 0.02
+            return "Additional information requested. Useful but consumes time and SLA budget."
+
+        self._request_info_streak = 0
 
         if action.action_type == "validate_document":
             doc_id = str(action.parameters.get("doc_id", "")).strip()
@@ -124,12 +152,9 @@ class InsuranceClaimEnvironment(Environment[InsuranceClaimAction, InsuranceClaim
                 for signal in discovered:
                     if signal not in self._found_signals:
                         self._found_signals.append(signal)
+                self._last_progress_step = self._state.step_number
                 return f"Validated {doc_id}. Potential inconsistencies detected: {', '.join(discovered)}"
             return f"Validated {doc_id}. No direct inconsistency detected."
-
-        if action.action_type == "request_information":
-            self._state.penalty_total += 0.02
-            return "Additional information requested. Useful but consumes time and SLA budget."
 
         if action.action_type == "flag_fraud_signal":
             flag_id = str(action.parameters.get("flag_id", "")).strip()
@@ -139,12 +164,25 @@ class InsuranceClaimEnvironment(Environment[InsuranceClaimAction, InsuranceClaim
             if not evidence:
                 raise ValueError("'evidence' is required for flag_fraud_signal")
 
+            if flag_id in self._flags_raised:
+                self._exploit_penalty += 0.05
+
             if flag_id not in self._flags_raised:
                 self._flags_raised.append(flag_id)
 
+            self._evidence_total += 1
+
             if flag_id in task.expected_signals:
+                hints = get_evidence_keyword_hints(task.task_id, flag_id)
+                evidence_lc = evidence.lower()
+                if not hints or any(h in evidence_lc for h in hints):
+                    self._evidence_hits += 1
+                else:
+                    self._exploit_penalty += 0.02
+
                 if flag_id not in self._found_signals:
                     self._found_signals.append(flag_id)
+                self._last_progress_step = self._state.step_number
                 return f"Fraud signal '{flag_id}' logged with evidence."
 
             self._false_flags += 1
@@ -216,7 +254,16 @@ class InsuranceClaimEnvironment(Environment[InsuranceClaimAction, InsuranceClaim
         return unique_signals
 
     def _build_observation(self, message: str) -> InsuranceClaimObservation:
-        task = get_task_definition(self._state.task_id)
+        task = self._runtime_task or build_runtime_task(self._state.task_id)
+        if len(task.expected_signals) == 0:
+            evidence_quality_score = 1.0 if self._false_flags == 0 else 0.0
+        else:
+            evidence_quality_score = (
+                float(self._evidence_hits) / float(self._evidence_total)
+                if self._evidence_total > 0
+                else 0.0
+            )
+
         reward_breakdown = compute_reward_breakdown(
             task_id=task.task_id,
             expected_signals=task.expected_signals,
@@ -229,6 +276,8 @@ class InsuranceClaimEnvironment(Environment[InsuranceClaimAction, InsuranceClaim
             payout_estimate_inr=self._state.payout_estimate_inr,
             payout_band=task.payout_band,
             investigation_targets=self._investigation_targets,
+            evidence_quality_score=evidence_quality_score,
+            exploit_penalty=min(self._exploit_penalty, 0.5),
             penalty_total=self._state.penalty_total,
         )
 
@@ -251,6 +300,10 @@ class InsuranceClaimEnvironment(Environment[InsuranceClaimAction, InsuranceClaim
             metadata={
                 "last_action_error": self._state.last_action_error,
                 "investigation_targets": self._investigation_targets,
+                "variant_id": self._payload.get("variant_id", 0),
+                "evidence_hits": self._evidence_hits,
+                "evidence_total": self._evidence_total,
+                "exploit_penalty": round(self._exploit_penalty, 4),
             },
             reward_breakdown=reward_breakdown,
         )

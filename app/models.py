@@ -20,6 +20,8 @@ class InsuranceClaimReward(BaseModel):
     payout_accuracy: float = Field(default=0.0, ge=0.0, le=1.0)
     efficiency_score: float = Field(default=0.0, ge=0.0, le=1.0)
     consistency_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    evidence_quality_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    exploit_penalty: float = Field(default=0.0, ge=0.0)
     penalty: float = Field(default=0.0)
     total: float = Field(default=0.0, ge=0.0, le=1.0)
 
