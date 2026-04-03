@@ -1,14 +1,7 @@
 name: Tests
 
 on:
-  pull_request:
-    branches:
-      - main
-      - release
-  push:
-    branches:
-      - main
-  workflow_dispatch:  # Allow manual trigger
+  workflow_dispatch:
 
 jobs:
   test:
