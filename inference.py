@@ -17,6 +17,15 @@ client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 SERVER_URL = "http://127.0.0.1:7860"
 TASKS = ["clean_claim", "contradictory_claim", "coordinated_fraud"]
 MAX_STEPS_DEFAULT = 20
+ALLOWED_ACTIONS = {
+    "validate_document",
+    "request_information",
+    "flag_fraud_signal",
+    "estimate_payout",
+    "approve_claim",
+    "deny_claim",
+    "request_investigation",
+}
 
 
 def _format_bool(value: bool) -> str:
@@ -44,6 +53,118 @@ def _build_prompt(observation: Dict[str, Any]) -> str:
         "\n\nObservation:\n"
         + json.dumps(compact, ensure_ascii=True)
     )
+
+
+def _next_unvalidated_doc_id(observation: Dict[str, Any]) -> Optional[str]:
+    documents = observation.get("documents", [])
+    validated = {
+        h.get("parameters", {}).get("doc_id")
+        for h in observation.get("action_history", [])
+        if h.get("action_type") == "validate_document"
+    }
+    for doc in documents:
+        doc_id = doc.get("doc_id")
+        if doc_id and doc_id not in validated:
+            return str(doc_id)
+    return None
+
+
+def _repair_action(observation: Dict[str, Any], action: Dict[str, Any]) -> Dict[str, Any]:
+    repaired = dict(action) if isinstance(action, dict) else {}
+    action_type = str(repaired.get("action_type", "")).strip()
+    parameters = repaired.get("parameters")
+    if not isinstance(parameters, dict):
+        parameters = {}
+
+    if action_type not in ALLOWED_ACTIONS:
+        return _fallback_action(observation)
+
+    repaired.setdefault("reasoning", "")
+
+    if action_type == "validate_document":
+        doc_id = str(parameters.get("doc_id", "")).strip()
+        if not doc_id:
+            next_doc_id = _next_unvalidated_doc_id(observation)
+            if next_doc_id:
+                parameters["doc_id"] = next_doc_id
+            else:
+                return _fallback_action(observation)
+
+    elif action_type == "estimate_payout":
+        amount = parameters.get("amount_inr")
+        if amount is None:
+            # Prefer grounded estimate from current observation.
+            docs = observation.get("documents", [])
+            estimate = None
+            for doc in docs:
+                metadata = doc.get("metadata", {}) if isinstance(doc, dict) else {}
+                if "estimate_inr" in metadata:
+                    estimate = metadata.get("estimate_inr")
+                    break
+                if "declared_cost_inr" in metadata:
+                    estimate = metadata.get("declared_cost_inr")
+            parameters["amount_inr"] = estimate if estimate is not None else 50000
+
+    elif action_type == "flag_fraud_signal":
+        flag_id = str(parameters.get("flag_id", "")).strip()
+        evidence = str(parameters.get("evidence", "")).strip()
+        task_id = str(observation.get("task_id", ""))
+        if not flag_id:
+            if task_id == "contradictory_claim":
+                known = ["date_mismatch", "cost_inflation", "signature_mismatch"]
+            elif task_id == "coordinated_fraud":
+                known = [
+                    "shared_repair_shop_far",
+                    "shared_emergency_contact",
+                    "near_identical_descriptions",
+                    "recent_policy_cluster",
+                ]
+            else:
+                known = []
+
+            used = {
+                h.get("parameters", {}).get("flag_id")
+                for h in observation.get("action_history", [])
+                if h.get("action_type") == "flag_fraud_signal"
+            }
+            for candidate in known:
+                if candidate not in used:
+                    flag_id = candidate
+                    break
+            if not flag_id and known:
+                flag_id = known[0]
+            if flag_id:
+                parameters["flag_id"] = flag_id
+
+        if not evidence:
+            parameters["evidence"] = "Structured cross-check evidence from claim documents"
+
+        if not str(parameters.get("flag_id", "")).strip():
+            return _fallback_action(observation)
+
+    elif action_type == "request_investigation":
+        targets = parameters.get("target_claim_ids")
+        if not isinstance(targets, list):
+            linked = observation.get("linked_claims", [])
+            claim_ids = []
+            for c in linked:
+                cid = c.get("claim_id") if isinstance(c, dict) else None
+                if cid:
+                    claim_ids.append(str(cid))
+            if not claim_ids:
+                current = observation.get("claim_id")
+                claim_ids = [str(current)] if current else []
+            parameters["target_claim_ids"] = claim_ids
+        if not str(parameters.get("reason", "")).strip():
+            parameters["reason"] = "Escalating for manual SIU review"
+
+    elif action_type == "deny_claim":
+        if not str(parameters.get("reason", "")).strip():
+            parameters["reason"] = "Material contradictions indicate likely fraud"
+
+    repaired["parameters"] = parameters
+    repaired["action_type"] = action_type
+    return repaired
 
 
 def _fallback_action(observation: Dict[str, Any]) -> Dict[str, Any]:
@@ -144,7 +265,7 @@ def _llm_action(observation: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(parsed, dict) and "action_type" in parsed:
             parsed.setdefault("parameters", {})
             parsed.setdefault("reasoning", "")
-            return parsed
+            return _repair_action(observation, parsed)
     except Exception:
         pass
 

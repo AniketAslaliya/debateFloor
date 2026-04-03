@@ -168,3 +168,24 @@ docker run --rm -p 7860:7860 insurance-claim-env:latest
 ## Baseline Score Notes
 
 Scores are reproducible for fixed model + prompt behavior because tasks and graders are fully deterministic.
+
+## Seeded Variance and Penalty Fairness
+
+A lightweight benchmark is included to show that reward behavior is stable across seeded variants while still penalizing exploit-like behavior.
+
+Run:
+
+```bash
+python scripts/generate_eval_report.py --base-url http://127.0.0.1:7860 --seeds 7,17,27
+```
+
+This writes:
+
+- `reports/eval_report.json`
+- `reports/eval_report.md`
+
+What to verify in the report:
+
+- Seeded variance: `variant_id` changes by seed, with small numeric shifts in documents/payout bands rather than random rule changes.
+- Reward stability: policy quality ranking across tasks remains consistent across seeds.
+- Penalty fairness: exploit penalties rise only for repeated low-signal behaviors (for example duplicate flags or request-information loops), while grounded evidence keeps `evidence_quality_score` high.
