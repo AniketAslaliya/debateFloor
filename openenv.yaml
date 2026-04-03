@@ -1,0 +1,53 @@
+spec_version: 1
+name: insurance_claim_triage_fraud_env
+type: space
+runtime: fastapi
+app: app.main:app
+port: 7860
+metadata:
+  title: Insurance Claim Triage and Fraud Detection Environment
+  description: >-
+    A deterministic OpenEnv environment for insurance claim processing where
+    agents validate claim evidence, detect fraud signals, estimate payout bands,
+    and make final adjudication decisions.
+  tags:
+    - openenv
+    - insurance
+    - fraud-detection
+    - triage
+  tasks:
+    - id: clean_claim
+      difficulty: easy
+      max_steps: 8
+      objective: Validate a clean auto claim, estimate payout, approve correctly.
+    - id: contradictory_claim
+      difficulty: medium
+      max_steps: 12
+      objective: Detect contradictions and deny/escalate with evidence.
+    - id: coordinated_fraud
+      difficulty: hard
+      max_steps: 20
+      objective: Correlate linked claims and escalate coordinated fraud.
+  action_space:
+    - validate_document
+    - request_information
+    - flag_fraud_signal
+    - estimate_payout
+    - approve_claim
+    - deny_claim
+    - request_investigation
+  observation_space:
+    - claim_id
+    - task_id
+    - claimant
+    - incident
+    - documents
+    - linked_claims
+    - action_history
+    - available_actions
+    - step_number
+    - max_steps
+    - flags_raised
+    - status
+    - message
+    - reward_breakdown
