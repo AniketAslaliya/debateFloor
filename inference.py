@@ -412,17 +412,21 @@ def _fallback_action(observation: Dict[str, Any]) -> Dict[str, Any]:
 
 def _llm_action(observation: Dict[str, Any]) -> Dict[str, Any]:
     prompt = _build_prompt(observation)
-    completion = client.chat.completions.create(
-        model=MODEL_NAME,
-        temperature=0.0,
-        messages=[
-            {
-                "role": "system",
-                "content": "Return strict JSON only with action_type, parameters, reasoning.",
-            },
-            {"role": "user", "content": prompt},
-        ],
-    )
+    try:
+        completion = client.chat.completions.create(
+            model=MODEL_NAME,
+            temperature=0.0,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Return strict JSON only with action_type, parameters, reasoning.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+        )
+    except Exception:
+        repaired_fallback = _repair_action(observation, _fallback_action(observation))
+        return _stabilize_action(observation, repaired_fallback)
 
     content = (completion.choices[0].message.content or "").strip()
     try:
