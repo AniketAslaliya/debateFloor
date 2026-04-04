@@ -19,8 +19,14 @@ COPY . .
 # Make start script executable
 RUN chmod +x /app/env/server/start.sh
 
-# Install Python dependencies using pip install -e . (from pyproject.toml)
-RUN pip install --no-cache-dir -e .
+# Install pinned BrowserGym dependencies first to avoid pip resolver backtracking,
+# then install this package in editable mode without re-resolving dependencies.
+RUN pip install --no-cache-dir \
+    "browsergym-core==0.14.2" \
+    "browsergym-miniwob==0.14.2" \
+    "browsergym-webarena==0.14.2"
+
+RUN pip install --no-cache-dir -e . --no-deps
 
 # Install MiniWoB++ from a pinned snapshot to avoid flaky Hub-time git clones.
 ARG MINIWOB_COMMIT=7fd85d71a4b60325c6585396ec4f48377d049838
