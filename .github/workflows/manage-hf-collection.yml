@@ -1,4 +1,4 @@
-name: Sync HF OpenEnv Collection
+﻿name: Sync HF OpenEnv Collection
 
 on:
   # Run nightly at midnight UTC
@@ -21,21 +21,36 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
+      - name: Check HF token availability
+        id: token
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          if [ -n "$HF_TOKEN" ]; then
+            echo "has_token=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Install dependencies
+        if: steps.token.outputs.has_token == 'true'
         run: |
           pip install "huggingface-hub>=0.24.0"
 
       - name: Sync global OpenEnv collection
+        if: steps.token.outputs.has_token == 'true'
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
@@ -46,9 +61,9 @@ jobs:
             --public-global-collection
 
       - name: Summary
-        if: success()
+        if: steps.token.outputs.has_token == 'true' && success()
         run: |
-          echo "## OpenEnv Collection Synced ✅" >> $GITHUB_STEP_SUMMARY
+          echo "## OpenEnv Collection Synced [OK]" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Successfully synced the global OpenEnv-tagged space collection." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -56,3 +71,12 @@ jobs:
           echo "- Scheduled to run daily at midnight UTC" >> $GITHUB_STEP_SUMMARY
           echo "- Task: Discover and add all spaces tagged \`openenv\`" >> $GITHUB_STEP_SUMMARY
           echo "- Collection title: OpenEnv Environment Hub" >> $GITHUB_STEP_SUMMARY
+
+      - name: Summary (token missing)
+        if: steps.token.outputs.has_token != 'true'
+        run: |
+          echo "## OpenEnv Collection Sync Skipped [WARN]" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "HF_TOKEN is not configured for this repository/environment, so sync was skipped." >> $GITHUB_STEP_SUMMARY
+          echo "Set \`HF_TOKEN\` in repository secrets to enable this workflow." >> $GITHUB_STEP_SUMMARY
+
