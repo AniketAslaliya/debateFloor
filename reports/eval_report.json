@@ -1,0 +1,62 @@
+{
+  "generated_at": "2026-04-03T16:40:41.607215+00:00",
+  "base_url": "https://aniketasla-insurance-claim-env.hf.space",
+  "rows": [
+    {
+      "task_id": "clean_claim",
+      "seed": 7,
+      "done": true,
+      "reward": 0.825,
+      "variant_id": 0,
+      "evidence_quality": 0.0,
+      "exploit_penalty": 0.0
+    },
+    {
+      "task_id": "clean_claim",
+      "seed": 17,
+      "done": true,
+      "reward": 0.825,
+      "variant_id": 0,
+      "evidence_quality": 0.0,
+      "exploit_penalty": 0.0
+    },
+    {
+      "task_id": "contradictory_claim",
+      "seed": 7,
+      "done": true,
+      "reward": 0.825,
+      "variant_id": 0,
+      "evidence_quality": 0.0,
+      "exploit_penalty": 0.0
+    },
+    {
+      "task_id": "contradictory_claim",
+      "seed": 17,
+      "done": true,
+      "reward": 0.825,
+      "variant_id": 0,
+      "evidence_quality": 0.0,
+      "exploit_penalty": 0.0
+    },
+    {
+      "task_id": "coordinated_fraud",
+      "seed": 7,
+      "done": true,
+      "reward": 0.9475,
+      "variant_id": 0,
+      "evidence_quality": 0.0,
+      "exploit_penalty": 0.0
+    },
+    {
+      "task_id": "coordinated_fraud",
+      "seed": 17,
+      "done": true,
+      "reward": 0.9475,
+      "variant_id": 0,
+      "evidence_quality": 0.0,
+      "exploit_penalty": 0.0
+    }
+  ],
+  "average_reward": 0.8658333333333332,
+  "completion_rate": 1.0
+}

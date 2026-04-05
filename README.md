@@ -1,3 +1,13 @@
+---
+title: Insurance Claim Triage Environment
+emoji: 🛡️
+colorFrom: blue
+colorTo: green
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # Insurance Claim Triage and Fraud Detection Environment
 
 > A production-style [OpenEnv](https://github.com/meta-pytorch/OpenEnv) benchmark for LLM agents that must adjudicate insurance claims under uncertainty, fraud pressure, and operational constraints.
