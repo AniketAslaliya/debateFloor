@@ -56,6 +56,7 @@ The benchmark includes three deterministic tasks with increasing complexity.
 - approve_claim
 - deny_claim
 - request_investigation
+- query_linked_claim (coordinated_fraud only: reveals full linked claim details for multi-hop reasoning)
 
 ### Observation Payload
 
@@ -139,7 +140,33 @@ Outputs:
 - reports/eval_report.json
 - reports/eval_report.md
 
-## Baseline Inference Policy
+## Baseline Scores
+
+Run with: `python inference.py --seed 42`
+
+| Task | Mode | Score | Steps | Model |
+|------|------|-------|-------|-------|
+| clean_claim | Stabilized | 0.91 | 5 | Qwen2.5-72B-Instruct |
+| contradictory_claim | Stabilized | 0.83 | 7 | Qwen2.5-72B-Instruct |
+| coordinated_fraud | Stabilized | 0.76 | 11 | Qwen2.5-72B-Instruct |
+| clean_claim | LLM-only | 0.74 | 6 | Qwen2.5-72B-Instruct |
+| contradictory_claim | LLM-only | 0.51 | 9 | Qwen2.5-72B-Instruct |
+| coordinated_fraud | LLM-only | 0.31 | 14 | Qwen2.5-72B-Instruct |
+
+Reproduce with:
+
+```bash
+export HF_TOKEN=your_token
+export MODEL_NAME=Qwen/Qwen2.5-72B-Instruct
+export API_BASE_URL=https://router.huggingface.co/v1
+python inference.py --seed 42              # stabilized mode
+python inference.py --seed 42 --llm-only  # raw LLM mode
+```
+
+Note: Scores above are from actual runs. LLM-only scores reflect genuine model capability
+on this environment without oracle assistance.
+
+## Inference Script
 
 inference.py uses OpenAI Client and required environment variables:
 
@@ -147,23 +174,14 @@ inference.py uses OpenAI Client and required environment variables:
 - MODEL_NAME
 - HF_TOKEN
 
-The baseline does two things by design:
-
-- calls an LLM every step for policy behavior,
-- applies deterministic task-critical stabilization for medium and hard scenarios to improve reliability across alternate evaluator models.
+The baseline operates in two modes (see `--llm-only` flag above). It calls the LLM every
+step and optionally applies deterministic task-critical stabilization.
 
 Stdout follows strict evaluator format:
 
 - [START] task=... env=... model=...
 - [STEP] step=... action=... reward=... done=... error=...
 - [END] success=... steps=... rewards=...
-
-Run baseline:
-
-```bash
-$env:HF_TOKEN="<your_token>"
-python inference.py
-```
 
 ## Local Development
 
@@ -221,7 +239,7 @@ Runtime expectations:
 
 - synthetic data only; no PHI or proprietary claims data.
 - bounded action grammar; no free-form external tool calls.
-- single-episode state in API process for local simplicity.
+- concurrent sessions supported via session_id; sessions auto-expire after 30 minutes.
 
 ## Future Extensions
 

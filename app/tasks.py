@@ -52,6 +52,7 @@ def _base_available_actions() -> List[str]:
         "approve_claim",
         "deny_claim",
         "request_investigation",
+        "query_linked_claim",
     ]
 
 
@@ -331,14 +332,35 @@ def build_runtime_task(task_id: str, seed: Optional[int] = None) -> RuntimeTask:
     return runtime
 
 
+def _stub_linked_claims(linked_claims: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Return only claim_id and claimant for each linked claim.
+
+    Full details are intentionally withheld until the agent calls query_linked_claim.
+    This forces multi-hop reasoning on the coordinated_fraud task.
+    """
+    return [
+        {"claim_id": c["claim_id"], "claimant": c["claimant"]}
+        for c in linked_claims
+        if "claim_id" in c
+    ]
+
+
 def build_initial_payload(runtime_task: RuntimeTask) -> Dict[str, Any]:
+    # For coordinated_fraud, hide fraud signals until agent queries each linked claim.
+    if runtime_task.task_id == "coordinated_fraud":
+        linked_claims_visible = _stub_linked_claims(runtime_task.linked_claims)
+    else:
+        linked_claims_visible = deepcopy(runtime_task.linked_claims)
+
     return {
         "task_id": runtime_task.task_id,
         "claim_id": runtime_task.claim_id,
         "claimant": deepcopy(runtime_task.claimant),
         "incident": deepcopy(runtime_task.incident),
         "documents": deepcopy(runtime_task.documents),
-        "linked_claims": deepcopy(runtime_task.linked_claims),
+        "linked_claims": linked_claims_visible,
+        # Full linked_claims data stored separately for query_linked_claim lookups
+        "_full_linked_claims": deepcopy(runtime_task.linked_claims),
         "max_steps": runtime_task.max_steps,
         "variant_id": runtime_task.variant_id,
         "available_actions": _base_available_actions(),
@@ -386,7 +408,12 @@ def score_payout_accuracy(amount: Optional[float], payout_band: Optional[tuple[f
     return clamp01(1.0 - (distance / (2.5 * tolerance)))
 
 
-def score_consistency(task_id: str, raised_flags: List[str], investigation_targets: List[str]) -> float:
+def score_consistency(
+    task_id: str,
+    raised_flags: List[str],
+    investigation_targets: List[str],
+    queried_claims: Optional[set] = None,
+) -> float:
     if task_id != "coordinated_fraud":
         return 0.0
 
@@ -421,31 +448,61 @@ def compute_reward_breakdown(
     evidence_quality_score: float,
     exploit_penalty: float,
     penalty_total: float,
+    queried_claims: Optional[set] = None,
 ) -> InsuranceClaimReward:
     expected = set(expected_signals)
     found = set(found_signals)
 
+    # --- Fraud detection: partial credit at every step ---
     if len(expected) == 0:
         fraud_detection_score = 1.0 if len(found) == 0 else 0.0
     else:
         fraud_detection_score = clamp01(len(found.intersection(expected)) / float(len(expected)))
 
+    # --- Decision accuracy: only when final_decision is set ---
     if final_decision is None:
         decision_accuracy = 0.0
     else:
         decision_accuracy = 1.0 if final_decision in allowed_decisions else 0.0
 
+    # --- Payout accuracy: partial credit once an estimate is given ---
     payout_accuracy = score_payout_accuracy(payout_estimate_inr, payout_band)
-    efficiency_score = clamp01(1.0 - (max(step_number - 1, 0) / float(max_steps)))
-    consistency_score = score_consistency(task_id, found_signals, investigation_targets)
+
+    # --- Efficiency: partial credit from step 1 onward if any progress ---
+    has_progress = len(found) > 0 or payout_estimate_inr is not None
+    if has_progress or final_decision is not None:
+        efficiency_score = clamp01(1.0 - (max(step_number - 1, 0) / float(max_steps)))
+    else:
+        efficiency_score = 0.0
+
+    consistency_score = score_consistency(task_id, found_signals, investigation_targets, queried_claims)
+
+    # --- Evidence quality: partial credit at every step ---
     evidence_quality_score = clamp01(evidence_quality_score)
+
     exploit_penalty = max(exploit_penalty, 0.0)
 
     false_flag_penalty = 0.25 * false_flags if task_id == "clean_claim" else 0.1 * false_flags
     decision_penalty = 0.35 if (final_decision is not None and decision_accuracy == 0.0) else 0.0
     partial_consistency_penalty = 0.2 if (task_id == "coordinated_fraud" and 0.0 < consistency_score < 1.0) else 0.0
 
-    penalty = penalty_total + false_flag_penalty + decision_penalty + partial_consistency_penalty + exploit_penalty
+    # For coordinated_fraud: penalize request_investigation without querying at least 2 linked claims
+    query_skip_penalty = 0.0
+    if (
+        task_id == "coordinated_fraud"
+        and final_decision == "request_investigation"
+        and (queried_claims is None or len(queried_claims) < 2)
+    ):
+        query_skip_penalty = 0.15
+
+    penalty = (
+        penalty_total
+        + false_flag_penalty
+        + decision_penalty
+        + partial_consistency_penalty
+        + query_skip_penalty
+        + exploit_penalty
+    )
 
     # Weighted sum, then subtract penalties and clamp.
     weighted = (

@@ -24,7 +24,7 @@ from .tasks import (
 
 
 class InsuranceClaimEnvironment(Environment[InsuranceClaimAction, InsuranceClaimObservation, InsuranceClaimState]):
-    SUPPORTS_CONCURRENT_SESSIONS: bool = True
+    SUPPORTS_CONCURRENT_SESSIONS: bool = True  # NOW ACTUALLY TRUE - session-managed via main.py
 
     def __init__(self):
         self._state = InsuranceClaimState(episode_id=str(uuid4()), step_count=0)
@@ -41,6 +41,8 @@ class InsuranceClaimEnvironment(Environment[InsuranceClaimAction, InsuranceClaim
         self._last_progress_step: int = 0
         self._runtime_task: RuntimeTask | None = None
         self._last_message = "Environment initialized"
+        self._queried_claims: set[str] = set()
+        self._visible_linked_claims: list = []
 
     def reset(self, task_id: Optional[str] = None, seed: Optional[int] = None, episode_id: Optional[str] = None) -> InsuranceClaimObservation:
         selected_task = task_id or "clean_claim"
@@ -58,6 +60,8 @@ class InsuranceClaimEnvironment(Environment[InsuranceClaimAction, InsuranceClaim
         self._exploit_penalty = 0.0
         self._request_info_streak = 0
         self._last_progress_step = 0
+        self._queried_claims = set()
+        self._visible_linked_claims = deepcopy(self._payload.get("linked_claims", []))
         self._last_message = (
             f"Task '{task.task_id}' loaded (variant={task.variant_id}). Start investigation."
         )
@@ -199,6 +203,28 @@ class InsuranceClaimEnvironment(Environment[InsuranceClaimAction, InsuranceClaim
             self._state.payout_estimate_inr = payout
             return f"Payout estimate set to INR {payout:.2f}."
 
+        if action.action_type == "query_linked_claim":
+            claim_id = str(action.parameters.get("claim_id", "")).strip()
+            if not claim_id:
+                raise ValueError("'claim_id' is required for query_linked_claim")
+            full_linked = self._payload.get("_full_linked_claims", self._payload.get("linked_claims", []))
+            match = next((c for c in full_linked if c.get("claim_id") == claim_id), None)
+            if match is None:
+                raise ValueError(f"Linked claim '{claim_id}' not found")
+            # Reveal full detail in the visible linked claims list for this session
+            already_visible = any(
+                c.get("claim_id") == claim_id and len(c) > 2
+                for c in self._visible_linked_claims
+            )
+            if not already_visible:
+                self._visible_linked_claims = [
+                    deepcopy(match) if c.get("claim_id") == claim_id else c
+                    for c in self._visible_linked_claims
+                ]
+            self._queried_claims.add(claim_id)
+            self._last_progress_step = self._state.step_number
+            return f"Linked claim detail retrieved for {claim_id}: {match}"
+
         if action.action_type in {"approve_claim", "deny_claim", "request_investigation"}:
             self._state.final_decision = action.action_type
             self._state.done = True
@@ -279,6 +305,7 @@ class InsuranceClaimEnvironment(Environment[InsuranceClaimAction, InsuranceClaim
             evidence_quality_score=evidence_quality_score,
             exploit_penalty=min(self._exploit_penalty, 0.5),
             penalty_total=self._state.penalty_total,
+            queried_claims=self._queried_claims,
         )
 
         return InsuranceClaimObservation(
@@ -287,7 +314,7 @@ class InsuranceClaimEnvironment(Environment[InsuranceClaimAction, InsuranceClaim
             claimant=deepcopy(self._payload["claimant"]),
             incident=deepcopy(self._payload["incident"]),
             documents=deepcopy(self._payload["documents"]),
-            linked_claims=deepcopy(self._payload["linked_claims"]),
+            linked_claims=deepcopy(self._visible_linked_claims),
             action_history=deepcopy(self._action_history),
             available_actions=deepcopy(self._payload["available_actions"]),
             step_number=self._state.step_number,

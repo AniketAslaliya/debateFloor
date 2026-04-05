@@ -1,14 +1,46 @@
 from __future__ import annotations
 
+import time
 from threading import Lock
-from typing import Any, Dict
+from typing import Any, Dict, Optional
+from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.background import BackgroundTasks
 from pydantic import BaseModel, Field, ValidationError
 
 from .environment import InsuranceClaimEnvironment
 from .models import InsuranceClaimAction, InsuranceClaimObservation
 from .tasks import list_tasks_summary
+
+SESSION_TTL_SECONDS = 1800  # 30 minutes
+
+
+class SessionEntry:
+    def __init__(self, env: InsuranceClaimEnvironment):
+        self.env = env
+        self.last_used = time.time()
+
+
+_sessions: Dict[str, SessionEntry] = {}
+_sessions_lock = Lock()
+
+
+def _get_or_create_session(session_id: str) -> InsuranceClaimEnvironment:
+    with _sessions_lock:
+        if session_id not in _sessions:
+            _sessions[session_id] = SessionEntry(InsuranceClaimEnvironment())
+        entry = _sessions[session_id]
+        entry.last_used = time.time()
+        return entry.env
+
+
+def _cleanup_sessions() -> None:
+    now = time.time()
+    with _sessions_lock:
+        expired = [k for k, v in _sessions.items() if now - v.last_used > SESSION_TTL_SECONDS]
+        for k in expired:
+            del _sessions[k]
 
 
 class ResetBody(BaseModel):
@@ -19,11 +51,10 @@ class ResetBody(BaseModel):
 
 class StepBody(BaseModel):
     action: Dict[str, Any] = Field(default_factory=dict)
+    session_id: str | None = None
 
 
 app = FastAPI(title="Insurance Claim Triage and Fraud Detection Environment")
-_env = InsuranceClaimEnvironment()
-_lock = Lock()
 
 
 @app.get("/")
@@ -37,44 +68,49 @@ def index() -> dict:
 
 
 @app.post("/reset")
-def reset(body: ResetBody = ResetBody()) -> dict:
-    with _lock:
-        obs = _env.reset(task_id=body.task_id, seed=body.seed, episode_id=body.episode_id)
+def reset(body: ResetBody = ResetBody(), background_tasks: BackgroundTasks = BackgroundTasks()) -> dict:
+    background_tasks.add_task(_cleanup_sessions)
+    session_id = body.episode_id or str(uuid4())
+    env = _get_or_create_session(session_id)
+    obs = env.reset(task_id=body.task_id, seed=body.seed, episode_id=session_id)
     return {
         "observation": obs.model_dump(),
         "reward": float(obs.reward or 0.0),
         "done": bool(obs.done),
+        "session_id": session_id,
     }
 
 
 @app.post("/step")
 def step(body: StepBody) -> dict:
+    session_id = body.session_id or "default"
+    env = _get_or_create_session(session_id)
     try:
         action = InsuranceClaimAction(**body.action)
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=exc.errors())
-
-    with _lock:
-        obs = _env.step(action)
+    obs = env.step(action)
     return {
         "observation": obs.model_dump(),
         "reward": float(obs.reward or 0.0),
         "done": bool(obs.done),
+        "session_id": session_id,
     }
 
 
 @app.get("/state")
-def state() -> dict:
-    with _lock:
-        return _env.state.model_dump()
+def state(session_id: str = Query(default="default")) -> dict:
+    env = _get_or_create_session(session_id)
+    return env.state.model_dump()
 
 
 @app.get("/schema")
 def schema() -> dict:
+    env = InsuranceClaimEnvironment()
     return {
         "action": InsuranceClaimAction.model_json_schema(),
         "observation": InsuranceClaimObservation.model_json_schema(),
-        "state": _env.state.model_json_schema(),
+        "state": env.state.model_json_schema(),
     }
 
 
@@ -85,4 +121,8 @@ def tasks() -> dict:
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "healthy", "environment": "insurance_claim_triage_fraud_env"}
+    return {
+        "status": "healthy",
+        "environment": "insurance_claim_triage_fraud_env",
+        "active_sessions": len(_sessions),
+    }
