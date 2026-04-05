@@ -12,9 +12,6 @@ jobs:
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: metaHackathon
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -30,9 +27,6 @@ jobs:
   docker-build:
     name: Docker Build
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: metaHackathon
     steps:
       - uses: actions/checkout@v4
       - name: Build Docker image
@@ -44,9 +38,6 @@ jobs:
     name: Server Smoke Test
     runs-on: ubuntu-latest
     needs: docker-build
-    defaults:
-      run:
-        working-directory: metaHackathon
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
