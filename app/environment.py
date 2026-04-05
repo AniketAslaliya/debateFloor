@@ -4,8 +4,6 @@ from copy import deepcopy
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
-from openenv.core.env_server.interfaces import Environment
-
 from .models import (
     ClaimStatus,
     InsuranceClaimAction,
@@ -23,7 +21,7 @@ from .tasks import (
 )
 
 
-class InsuranceClaimEnvironment(Environment[InsuranceClaimAction, InsuranceClaimObservation, InsuranceClaimState]):
+class InsuranceClaimEnvironment:
     SUPPORTS_CONCURRENT_SESSIONS: bool = True  # NOW ACTUALLY TRUE - session-managed via main.py
 
     def __init__(self):
