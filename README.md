@@ -1,4 +1,13 @@
-﻿# Insurance Claim Triage and Fraud Detection Environment
+﻿---
+title: Insurance Claim Triage Environment
+emoji: 🛡️
+colorFrom: blue
+colorTo: green
+sdk: docker
+app_port: 7860
+---
+
+# Insurance Claim Triage and Fraud Detection Environment
 
 A production-style OpenEnv benchmark for claim adjudication under uncertainty, fraud pressure, and operational constraints.
 
