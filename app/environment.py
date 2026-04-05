@@ -136,8 +136,11 @@ class InsuranceClaimEnvironment(Environment[InsuranceClaimAction, InsuranceClaim
         if action.action_type == "request_information":
             self._request_info_streak += 1
             if self._request_info_streak > 2:
+                # Looping on request_information is an exploit pattern
                 self._exploit_penalty += 0.03
-            self._state.penalty_total += 0.02
+            if self._request_info_streak > 1:
+                # First request is free; subsequent ones consume SLA budget
+                self._state.penalty_total += 0.02
             return "Additional information requested. Useful but consumes time and SLA budget."
 
         self._request_info_streak = 0
@@ -223,7 +226,21 @@ class InsuranceClaimEnvironment(Environment[InsuranceClaimAction, InsuranceClaim
                 ]
             self._queried_claims.add(claim_id)
             self._last_progress_step = self._state.step_number
-            return f"Linked claim detail retrieved for {claim_id}: {match}"
+
+            # After querying 2+ linked claims, the shared emergency contact becomes
+            # detectable. Surface it as a hint in the returned message.
+            hint = ""
+            if len(self._queried_claims) >= 2:
+                queried_data = [
+                    c for c in self._visible_linked_claims
+                    if c.get("claim_id") in self._queried_claims and len(c) > 2
+                ]
+                contacts = [c.get("emergency_contact") for c in queried_data if c.get("emergency_contact")]
+                unique_contacts = set(contacts)
+                if len(contacts) > 1 and len(unique_contacts) == 1:
+                    hint = f" Cross-claim pattern detected: all queried claims share emergency_contact={contacts[0]}."
+
+            return f"Linked claim detail retrieved for {claim_id}: {match}{hint}"
 
         if action.action_type in {"approve_claim", "deny_claim", "request_investigation"}:
             self._state.final_decision = action.action_type
@@ -266,9 +283,10 @@ class InsuranceClaimEnvironment(Environment[InsuranceClaimAction, InsuranceClaim
         signal_map = mapping.get(task_id, {})
         signals = list(signal_map.get(doc_id, []))
 
-        if task_id == "coordinated_fraud" and doc_id in {"DOC-21", "DOC-22", "DOC-23"}:
-            # This cross-claim inconsistency is visible across linked claim metadata.
-            signals.append("shared_emergency_contact")
+        # NOTE: shared_emergency_contact is NOT discoverable from primary documents.
+        # It can only be found by calling query_linked_claim on at least 2 linked claims,
+        # then flag_fraud_signal with evidence from the queried data. This enforces
+        # genuine multi-hop reasoning rather than single-step observation reading.
 
         # Keep signal order deterministic and unique.
         seen: set[str] = set()
@@ -281,7 +299,10 @@ class InsuranceClaimEnvironment(Environment[InsuranceClaimAction, InsuranceClaim
 
     def _build_observation(self, message: str) -> InsuranceClaimObservation:
         task = self._runtime_task or build_runtime_task(self._state.task_id)
-        if len(task.expected_signals) == 0:
+        if self._state.step_number == 0:
+            # No actions taken yet — reward must be 0.0 so the trajectory is meaningful
+            evidence_quality_score = 0.0
+        elif len(task.expected_signals) == 0:
             evidence_quality_score = 1.0 if self._false_flags == 0 else 0.0
         else:
             evidence_quality_score = (

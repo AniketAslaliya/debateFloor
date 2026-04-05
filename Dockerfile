@@ -5,6 +5,9 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
+# Install curl for HEALTHCHECK (not present in python:3.11-slim by default)
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
@@ -13,6 +16,7 @@ COPY openenv.yaml /app/openenv.yaml
 COPY inference.py /app/inference.py
 COPY README.md /app/README.md
 COPY pyproject.toml /app/pyproject.toml
+COPY server /app/server
 
 EXPOSE 7860
 

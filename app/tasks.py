@@ -43,8 +43,8 @@ class RuntimeTask:
     variant_id: int
 
 
-def _base_available_actions() -> List[str]:
-    return [
+def _base_available_actions(task_id: str = "") -> List[str]:
+    actions = [
         "validate_document",
         "request_information",
         "flag_fraud_signal",
@@ -52,8 +52,10 @@ def _base_available_actions() -> List[str]:
         "approve_claim",
         "deny_claim",
         "request_investigation",
-        "query_linked_claim",
     ]
+    if task_id == "coordinated_fraud":
+        actions.append("query_linked_claim")
+    return actions
 
 
 TASKS: Dict[str, TaskDefinition] = {
@@ -363,7 +365,7 @@ def build_initial_payload(runtime_task: RuntimeTask) -> Dict[str, Any]:
         "_full_linked_claims": deepcopy(runtime_task.linked_claims),
         "max_steps": runtime_task.max_steps,
         "variant_id": runtime_task.variant_id,
-        "available_actions": _base_available_actions(),
+        "available_actions": _base_available_actions(runtime_task.task_id),
     }
 
 
@@ -375,10 +377,10 @@ def get_evidence_keyword_hints(task_id: str, flag_id: str) -> List[str]:
             "signature_mismatch": ["signature", "doctor", "clinic", "dr-xyz"],
         },
         "coordinated_fraud": {
-            "shared_repair_shop_far": ["repair", "shop", "distance", "340", "kota"],
-            "shared_emergency_contact": ["contact", "phone", "emergency", "shared"],
-            "near_identical_descriptions": ["identical", "description", "same narrative"],
-            "recent_policy_cluster": ["policy", "purchase", "30 days", "cluster"],
+            "shared_repair_shop_far": ["repair", "shop", "distance", "km", "kota", "rapidfix"],
+            "shared_emergency_contact": ["contact", "phone", "emergency", "shared", "9000002222"],
+            "near_identical_descriptions": ["identical", "description", "narrative", "template", "similarity"],
+            "recent_policy_cluster": ["policy", "purchase", "days", "cluster", "30"],
         },
     }
     return hints.get(task_id, {}).get(flag_id, [])
@@ -453,8 +455,10 @@ def compute_reward_breakdown(
     expected = set(expected_signals)
     found = set(found_signals)
 
-    # --- Fraud detection: partial credit at every step ---
-    if len(expected) == 0:
+    # --- Fraud detection: partial credit at every step (0.0 before any action is taken) ---
+    if step_number == 0:
+        fraud_detection_score = 0.0
+    elif len(expected) == 0:
         fraud_detection_score = 1.0 if len(found) == 0 else 0.0
     else:
         fraud_detection_score = clamp01(len(found.intersection(expected)) / float(len(expected)))
@@ -465,17 +469,22 @@ def compute_reward_breakdown(
     else:
         decision_accuracy = 1.0 if final_decision in allowed_decisions else 0.0
 
-    # --- Payout accuracy: partial credit once an estimate is given ---
-    payout_accuracy = score_payout_accuracy(payout_estimate_inr, payout_band)
+    # --- Payout accuracy: 0.0 until step 1; for tasks with no payout band, 1.0 after step 0 ---
+    if step_number == 0:
+        payout_accuracy = 0.0
+    else:
+        payout_accuracy = score_payout_accuracy(payout_estimate_inr, payout_band)
 
     # --- Efficiency: partial credit from step 1 onward if any progress ---
-    has_progress = len(found) > 0 or payout_estimate_inr is not None
+    # query_linked_claim counts as progress for coordinated_fraud
+    has_queried = queried_claims is not None and len(queried_claims) > 0
+    has_progress = len(found) > 0 or payout_estimate_inr is not None or has_queried
     if has_progress or final_decision is not None:
         efficiency_score = clamp01(1.0 - (max(step_number - 1, 0) / float(max_steps)))
     else:
         efficiency_score = 0.0
 
-    consistency_score = score_consistency(task_id, found_signals, investigation_targets, queried_claims)
+    consistency_score = 0.0 if step_number == 0 else score_consistency(task_id, found_signals, investigation_targets, queried_claims)
 
     # --- Evidence quality: partial credit at every step ---
     evidence_quality_score = clamp01(evidence_quality_score)
