@@ -1,258 +1,266 @@
-﻿---
-title: Insurance Claim Triage Environment
-emoji: 🛡️
-colorFrom: blue
-colorTo: green
-sdk: docker
-app_port: 7860
----
-
 # Insurance Claim Triage and Fraud Detection Environment
 
-A production-style OpenEnv benchmark for claim adjudication under uncertainty, fraud pressure, and operational constraints.
+> A production-style [OpenEnv](https://github.com/meta-pytorch/OpenEnv) benchmark for LLM agents that must adjudicate insurance claims under uncertainty, fraud pressure, and operational constraints.
 
-## Why This Environment Matters
+[![Validate Submission](https://github.com/AniketAslaliya/insuranceClaim/actions/workflows/validate.yml/badge.svg)](https://github.com/AniketAslaliya/insuranceClaim/actions/workflows/validate.yml)
+[![HuggingFace Space](https://img.shields.io/badge/🤗%20Space-insurance--claim--env-blue)](https://huggingface.co/spaces/AniketAsla/insurance-claim-env)
 
-Insurance claims handling is a real, high-impact workflow where agents must balance customer experience, fraud risk, payout accuracy, and investigation cost. This environment models that tension directly and evaluates whether an agent can:
+---
 
-- verify evidence reliability,
-- detect fraud signals without over-flagging,
-- make calibrated payout decisions,
-- and escalate consistently for linked-risk scenarios.
+## Overview
 
-## Benchmark Goals
+Insurance claims handling is a high-stakes workflow where agents must balance customer experience, fraud risk, payout accuracy, and investigation cost simultaneously. This environment models that tension directly as a structured decision problem.
 
-This environment is designed for:
+An agent receives a claim file with supporting documents, linked claims, and incident data. It must investigate, flag anomalies, estimate payouts, and reach a final adjudication decision — all within a step budget and under a reward signal that penalizes both over-caution and fraud blindness.
 
-- policy evaluation for tool-using LLM agents,
-- reward-shaping research for fraud-sensitive decision systems,
-- robustness testing under seeded scenario variation,
-- exploit-resistance analysis (reward hacking and low-signal loops).
+The environment is built on the OpenEnv REST API spec and can be run locally or accessed as a live HuggingFace Docker Space.
+
+---
 
 ## Task Portfolio
 
-The benchmark includes three deterministic tasks with increasing complexity.
+Three tasks of increasing complexity, each with 5 seeded variants for reproducible evaluation.
 
-### 1. clean_claim (easy)
+### `clean_claim` — Easy
 
-- Context: clean auto claim with consistent documentation.
-- Expected final decision: approve_claim.
-- Payout target band: INR 45,000 to INR 55,000.
-- Core challenge: avoid false fraud escalation while keeping cycle-time efficient.
+A straightforward auto insurance claim with internally consistent documentation. No fraud signals are present. The correct decision is `approve_claim` with a payout estimate in the INR 45,000–55,000 band.
 
-### 2. contradictory_claim (medium)
+The challenge is efficiency: agents that over-investigate or raise false fraud signals are penalized even when the final decision is correct.
 
-- Context: medical claim with embedded contradictions.
-- Contradictions include incident-date mismatch, suspicious cost inflation, and signature inconsistency.
-- Expected final decision: deny_claim or request_investigation.
-- Core challenge: detect and justify true signals with grounded evidence.
+### `contradictory_claim` — Medium
 
-### 3. coordinated_fraud (hard)
+A medical claim with three embedded contradictions:
+- Incident date mismatch between the FIR and hospital admission record
+- Suspicious cost inflation in the repair estimate
+- Signature inconsistency across documents
 
-- Context: linked multi-claim ring with cross-claim patterns.
-- Indicators include distant shared repair shop, shared emergency contact, near-identical narratives, and clustered recent policy purchases.
-- Expected final decision: request_investigation.
-- Core challenge: maintain consistency across linked claims and escalate the full cluster.
+The agent must validate documents, flag each signal with grounded evidence text, and reach a `deny_claim` or `request_investigation` decision. Vague or keyword-free evidence reduces the evidence quality score.
+
+### `coordinated_fraud` — Hard
+
+A multi-claim fraud ring involving three linked policies. Signals are distributed across claims and require multi-hop reasoning:
+
+- A shared repair shop located 340 km away from all incident sites
+- Near-identical damage descriptions across independent claims
+- All three policies purchased within 11 days of each other
+- A shared emergency contact discoverable only after querying two or more linked claims
+
+The final decision must be `request_investigation` targeting the full cluster. Partial escalation (missing a linked claim) is penalized.
+
+---
 
 ## Environment Contract
 
+### REST API
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/reset` | Start a new episode. Accepts `task_id`, `seed`, `session_id`. Returns `session_id` and initial observation. |
+| `POST` | `/step` | Submit an action. Requires `session_id` and `action` body. Returns observation, reward, done. |
+| `GET`  | `/state` | Current episode state for a session. |
+| `GET`  | `/tasks` | Lists all available task IDs with descriptions. |
+| `GET`  | `/schema` | JSON schema for action, observation, and state types. |
+| `GET`  | `/health` | Liveness check. Returns `{"status": "healthy", "active_sessions": N}`. |
+
 ### Action Space
 
-- validate_document
-- request_information
-- flag_fraud_signal
-- estimate_payout
-- approve_claim
-- deny_claim
-- request_investigation
-- query_linked_claim (coordinated_fraud only: reveals full linked claim details for multi-hop reasoning)
+| Action | Required Parameters | Notes |
+|--------|--------------------|----|
+| `validate_document` | `doc_id` | Reveals embedded signals from the document |
+| `request_information` | — | First call free; subsequent calls add SLA penalty |
+| `flag_fraud_signal` | `flag_id`, `evidence` | Evidence text must reference discovered keywords |
+| `estimate_payout` | `amount_inr` | Must be within the task's payout band for full credit |
+| `query_linked_claim` | `claim_id` | `coordinated_fraud` only — unlocks full linked claim details |
+| `approve_claim` | `reason` | Final decision |
+| `deny_claim` | `reason` | Final decision |
+| `request_investigation` | `target_claim_ids`, `reason` | Final decision; must target the full fraud cluster |
 
-### Observation Payload
+### Observation Fields
 
-Each step returns structured fields:
+Every step returns a structured observation including:
 
-- claim_id
-- task_id
-- claimant
-- incident
-- documents
-- linked_claims
-- action_history
-- available_actions
-- step_number
-- max_steps
-- flags_raised
-- status
-- message
-- reward_breakdown
-- metadata (includes variant_id, evidence counters, exploit penalty, and last_action_error)
+- `claim_id`, `task_id`, `session_id`
+- `claimant` — name, contact, policy details
+- `incident` — date, location, description, severity
+- `documents` — list of docs with metadata (each has a `doc_id`)
+- `linked_claims` — stub list; full details revealed via `query_linked_claim`
+- `action_history` — all prior steps in this episode
+- `available_actions` — task-appropriate action grammar
+- `step_number`, `max_steps`, `done`, `status`, `message`
+- `reward`, `reward_breakdown` — per-component score breakdown
+- `metadata` — `variant_id`, `evidence_hits`, `exploit_penalty`, `last_action_error`
 
-### API Endpoints
-
-- POST /reset
-- POST /step
-- GET /state
-- GET /tasks
-- GET /schema
-- GET /health
-- GET /
+---
 
 ## Reward Model
 
-Reward is deterministic and clamped to [0.0, 1.0].
+Reward is deterministic and clamped to `[0.0, 1.0]`. It is non-zero only after the first action, giving a clean `reward=0.0` at reset.
 
-Final reward combines:
+### Components
 
-- fraud_detection_score
-- decision_accuracy
-- payout_accuracy
-- efficiency_score
-- consistency_score
-- evidence_quality_score
+| Component | Weight | Description |
+|-----------|--------|-------------|
+| `fraud_detection_score` | 0.30 | Fraction of expected signals correctly found |
+| `decision_accuracy` | 0.25 | Correct final decision for the task |
+| `payout_accuracy` | 0.15 | Payout estimate within the task's target band |
+| `efficiency_score` | 0.10 | Inverse step usage relative to budget |
+| `consistency_score` | 0.10 | Correct escalation targets in `request_investigation` |
+| `evidence_quality_score` | 0.10 | Evidence text quality for flagged signals |
 
-Then subtracts cumulative penalties:
+### Penalties
 
-- false-flag penalties,
-- wrong-decision penalty,
-- partial-consistency penalty,
-- exploit_penalty,
-- action-error and workflow penalties.
+- **False flag** — flagging a signal not in the ground truth
+- **Exploit penalty** — looping `request_information` >2 times; duplicate signal flags
+- **Low-quality evidence** — evidence text missing discovered keywords
+- **Partial cluster escalation** — `request_investigation` missing linked claims in `coordinated_fraud`
+- **Wrong decision** — strong penalty for approving a fraudulent claim or denying a clean one
 
-### Fairness and Anti-Gaming Design
+---
 
-To reduce reward hacking:
+## Seeded Variants
 
-- repeated request_information loops increase exploit penalty,
-- duplicate signal-flagging increases exploit penalty,
-- low-quality evidence text reduces evidence quality credit,
-- incorrect final decisions receive strong penalties,
-- partial cluster escalation in coordinated-fraud is penalized.
-
-This creates a measurable trade-off between aggressive fraud hunting and precision.
-
-## Seeded Variants and Robustness
-
-Each task supports seed-driven variants that alter numeric surfaces (costs, dates, distances, timelines) while preserving logical structure and grading rules. This allows:
-
-- reproducible evaluation,
-- variance analysis across controlled perturbations,
-- robustness testing without changing task intent.
-
-Generate seeded evaluation snapshot:
+Each task supports 5 seed-driven variants that alter numeric surfaces (costs, dates, distances, contact names) while preserving logical structure and grading rules. Use seeds for reproducible evaluation and variance analysis.
 
 ```bash
-python scripts/generate_eval_report.py --base-url http://127.0.0.1:7860 --seeds 7,17,27
+# Run evaluation across seeds
+python scripts/generate_eval_report.py --base-url http://127.0.0.1:7860 --seeds 7,17,27,42,99
 ```
 
 Outputs:
+- `reports/eval_report.json`
+- `reports/eval_report.md`
 
-- reports/eval_report.json
-- reports/eval_report.md
+---
 
 ## Baseline Scores
 
-Run with: `python inference.py --seed 42`
+Run with `python inference.py --seed 42` using Qwen2.5-72B-Instruct via HuggingFace Inference API.
 
-| Task | Mode | Score | Steps | Model |
-|------|------|-------|-------|-------|
-| clean_claim | Stabilized | 0.91 | 5 | Qwen2.5-72B-Instruct |
-| contradictory_claim | Stabilized | 0.83 | 7 | Qwen2.5-72B-Instruct |
-| coordinated_fraud | Stabilized | 0.76 | 11 | Qwen2.5-72B-Instruct |
-| clean_claim | LLM-only | 0.74 | 6 | Qwen2.5-72B-Instruct |
-| contradictory_claim | LLM-only | 0.51 | 9 | Qwen2.5-72B-Instruct |
-| coordinated_fraud | LLM-only | 0.31 | 14 | Qwen2.5-72B-Instruct |
+| Task | Mode | Score | Steps |
+|------|------|-------|-------|
+| `clean_claim` | Stabilized | 0.91 | 5 |
+| `contradictory_claim` | Stabilized | 0.83 | 7 |
+| `coordinated_fraud` | Stabilized | 0.76 | 11 |
+| `clean_claim` | LLM-only | 0.74 | 6 |
+| `contradictory_claim` | LLM-only | 0.51 | 9 |
+| `coordinated_fraud` | LLM-only | 0.31 | 14 |
 
-Reproduce with:
+**Stabilized** mode applies deterministic task-critical action correction on top of the LLM output. **LLM-only** mode reflects raw model capability with no oracle assistance.
+
+Reproduce:
 
 ```bash
 export HF_TOKEN=your_token
 export MODEL_NAME=Qwen/Qwen2.5-72B-Instruct
 export API_BASE_URL=https://router.huggingface.co/v1
-python inference.py --seed 42              # stabilized mode
-python inference.py --seed 42 --llm-only  # raw LLM mode
+
+python inference.py --seed 42             # stabilized
+python inference.py --seed 42 --llm-only  # raw LLM
+python inference.py --task coordinated_fraud --seed 17
 ```
 
-Note: Scores above are from actual runs. LLM-only scores reflect genuine model capability
-on this environment without oracle assistance.
+---
 
-## Inference Script
+## Quickstart
 
-inference.py uses OpenAI Client and required environment variables:
-
-- API_BASE_URL
-- MODEL_NAME
-- HF_TOKEN
-
-The baseline operates in two modes (see `--llm-only` flag above). It calls the LLM every
-step and optionally applies deterministic task-critical stabilization.
-
-Stdout follows strict evaluator format:
-
-- [START] task=... env=... model=...
-- [STEP] step=... action=... reward=... done=... error=...
-- [END] success=... steps=... rewards=...
-
-## Local Development
+### Run locally
 
 ```bash
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+git clone https://github.com/AniketAslaliya/insuranceClaim
+cd insuranceClaim
 pip install -r requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 7860
 ```
 
-## Validation and Dry Run Commands
+Then open `http://localhost:7860/` for the API root, or `/tasks` to see available tasks.
 
-Spec validation:
-
-```bash
-openenv validate .
-```
-
-Docker build:
+### Run with Docker
 
 ```bash
 docker build -t insurance-claim-env:latest .
+docker run -p 7860:7860 insurance-claim-env:latest
 ```
 
-Live Space evaluation:
+### Quick episode example
+
+```python
+import requests
+
+BASE = "http://localhost:7860"
+
+# Start episode
+r = requests.post(f"{BASE}/reset", json={"task_id": "clean_claim", "seed": 42})
+session_id = r.json()["session_id"]
+
+# Validate documents
+for doc_id in ["DOC-1", "DOC-2", "DOC-3"]:
+    requests.post(f"{BASE}/step", json={
+        "session_id": session_id,
+        "action": {"action_type": "validate_document", "parameters": {"doc_id": doc_id}, "reasoning": "check docs"}
+    })
+
+# Estimate payout and approve
+requests.post(f"{BASE}/step", json={
+    "session_id": session_id,
+    "action": {"action_type": "estimate_payout", "parameters": {"amount_inr": 50500}, "reasoning": "within band"}
+})
+resp = requests.post(f"{BASE}/step", json={
+    "session_id": session_id,
+    "action": {"action_type": "approve_claim", "parameters": {"reason": "all documents consistent"}, "reasoning": "approve"}
+})
+print(f"Final reward: {resp.json()['reward']}")  # ~0.91
+```
+
+---
+
+## Testing
 
 ```bash
-python scripts/hf_space_eval.py --base-url https://aniketasla-insurance-claim-env.hf.space
+# Unit and reward tests
+PYTHONPATH=. pytest tests/envs/test_insurance_claim_reward_and_exploit.py -q
+
+# Smoke import (step-0 reward == 0.0 for all tasks)
+PYTHONPATH=. python ci/smoke_import.py
+
+# Full clean_claim episode (reward >= 0.70)
+python ci/test_clean_claim_episode.py
+
+# Concurrent session isolation
+python ci/test_concurrent_sessions.py
 ```
 
-Deterministic reward/exploit tests:
+The GitHub Actions workflow runs all of these plus a Docker build and live server smoke test on every push.
 
-```bash
-python -m pytest tests/envs/test_insurance_claim_reward_and_exploit.py -q
+---
+
+## Architecture
+
+```
+app/
+  main.py          # FastAPI server, session management (UUID-keyed, 30min TTL)
+  environment.py   # InsuranceClaimEnvironment — step/reset logic, signal discovery
+  tasks.py         # Task definitions, reward computation, seeded variants
+  models.py        # Pydantic v2 models for Action, Observation, State
+
+ci/                # CI test scripts (no server import needed, use HTTP)
+tests/             # Pytest reward and exploit unit tests
+inference.py       # Baseline LLM agent (OpenAI client, stabilized + LLM-only modes)
+scripts/           # Eval report generator, HF Space evaluator
 ```
 
-## Hugging Face Space Deployment
+Session isolation: every `/reset` call returns a `session_id`. All subsequent `/step` and `/state` calls must include it. Sessions are independent in-memory objects; concurrent episodes do not share state.
 
-This project is deployed as a Docker Space and should expose port 7860.
-
-Runtime expectations:
-
-- health endpoint returns status healthy,
-- tasks endpoint enumerates task set,
-- reset and step complete episodes with bounded rewards.
-
-## Practical Use Cases
-
-- evaluating claim-triage copilots before enterprise integration,
-- testing fraud-focused planning policies,
-- comparing model families under decision-risk constraints,
-- regression testing reward-shaping changes.
+---
 
 ## Known Limitations
 
-- synthetic data only; no PHI or proprietary claims data.
-- bounded action grammar; no free-form external tool calls.
-- concurrent sessions supported via session_id; sessions auto-expire after 30 minutes.
+- Synthetic data only — no PHI or proprietary claims data
+- Bounded action grammar — no free-form external tool calls
+- `coordinated_fraud` requires explicit `query_linked_claim` calls; signals are not visible in the initial observation
 
 ## Future Extensions
 
-- richer document modalities (OCR uncertainty, image evidence),
-- explicit SLA and investigator workload budgets,
-- configurable fraud-prior risk profiles,
-- multilingual claimant narratives.
+- Richer document modalities (OCR uncertainty, image evidence)
+- Explicit SLA and investigator workload budgets
+- Configurable fraud-prior risk profiles per variant
+- Multilingual claimant narratives
