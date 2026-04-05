@@ -28,10 +28,7 @@ from openai import OpenAI
 
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
-HF_TOKEN = os.getenv("HF_TOKEN")
-
-if not HF_TOKEN:
-    raise ValueError("HF_TOKEN environment variable is required")
+HF_TOKEN = os.getenv("HF_TOKEN", "no-token")
 
 client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 
@@ -556,11 +553,13 @@ def run_task(task_name: str, seed: int = 42, llm_only: bool = False) -> Dict[str
     except Exception as exc:
         last_error = str(exc)
     finally:
+        final_score_val = round(float(observation.get("reward", 0.0) or 0.0), 2)
         rewards_str = ",".join(f"{r:.2f}" for r in rewards)
         print(
-            "[END] success={} steps={} rewards={}".format(
+            "[END] success={} steps={} score={:.2f} rewards={}".format(
                 _format_bool(success),
                 step_idx,
+                final_score_val,
                 rewards_str,
             )
         )

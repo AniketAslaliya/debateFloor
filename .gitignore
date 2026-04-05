@@ -118,7 +118,7 @@ outputs/
 **/server/requirements.txt.generated
 
 # UV root lock file (env lock files should be committed)
-/uv.lock
+# /uv.lock  # committed for openenv validation
 .uv/
 
 *.backup*/
