@@ -1,4 +1,13 @@
-name: Validate Submission
+name: CI
+
+# Single entry point for all CI. Runs on every push/PR to main.
+# Jobs that are independent run in parallel; server smoke test runs
+# after docker-build since it needs the image.
+#
+# Job order:
+#   unit-tests  ──┐
+#                 ├── (parallel) ──> server-smoke  (sequential, needs docker-build)
+#   docker-build ─┘
 
 on:
   push:
@@ -9,6 +18,7 @@ on:
 
 jobs:
 
+  # ── 1. Unit tests and smoke import (no Docker needed) ─────────────────────
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest
@@ -19,11 +29,12 @@ jobs:
           python-version: "3.11"
       - name: Install dependencies
         run: pip install -r requirements.txt pytest pytest-asyncio
-      - name: Run reward and exploit tests
+      - name: Reward and exploit tests (15 tests)
         run: PYTHONPATH=. pytest tests/envs/test_insurance_claim_reward_and_exploit.py -q --tb=short
-      - name: Smoke-import all three tasks
+      - name: Smoke-import all tasks (step-0 reward == 0.0)
         run: PYTHONPATH=. python ci/smoke_import.py
 
+  # ── 2. Docker build (independent of unit tests) ───────────────────────────
   docker-build:
     name: Docker Build
     runs-on: ubuntu-latest
@@ -34,6 +45,7 @@ jobs:
       - name: Print image size
         run: docker images insurance-claim-env:ci
 
+  # ── 3. Live server smoke tests (needs docker-build) ───────────────────────
   server-smoke:
     name: Server Smoke Test
     runs-on: ubuntu-latest
@@ -45,43 +57,54 @@ jobs:
           python-version: "3.11"
       - name: Install requests
         run: pip install requests
-      - name: Build and start server
+
+      - name: Start server
         run: |
           docker build -t insurance-claim-env:ci .
           docker run -d --name env-server -p 7860:7860 insurance-claim-env:ci
-          echo "Waiting for server..."
+          echo "Waiting for server to be ready..."
           for i in $(seq 1 60); do
             curl -sf http://localhost:7860/health > /dev/null && echo "Ready after ${i}s" && break
             sleep 1
           done
-          curl -sf http://localhost:7860/health > /dev/null || (docker logs env-server && exit 1)
-      - name: GET /health
+          curl -sf http://localhost:7860/health > /dev/null || (echo "Server never became healthy" && docker logs env-server && exit 1)
+
+      - name: GET /health → status==healthy
         run: |
-          curl -sf http://localhost:7860/health | python -m json.tool
           STATUS=$(curl -sf http://localhost:7860/health | python -c "import sys,json; print(json.load(sys.stdin)['status'])")
-          test "$STATUS" = "healthy" && echo "health OK" || (echo "FAIL: $STATUS" && exit 1)
-      - name: GET /tasks (must be at least 3)
+          test "$STATUS" = "healthy" && echo "OK: $STATUS" || (echo "FAIL: $STATUS" && exit 1)
+
+      - name: GET /tasks → at least 3 tasks
         run: |
           COUNT=$(curl -sf http://localhost:7860/tasks | python -c "import sys,json; print(len(json.load(sys.stdin)['tasks']))")
-          python -c "import sys; count=int('$COUNT'); sys.exit(0 if count >= 3 else 1)" && echo "tasks OK ($COUNT)" || (echo "FAIL: got $COUNT" && exit 1)
-      - name: POST /reset with empty body (must return session_id)
+          python -c "import sys; c=int('$COUNT'); sys.exit(0 if c >= 3 else 1)" && echo "OK: $COUNT tasks" || (echo "FAIL: $COUNT tasks" && exit 1)
+
+      - name: POST /reset → returns session_id
         run: |
-          curl -sf -X POST http://localhost:7860/reset -H "Content-Type: application/json" -d '{}' | python -m json.tool
-          HAS=$(curl -sf -X POST http://localhost:7860/reset -H "Content-Type: application/json" -d '{}' | python -c "import sys,json; d=json.load(sys.stdin); print('yes' if 'session_id' in d else 'no')")
-          test "$HAS" = "yes" && echo "session_id OK" || (echo "FAIL: no session_id" && exit 1)
-      - name: GET /schema (action + observation + state)
+          HAS=$(curl -sf -X POST http://localhost:7860/reset \
+            -H "Content-Type: application/json" -d '{}' \
+            | python -c "import sys,json; d=json.load(sys.stdin); print('yes' if 'session_id' in d else 'no')")
+          test "$HAS" = "yes" && echo "OK: session_id present" || (echo "FAIL: no session_id" && exit 1)
+
+      - name: GET /schema → action + observation + state keys present
         run: |
-          KEYS=$(curl -sf http://localhost:7860/schema | python -c "import sys,json; d=json.load(sys.stdin); print(all(k in d for k in ['action','observation','state']))")
-          test "$KEYS" = "True" && echo "schema OK" || (echo "FAIL" && exit 1)
+          KEYS=$(curl -sf http://localhost:7860/schema | python -c \
+            "import sys,json; d=json.load(sys.stdin); print(all(k in d for k in ['action','observation','state']))")
+          test "$KEYS" = "True" && echo "OK: schema complete" || (echo "FAIL: schema missing keys" && exit 1)
+
+      - name: identity_fraud task reachable
+        run: |
+          HAS=$(curl -sf -X POST http://localhost:7860/reset \
+            -H "Content-Type: application/json" -d '{"task_id":"identity_fraud","seed":0}' \
+            | python -c "import sys,json; d=json.load(sys.stdin); print('yes' if 'session_id' in d else 'no')")
+          test "$HAS" = "yes" && echo "OK: identity_fraud reset" || (echo "FAIL" && exit 1)
+
       - name: Full clean_claim episode (reward >= 0.70)
         run: python ci/test_clean_claim_episode.py
-      - name: identity_fraud task is reachable (reset returns session_id)
-        run: |
-          HAS=$(curl -sf -X POST http://localhost:7860/reset -H "Content-Type: application/json" \
-            -d '{"task_id":"identity_fraud","seed":0}' | python -c "import sys,json; d=json.load(sys.stdin); print('yes' if 'session_id' in d else 'no')")
-          test "$HAS" = "yes" && echo "identity_fraud reset OK" || (echo "FAIL" && exit 1)
+
       - name: Concurrent sessions are isolated
         run: python ci/test_concurrent_sessions.py
+
       - name: Container logs on failure
         if: failure()
         run: docker logs env-server
