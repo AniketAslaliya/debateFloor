@@ -31,9 +31,9 @@ metadata:
       difficulty: hard
       max_steps: 20
       objective: >-
-        Query linked claims to discover cross-claim fraud patterns, flag all 4 ring
-        signals with grounded evidence, and escalate the full cluster for investigation.
-        Requires multi-hop reasoning across 3 linked claims.
+        Query linked claims to discover cross-claim fraud patterns. After querying 2 claims,
+        a 4th hidden claim surfaces (dynamic ring expansion). Flag all 5 signals including
+        clustered_policy_broker discoverable from the 4th claim. Escalate the full cluster.
     - id: identity_fraud
       difficulty: hard
       max_steps: 15
@@ -46,6 +46,7 @@ metadata:
     - validate_document
     - request_information
     - lookup_policy_history
+    - compare_documents
     - flag_fraud_signal
     - estimate_payout
     - approve_claim

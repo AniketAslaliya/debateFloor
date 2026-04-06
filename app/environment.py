@@ -11,11 +11,13 @@ from .models import (
     InsuranceClaimState,
 )
 from .tasks import (
+    ACTION_COSTS,
     TASKS,
     RuntimeTask,
     build_runtime_task,
     build_initial_payload,
     compute_reward_breakdown,
+    get_compare_signals,
     get_evidence_keyword_hints,
     get_task_definition,
 )
@@ -44,6 +46,8 @@ class InsuranceClaimEnvironment:
         self._policy_history_checked: bool = False
         self._identity_verified: bool = False
         self._agent_confidence: Optional[float] = None
+        self._budget_remaining: int = 0
+        self._compared_pairs: set[tuple] = set()
 
     def reset(self, task_id: Optional[str] = None, seed: Optional[int] = None, episode_id: Optional[str] = None) -> InsuranceClaimObservation:
         selected_task = task_id or "clean_claim"
@@ -66,6 +70,8 @@ class InsuranceClaimEnvironment:
         self._policy_history_checked = False
         self._identity_verified = False
         self._agent_confidence = None
+        self._budget_remaining = self._payload.get("investigation_budget", 0)
+        self._compared_pairs = set()
         self._last_message = (
             f"Task '{task.task_id}' loaded (variant={task.variant_id}). Start investigation."
         )
@@ -137,6 +143,12 @@ class InsuranceClaimEnvironment:
     def _apply_action(self, action: InsuranceClaimAction) -> str:
         task = self._runtime_task or build_runtime_task(self._state.task_id)
 
+        # Deduct investigation budget; overage adds 0.02 penalty per unit
+        cost = ACTION_COSTS.get(action.action_type, 1)
+        self._budget_remaining -= cost
+        if self._budget_remaining < 0:
+            self._state.penalty_total += 0.02  # per unit over budget
+
         if action.action_type == "request_information":
             self._request_info_streak += 1
             if self._request_info_streak > 2:
@@ -182,7 +194,6 @@ class InsuranceClaimEnvironment:
                 return "Identity verification already performed. No new information."
             self._identity_verified = True
             self._last_progress_step = self._state.step_number
-            # Verification reveals both identity_mismatch and hospital_no_record signals
             for sig in ["identity_mismatch", "hospital_no_record"]:
                 if sig not in self._found_signals:
                     self._found_signals.append(sig)
@@ -192,6 +203,39 @@ class InsuranceClaimEnvironment:
                 "Hospital records show admission under a different name ('Aarav Kumar') with DOB mismatch. "
                 "KYC status at policy inception: PENDING — identity was never confirmed."
             )
+
+        if action.action_type == "compare_documents":
+            task = self._runtime_task or build_runtime_task(self._state.task_id)
+            doc_id_a = str(action.parameters.get("doc_id_a", "")).strip()
+            doc_id_b = str(action.parameters.get("doc_id_b", "")).strip()
+            if not doc_id_a or not doc_id_b:
+                raise ValueError("'doc_id_a' and 'doc_id_b' are required for compare_documents")
+            if doc_id_a == doc_id_b:
+                raise ValueError("'doc_id_a' and 'doc_id_b' must be different documents")
+
+            all_doc_ids = {d["doc_id"] for d in self._payload["documents"]}
+            for did in (doc_id_a, doc_id_b):
+                if did not in all_doc_ids:
+                    raise ValueError(f"Unknown doc_id '{did}'")
+
+            pair = (doc_id_a, doc_id_b)
+            pair_rev = (doc_id_b, doc_id_a)
+            if pair in self._compared_pairs or pair_rev in self._compared_pairs:
+                self._exploit_penalty += 0.03
+                return f"Documents {doc_id_a} and {doc_id_b} were already compared. No new findings."
+
+            self._compared_pairs.add(pair)
+            signals = get_compare_signals(task.task_id, doc_id_a, doc_id_b)
+            if signals:
+                for sig in signals:
+                    if sig not in self._found_signals:
+                        self._found_signals.append(sig)
+                self._last_progress_step = self._state.step_number
+                return (
+                    f"Cross-document comparison of {doc_id_a} vs {doc_id_b} revealed "
+                    f"inconsistencies: {', '.join(signals)}."
+                )
+            return f"Cross-document comparison of {doc_id_a} vs {doc_id_b}: documents are consistent."
 
         if action.action_type == "validate_document":
             doc_id = str(action.parameters.get("doc_id", "")).strip()
@@ -275,8 +319,25 @@ class InsuranceClaimEnvironment:
             self._queried_claims.add(claim_id)
             self._last_progress_step = self._state.step_number
 
-            # After querying 2+ linked claims, the shared emergency contact becomes
-            # detectable. Surface it as a hint in the returned message.
+            # Dynamic ring expansion: after querying 2 existing claims, the 4th
+            # hidden claim (CLM-GROUP-304) surfaces in linked_claims.
+            expansion_hint = ""
+            if len(self._queried_claims) >= 2:
+                full_linked = self._payload.get("_full_linked_claims", [])
+                hidden = [
+                    c for c in full_linked
+                    if c.get("_hidden_until_queries", 0) <= len(self._queried_claims)
+                    and not any(v.get("claim_id") == c["claim_id"] for v in self._visible_linked_claims)
+                ]
+                for new_claim in hidden:
+                    stub = {"claim_id": new_claim["claim_id"], "claimant": new_claim["claimant"]}
+                    self._visible_linked_claims.append(stub)
+                    expansion_hint = (
+                        f" NEW: A previously unknown linked claim {new_claim['claim_id']} "
+                        f"({new_claim['claimant']}) has surfaced. Query it for full details."
+                    )
+
+            # After querying 2+ linked claims, the shared emergency contact becomes detectable.
             hint = ""
             if len(self._queried_claims) >= 2:
                 queried_data = [
@@ -288,7 +349,13 @@ class InsuranceClaimEnvironment:
                 if len(contacts) > 1 and len(unique_contacts) == 1:
                     hint = f" Cross-claim pattern detected: all queried claims share emergency_contact={contacts[0]}."
 
-            return f"Linked claim detail retrieved for {claim_id}: {match}{hint}"
+            # Querying CLM-GROUP-304 reveals clustered_policy_broker signal
+            if match.get("broker_id") and claim_id == "CLM-GROUP-304":
+                if "clustered_policy_broker" not in self._found_signals:
+                    self._found_signals.append("clustered_policy_broker")
+                    hint += " All queried claims share broker_id=BRK-441 (clustered_policy_broker signal)."
+
+            return f"Linked claim detail retrieved for {claim_id}: {match}{hint}{expansion_hint}"
 
         if action.action_type in {"approve_claim", "deny_claim", "request_investigation"}:
             self._state.final_decision = action.action_type
@@ -400,6 +467,8 @@ class InsuranceClaimEnvironment:
             available_actions=deepcopy(self._payload["available_actions"]),
             step_number=self._state.step_number,
             max_steps=self._state.max_steps,
+            investigation_budget=self._payload.get("investigation_budget", 0),
+            budget_remaining=self._budget_remaining,
             flags_raised=deepcopy(self._flags_raised),
             status=self._state.status,
             message=message,
@@ -415,6 +484,8 @@ class InsuranceClaimEnvironment:
                 "policy_history_checked": self._policy_history_checked,
                 "identity_verified": self._identity_verified,
                 "agent_confidence": self._agent_confidence,
+                "budget_remaining": self._budget_remaining,
+                "compared_pairs": [list(p) for p in self._compared_pairs],
             },
             reward_breakdown=reward_breakdown,
         )

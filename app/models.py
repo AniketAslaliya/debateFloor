@@ -66,7 +66,8 @@ class InsuranceClaimAction(Action):
     action_type: Literal[
         "validate_document",
         "request_information",
-        "lookup_policy_history",   # Available in all tasks: reveals prior claim history
+        "lookup_policy_history",   # All tasks: reveals prior claim history
+        "compare_documents",       # All tasks: cross-document tamper detection
         "flag_fraud_signal",
         "estimate_payout",
         "approve_claim",
@@ -106,6 +107,8 @@ class InsuranceClaimObservation(Observation):
     available_actions: List[str] = Field(default_factory=list, description="Valid action_type values for this task")
     step_number: int = Field(default=0, description="Current step number (0-indexed from reset)")
     max_steps: int = Field(default=0, description="Maximum steps allowed before episode closes")
+    investigation_budget: int = Field(default=0, description="Total budget units for this episode")
+    budget_remaining: int = Field(default=0, description="Budget units remaining. Going negative adds a 0.02 penalty per unit over budget.")
     flags_raised: List[str] = Field(default_factory=list, description="Fraud signal flag IDs raised so far")
     status: ClaimStatus = Field(default=ClaimStatus.OPEN, description="Current claim processing status")
     message: str = Field(default="", description="Human-readable message describing result of last action")

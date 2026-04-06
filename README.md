@@ -49,14 +49,15 @@ The agent must validate documents, flag each signal with grounded evidence text,
 
 ### `coordinated_fraud` — Hard
 
-A multi-claim fraud ring involving three linked policies. Signals are distributed across claims and require multi-hop reasoning via `query_linked_claim`:
+A multi-claim fraud ring with **dynamic ring expansion**. Starts with 3 visible linked claims; after querying any 2, a hidden 4th claim (`CLM-GROUP-304`) surfaces. Five discoverable signals:
 
 - Shared repair shop located 300–380 km from all incident sites
 - Near-identical accident descriptions across independent claims (similarity 0.90–0.95)
-- All three policies purchased within 30 days of the incident
-- Shared emergency contact — discoverable only after querying 2+ linked claims
+- All policies purchased within 30 days of the incident
+- Shared emergency contact — discoverable after querying 2+ linked claims
+- **Clustered policy broker** (`BRK-441`) — discoverable only by querying the 4th claim
 
-The final decision must be `request_investigation` targeting the full cluster. Partial escalation is penalized.
+The final decision must be `request_investigation` targeting all 4 claims. The agent must decide whether to spend budget querying the 4th claim for the broker signal or escalate with 4 signals.
 
 ### `identity_fraud` — Hard
 
@@ -91,6 +92,7 @@ Use `verify_identity` to cross-check the registry (discovers 2 signals in one ca
 | `validate_document` | `doc_id` | All tasks | Reveals embedded signals from the document |
 | `request_information` | — | All tasks | First call free; subsequent calls add SLA penalty |
 | `lookup_policy_history` | — | All tasks | Returns prior claim history, policy age, risk score. Triggers signal discovery in `contradictory_claim` and `identity_fraud` |
+| `compare_documents` | `doc_id_a`, `doc_id_b` | All tasks | Cross-document tamper detection. Discovers signals from document pairs (e.g. date mismatch, DOB inconsistency). Duplicate comparison adds exploit penalty. |
 | `flag_fraud_signal` | `flag_id`, `evidence` | All tasks | Evidence text must reference discovered keywords for quality credit |
 | `estimate_payout` | `amount_inr` | All tasks | Must be within the task's payout band for full credit |
 | `approve_claim` | `reason`, `confidence?` | All tasks | Final decision |
@@ -113,8 +115,9 @@ Every step returns a structured observation:
 - `action_history` — all prior steps in this episode
 - `available_actions` — task-specific valid action types
 - `step_number`, `max_steps`, `done`, `status`, `message`
+- `investigation_budget`, `budget_remaining` — soft budget; going over adds 0.02 penalty per unit
 - `reward`, `reward_breakdown` — per-component score breakdown at every step
-- `metadata` — `variant_id`, `evidence_hits`, `exploit_penalty`, `last_action_error`, `policy_history_checked`, `identity_verified`, `agent_confidence`
+- `metadata` — `variant_id`, `evidence_hits`, `exploit_penalty`, `last_action_error`, `policy_history_checked`, `identity_verified`, `agent_confidence`, `budget_remaining`, `compared_pairs`
 
 ---
 
@@ -140,9 +143,10 @@ Reward is deterministic and clamped to `[0.0, 1.0]`. It is zero at reset and gro
 |---------|---------|
 | False flag | Flagging a signal not in the ground truth (0.10–0.25 per flag) |
 | Wrong decision | Approving fraud or denying a clean claim (0.35) |
-| Exploit penalty | Looping `request_information` >2×; duplicate signal flags; duplicate `lookup_policy_history` |
+| Exploit penalty | Looping `request_information` >2×; duplicate signal flags; duplicate `lookup_policy_history`; duplicate `compare_documents` |
 | Partial cluster | `request_investigation` missing linked claims in `coordinated_fraud` (0.20) |
 | Query skip | `request_investigation` without querying ≥2 linked claims (0.15) |
+| Budget overage | Each action unit over `investigation_budget` adds 0.02 to penalty |
 
 ---
 

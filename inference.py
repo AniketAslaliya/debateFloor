@@ -39,6 +39,7 @@ ALLOWED_ACTIONS = {
     "validate_document",
     "request_information",
     "lookup_policy_history",
+    "compare_documents",
     "flag_fraud_signal",
     "estimate_payout",
     "approve_claim",
@@ -198,17 +199,29 @@ def _canonical_action(observation: Dict[str, Any]) -> Optional[Dict[str, Any]]:
                     "reasoning": "Retrieve full linked claim detail to discover cross-claim fraud patterns.",
                 }
 
+        # After 2 queries the 4th claim surfaces — query it too
+        all_linked_ids = [c.get("claim_id") for c in linked_claims if isinstance(c, dict) and c.get("claim_id")]
+        for cid in all_linked_ids:
+            if cid not in queried:
+                return {
+                    "action_type": "query_linked_claim",
+                    "parameters": {"claim_id": cid},
+                    "reasoning": "Retrieve full linked claim detail including 4th ring member.",
+                }
+
         ring_evidence = {
-            "shared_repair_shop_far": "Linked claims share a distant repair shop far from incident location",
-            "shared_emergency_contact": "Multiple claimants share the same emergency contact",
-            "near_identical_descriptions": "Narratives are near-identical across linked claims",
-            "recent_policy_cluster": "Policies were purchased in a clustered window before incidents",
+            "shared_repair_shop_far": "Linked claims share a distant repair shop far from incident location rapidfix kota km",
+            "shared_emergency_contact": "Multiple claimants share the same emergency contact phone 9000002222",
+            "near_identical_descriptions": "Narratives are near-identical across linked claims identical description template similarity",
+            "recent_policy_cluster": "Policies were purchased in a clustered window before incidents policy purchase days 30",
+            "clustered_policy_broker": "All 4 claims issued through the same broker BRK-441 clustered policy broker",
         }
         for flag_id in [
             "shared_repair_shop_far",
             "shared_emergency_contact",
             "near_identical_descriptions",
             "recent_policy_cluster",
+            "clustered_policy_broker",
         ]:
             if flag_id not in flagged:
                 return {
@@ -220,10 +233,11 @@ def _canonical_action(observation: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         return {
             "action_type": "request_investigation",
             "parameters": {
-                "target_claim_ids": ["CLM-GROUP-301", "CLM-GROUP-302", "CLM-GROUP-303"],
-                "reason": "Linked claims show a coordinated fraud pattern",
+                "target_claim_ids": ["CLM-GROUP-301", "CLM-GROUP-302", "CLM-GROUP-303", "CLM-GROUP-304"],
+                "reason": "Linked claims show a coordinated fraud pattern including 4th ring member",
             },
-            "reasoning": "Escalate all linked claims after consistent multi-signal confirmation.",
+            "reasoning": "Escalate all 4 linked claims after consistent multi-signal confirmation.",
+            "confidence": 0.90,
         }
 
     if task_id == "identity_fraud":
@@ -435,8 +449,11 @@ def _repair_action(observation: Dict[str, Any], action: Dict[str, Any]) -> Dict[
             parameters["reason"] = "Material contradictions indicate likely fraud"
 
     elif action_type in {"lookup_policy_history", "verify_identity"}:
-        # No required parameters for these actions
-        pass
+        pass  # No required parameters
+
+    elif action_type == "compare_documents":
+        if not str(parameters.get("doc_id_a", "")).strip() or not str(parameters.get("doc_id_b", "")).strip():
+            return _fallback_action(observation)
 
     repaired["parameters"] = parameters
     repaired["action_type"] = action_type

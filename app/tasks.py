@@ -8,12 +8,29 @@ from typing import Any, Dict, List, Optional
 from .models import InsuranceClaimReward
 
 
+# Budget units consumed per action type. Final decisions are free.
+ACTION_COSTS: Dict[str, int] = {
+    "validate_document": 1,
+    "request_information": 2,
+    "lookup_policy_history": 1,
+    "compare_documents": 1,
+    "flag_fraud_signal": 1,
+    "estimate_payout": 1,
+    "query_linked_claim": 1,
+    "verify_identity": 2,
+    "approve_claim": 0,
+    "deny_claim": 0,
+    "request_investigation": 0,
+}
+
+
 @dataclass(frozen=True)
 class TaskDefinition:
     task_id: str
     title: str
     difficulty: str
     max_steps: int
+    investigation_budget: int       # soft budget; overage adds 0.02 penalty per unit
     claim_id: str
     claimant: Dict[str, Any]
     incident: Dict[str, Any]
@@ -33,6 +50,7 @@ class RuntimeTask:
     title: str
     difficulty: str
     max_steps: int
+    investigation_budget: int
     claim_id: str
     claimant: Dict[str, Any]
     incident: Dict[str, Any]
@@ -51,7 +69,8 @@ def _base_available_actions(task_id: str = "") -> List[str]:
     actions = [
         "validate_document",
         "request_information",
-        "lookup_policy_history",   # available in all tasks
+        "lookup_policy_history",
+        "compare_documents",
         "flag_fraud_signal",
         "estimate_payout",
         "approve_claim",
@@ -71,6 +90,7 @@ TASKS: Dict[str, TaskDefinition] = {
         title="Clean auto claim with complete evidence",
         difficulty="easy",
         max_steps=8,
+        investigation_budget=8,   # validate×3 + estimate + approve = 5; 3 units slack
         claim_id="CLM-AUTO-001",
         claimant={
             "name": "Rajesh Verma",
@@ -123,6 +143,7 @@ TASKS: Dict[str, TaskDefinition] = {
         title="Medical claim with contradictory evidence",
         difficulty="medium",
         max_steps=12,
+        investigation_budget=12,  # validate×4 + lookup + flag×4 + deny = 10; 2 units slack
         claim_id="CLM-MED-017",
         claimant={
             "name": "Neha Kapoor",
@@ -198,6 +219,7 @@ TASKS: Dict[str, TaskDefinition] = {
         title="Coordinated multi-claim fraud ring",
         difficulty="hard",
         max_steps=20,
+        investigation_budget=18,  # validate×3 + query×4 + flag×5 + escalate = 15; 3 units slack
         claim_id="CLM-GROUP-301",
         claimant={
             "name": "Primary: Arjun Saini",
@@ -258,6 +280,19 @@ TASKS: Dict[str, TaskDefinition] = {
                 "repair_shop": "RapidFix Motors",
                 "accident_description": "A truck abruptly stopped causing chain collision near city bypass.",
                 "policy_purchase_date": "2026-02-02",
+                "broker_id": "BRK-441",
+            },
+            # 4th claim — hidden until agent queries 2 linked claims (dynamic ring expansion)
+            {
+                "claim_id": "CLM-GROUP-304",
+                "claimant": "Vikram Sharma",
+                "contact": "+91-9011009988",
+                "emergency_contact": "+91-9000002222",
+                "repair_shop": "RapidFix Motors",
+                "accident_description": "A truck abruptly stopped causing chain collision near city bypass.",
+                "policy_purchase_date": "2026-02-08",
+                "broker_id": "BRK-441",
+                "_hidden_until_queries": 2,   # surfaced only after 2 existing claims are queried
             },
         ],
         expected_signals=[
@@ -265,10 +300,11 @@ TASKS: Dict[str, TaskDefinition] = {
             "shared_emergency_contact",
             "near_identical_descriptions",
             "recent_policy_cluster",
+            "clustered_policy_broker",   # discoverable by querying the 4th linked claim
         ],
         allowed_final_decisions=["request_investigation"],
         payout_band=None,
-        consistency_group_claim_ids=["CLM-GROUP-301", "CLM-GROUP-302", "CLM-GROUP-303"],
+        consistency_group_claim_ids=["CLM-GROUP-301", "CLM-GROUP-302", "CLM-GROUP-303", "CLM-GROUP-304"],
         policy_history={
             "prior_claims": [],
             "years_as_customer": 0,
@@ -283,6 +319,7 @@ TASKS: Dict[str, TaskDefinition] = {
         title="Ghost claimant identity fraud",
         difficulty="hard",
         max_steps=15,
+        investigation_budget=14,  # verify(2)+lookup+validate×4+flag×4+deny = 11; 3 units slack
         claim_id="CLM-ID-501",
         claimant={
             "name": "Aarav Mehta",
@@ -389,6 +426,7 @@ def _copy_runtime_from_task(task: TaskDefinition, variant_id: int) -> RuntimeTas
         title=task.title,
         difficulty=task.difficulty,
         max_steps=task.max_steps,
+        investigation_budget=task.investigation_budget,
         claim_id=task.claim_id,
         claimant=deepcopy(task.claimant),
         incident=deepcopy(task.incident),
@@ -471,11 +509,12 @@ def build_runtime_task(task_id: str, seed: Optional[int] = None) -> RuntimeTask:
 
 
 def _stub_linked_claims(linked_claims: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Return only claim_id and claimant for each linked claim."""
+    """Return only claim_id and claimant. Hidden claims (with _hidden_until_queries > 0)
+    are excluded from the initial list — they surface dynamically in the environment."""
     return [
         {"claim_id": c["claim_id"], "claimant": c["claimant"]}
         for c in linked_claims
-        if "claim_id" in c
+        if "claim_id" in c and c.get("_hidden_until_queries", 0) == 0
     ]
 
 
@@ -494,6 +533,7 @@ def build_initial_payload(runtime_task: RuntimeTask) -> Dict[str, Any]:
         "linked_claims": linked_claims_visible,
         "_full_linked_claims": deepcopy(runtime_task.linked_claims),
         "max_steps": runtime_task.max_steps,
+        "investigation_budget": runtime_task.investigation_budget,
         "variant_id": runtime_task.variant_id,
         "available_actions": _base_available_actions(runtime_task.task_id),
     }
@@ -512,6 +552,7 @@ def get_evidence_keyword_hints(task_id: str, flag_id: str) -> List[str]:
             "shared_emergency_contact": ["contact", "phone", "emergency", "shared", "9000002222"],
             "near_identical_descriptions": ["identical", "description", "narrative", "template", "similarity"],
             "recent_policy_cluster": ["policy", "purchase", "days", "cluster", "30"],
+            "clustered_policy_broker": ["broker", "brk-441", "same broker", "policy broker", "issued"],
         },
         "identity_fraud": {
             "identity_mismatch": ["identity", "registry", "national", "id", "mismatch", "no record", "7821"],
@@ -521,6 +562,31 @@ def get_evidence_keyword_hints(task_id: str, flag_id: str) -> List[str]:
         },
     }
     return hints.get(task_id, {}).get(flag_id, [])
+
+
+# Cross-document comparison signal mapping: (doc_a, doc_b) → signals discovered
+COMPARE_DOCUMENT_SIGNALS: Dict[str, Dict[tuple, List[str]]] = {
+    "contradictory_claim": {
+        ("DOC-10", "DOC-11"): ["date_mismatch"],
+        ("DOC-11", "DOC-10"): ["date_mismatch"],
+        ("DOC-10", "DOC-12"): ["cost_inflation"],
+        ("DOC-12", "DOC-10"): ["cost_inflation"],
+    },
+    "coordinated_fraud": {
+        ("DOC-21", "DOC-22"): ["near_identical_descriptions"],
+        ("DOC-22", "DOC-21"): ["near_identical_descriptions"],
+    },
+    "identity_fraud": {
+        ("DOC-31", "DOC-34"): ["dob_inconsistency"],
+        ("DOC-34", "DOC-31"): ["dob_inconsistency"],
+        ("DOC-32", "DOC-33"): ["hospital_no_record"],
+        ("DOC-33", "DOC-32"): ["hospital_no_record"],
+    },
+}
+
+
+def get_compare_signals(task_id: str, doc_id_a: str, doc_id_b: str) -> List[str]:
+    return COMPARE_DOCUMENT_SIGNALS.get(task_id, {}).get((doc_id_a, doc_id_b), [])
 
 
 def clamp01(value: float) -> float:
