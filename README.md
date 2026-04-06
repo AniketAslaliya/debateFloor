@@ -12,7 +12,7 @@ pinned: false
 
 > A production-style [OpenEnv](https://github.com/meta-pytorch/OpenEnv) benchmark for LLM agents that must adjudicate insurance claims under uncertainty, fraud pressure, and operational constraints.
 
-[![Validate Submission](https://github.com/AniketAslaliya/insuranceClaim/actions/workflows/validate.yml/badge.svg)](https://github.com/AniketAslaliya/insuranceClaim/actions/workflows/validate.yml)
+[![CI](https://github.com/AniketAslaliya/insuranceClaim/actions/workflows/validate.yml/badge.svg)](https://github.com/AniketAslaliya/insuranceClaim/actions/workflows/validate.yml)
 [![HuggingFace Space](https://img.shields.io/badge/🤗%20Space-insurance--claim--env-blue)](https://huggingface.co/spaces/AniketAsla/insurance-claim-env)
 
 ---
@@ -23,39 +23,51 @@ Insurance claims handling is a high-stakes workflow where agents must balance cu
 
 An agent receives a claim file with supporting documents, linked claims, and incident data. It must investigate, flag anomalies, estimate payouts, and reach a final adjudication decision — all within a step budget and under a reward signal that penalizes both over-caution and fraud blindness.
 
-The environment is built on the OpenEnv REST API spec and can be run locally or accessed as a live HuggingFace Docker Space.
+The environment is built on the OpenEnv REST API spec and runs as a live HuggingFace Docker Space.
 
 ---
 
 ## Task Portfolio
 
-Three tasks of increasing complexity, each with 5 seeded variants for reproducible evaluation.
+Four tasks of increasing complexity, each with 5 seeded variants for reproducible evaluation.
 
 ### `clean_claim` — Easy
 
 A straightforward auto insurance claim with internally consistent documentation. No fraud signals are present. The correct decision is `approve_claim` with a payout estimate in the INR 45,000–55,000 band.
 
-The challenge is efficiency: agents that over-investigate or raise false fraud signals are penalized even when the final decision is correct.
+The challenge is efficiency: agents that over-investigate or raise false fraud signals are penalized even when the final decision is correct. `lookup_policy_history` returns a clean 6-year history with no prior claims.
 
 ### `contradictory_claim` — Medium
 
-A medical claim with three embedded contradictions:
-- Incident date mismatch between the FIR and hospital admission record
-- Suspicious cost inflation in the repair estimate
-- Signature inconsistency across documents
+A medical claim with four discoverable signals:
+- Incident date mismatch between the claim form and hospital admission record
+- Suspicious cost inflation (2.4× the standard procedure rate)
+- Signature inconsistency across discharge documents
+- **Prior similar claim** — identical procedure 8 months ago, discoverable only via `lookup_policy_history`
 
-The agent must validate documents, flag each signal with grounded evidence text, and reach a `deny_claim` or `request_investigation` decision. Vague or keyword-free evidence reduces the evidence quality score.
+The agent must validate documents, flag each signal with grounded evidence text, and reach a `deny_claim` or `request_investigation` decision.
 
 ### `coordinated_fraud` — Hard
 
-A multi-claim fraud ring involving three linked policies. Signals are distributed across claims and require multi-hop reasoning:
+A multi-claim fraud ring involving three linked policies. Signals are distributed across claims and require multi-hop reasoning via `query_linked_claim`:
 
-- A shared repair shop located 340 km away from all incident sites
-- Near-identical damage descriptions across independent claims
-- All three policies purchased within 11 days of each other
-- A shared emergency contact discoverable only after querying two or more linked claims
+- Shared repair shop located 300–380 km from all incident sites
+- Near-identical accident descriptions across independent claims (similarity 0.90–0.95)
+- All three policies purchased within 30 days of the incident
+- Shared emergency contact — discoverable only after querying 2+ linked claims
 
-The final decision must be `request_investigation` targeting the full cluster. Partial escalation (missing a linked claim) is penalized.
+The final decision must be `request_investigation` targeting the full cluster. Partial escalation is penalized.
+
+### `identity_fraud` — Hard
+
+A ghost claimant scenario where the policyholder does not exist. Four discoverable signals:
+
+- **Identity mismatch** — national registry has no record matching the claimant name and ID
+- **Hospital no record** — hospital system shows admission under a different name with DOB mismatch
+- **Recent policy purchase** — policy opened only 5 days before the incident (30-day exclusion window); discoverable via `lookup_policy_history`
+- **DOB inconsistency** — date of birth on ID proof conflicts with policy application
+
+Use `verify_identity` to cross-check the registry (discovers 2 signals in one call), and `lookup_policy_history` to surface the suspicious policy age. Correct decisions: `deny_claim` or `request_investigation`.
 
 ---
 
@@ -74,99 +86,102 @@ The final decision must be `request_investigation` targeting the full cluster. P
 
 ### Action Space
 
-| Action | Required Parameters | Notes |
-|--------|--------------------|----|
-| `validate_document` | `doc_id` | Reveals embedded signals from the document |
-| `request_information` | — | First call free; subsequent calls add SLA penalty |
-| `flag_fraud_signal` | `flag_id`, `evidence` | Evidence text must reference discovered keywords |
-| `estimate_payout` | `amount_inr` | Must be within the task's payout band for full credit |
-| `query_linked_claim` | `claim_id` | `coordinated_fraud` only — unlocks full linked claim details |
-| `approve_claim` | `reason` | Final decision |
-| `deny_claim` | `reason` | Final decision |
-| `request_investigation` | `target_claim_ids`, `reason` | Final decision; must target the full fraud cluster |
+| Action | Parameters | Available In | Notes |
+|--------|-----------|-------------|-------|
+| `validate_document` | `doc_id` | All tasks | Reveals embedded signals from the document |
+| `request_information` | — | All tasks | First call free; subsequent calls add SLA penalty |
+| `lookup_policy_history` | — | All tasks | Returns prior claim history, policy age, risk score. Triggers signal discovery in `contradictory_claim` and `identity_fraud` |
+| `flag_fraud_signal` | `flag_id`, `evidence` | All tasks | Evidence text must reference discovered keywords for quality credit |
+| `estimate_payout` | `amount_inr` | All tasks | Must be within the task's payout band for full credit |
+| `approve_claim` | `reason`, `confidence?` | All tasks | Final decision |
+| `deny_claim` | `reason`, `confidence?` | All tasks | Final decision |
+| `request_investigation` | `target_claim_ids`, `reason`, `confidence?` | All tasks | Final decision; must target the full fraud cluster |
+| `query_linked_claim` | `claim_id` | `coordinated_fraud` | Unlocks full linked claim details for multi-hop reasoning |
+| `verify_identity` | — | `identity_fraud` | Cross-checks claimant against national registry; discovers `identity_mismatch` + `hospital_no_record` in one call |
+
+**`confidence` field:** All final decisions accept an optional `confidence: 0.0–1.0` field. When provided, it is scored against the task's ground-truth confidence via a Brier-style calibration score (see reward model).
 
 ### Observation Fields
 
-Every step returns a structured observation including:
+Every step returns a structured observation:
 
 - `claim_id`, `task_id`, `session_id`
 - `claimant` — name, contact, policy details
-- `incident` — date, location, description, severity
-- `documents` — list of docs with metadata (each has a `doc_id`)
-- `linked_claims` — stub list; full details revealed via `query_linked_claim`
+- `incident` — date, location, type, description
+- `documents` — list of docs with `doc_id` and metadata
+- `linked_claims` — stub list for `coordinated_fraud`; full details unlocked via `query_linked_claim`
 - `action_history` — all prior steps in this episode
-- `available_actions` — task-appropriate action grammar
+- `available_actions` — task-specific valid action types
 - `step_number`, `max_steps`, `done`, `status`, `message`
-- `reward`, `reward_breakdown` — per-component score breakdown
-- `metadata` — `variant_id`, `evidence_hits`, `exploit_penalty`, `last_action_error`
+- `reward`, `reward_breakdown` — per-component score breakdown at every step
+- `metadata` — `variant_id`, `evidence_hits`, `exploit_penalty`, `last_action_error`, `policy_history_checked`, `identity_verified`, `agent_confidence`
 
 ---
 
 ## Reward Model
 
-Reward is deterministic and clamped to `[0.0, 1.0]`. It is non-zero only after the first action, giving a clean `reward=0.0` at reset.
+Reward is deterministic and clamped to `[0.0, 1.0]`. It is zero at reset and grows with each meaningful action.
 
 ### Components
 
 | Component | Weight | Description |
 |-----------|--------|-------------|
-| `fraud_detection_score` | 0.30 | Fraction of expected signals correctly found |
-| `decision_accuracy` | 0.25 | Correct final decision for the task |
-| `payout_accuracy` | 0.15 | Payout estimate within the task's target band |
+| `fraud_detection_score` | 0.28 | Fraction of expected signals correctly found |
+| `decision_accuracy` | 0.20 | 1.0 if final decision matches ground truth, else 0.0 |
+| `payout_accuracy` | 0.11 | Payout estimate within the task's target band |
 | `efficiency_score` | 0.10 | Inverse step usage relative to budget |
-| `consistency_score` | 0.10 | Correct escalation targets in `request_investigation` |
-| `evidence_quality_score` | 0.10 | Evidence text quality for flagged signals |
+| `consistency_score` | 0.09 | For `coordinated_fraud`: quality of linked-claim targeting |
+| `evidence_quality_score` | 0.14 | Fraction of flagged signals backed by keyword-grounded evidence |
+| `calibration_score` | 0.08 | `1 − (agent_confidence − ground_truth_confidence)²`; only scored when `confidence` is provided on final decision |
 
 ### Penalties
 
-- **False flag** — flagging a signal not in the ground truth
-- **Exploit penalty** — looping `request_information` >2 times; duplicate signal flags
-- **Low-quality evidence** — evidence text missing discovered keywords
-- **Partial cluster escalation** — `request_investigation` missing linked claims in `coordinated_fraud`
-- **Wrong decision** — strong penalty for approving a fraudulent claim or denying a clean one
+| Penalty | Trigger |
+|---------|---------|
+| False flag | Flagging a signal not in the ground truth (0.10–0.25 per flag) |
+| Wrong decision | Approving fraud or denying a clean claim (0.35) |
+| Exploit penalty | Looping `request_information` >2×; duplicate signal flags; duplicate `lookup_policy_history` |
+| Partial cluster | `request_investigation` missing linked claims in `coordinated_fraud` (0.20) |
+| Query skip | `request_investigation` without querying ≥2 linked claims (0.15) |
 
 ---
 
 ## Seeded Variants
 
-Each task supports 5 seed-driven variants that alter numeric surfaces (costs, dates, distances, contact names) while preserving logical structure and grading rules. Use seeds for reproducible evaluation and variance analysis.
+Each task supports 5 seed-driven variants that alter numeric surfaces (costs, dates, distances, policy ages) while preserving logical structure and grading rules.
 
 ```bash
-# Run evaluation across seeds
 python scripts/generate_eval_report.py --base-url http://127.0.0.1:7860 --seeds 7,17,27,42,99
 ```
-
-Outputs:
-- `reports/eval_report.json`
-- `reports/eval_report.md`
 
 ---
 
 ## Baseline Scores
 
-Run with `python inference.py --seed 42` using Qwen2.5-72B-Instruct via HuggingFace Inference API.
+Run with `python inference.py --seed 42` using Qwen2.5-72B-Instruct.
 
 | Task | Mode | Score | Steps |
 |------|------|-------|-------|
 | `clean_claim` | Stabilized | 0.91 | 5 |
 | `contradictory_claim` | Stabilized | 0.83 | 7 |
 | `coordinated_fraud` | Stabilized | 0.76 | 11 |
+| `identity_fraud` | Stabilized | 0.86 | 11 |
 | `clean_claim` | LLM-only | 0.74 | 6 |
 | `contradictory_claim` | LLM-only | 0.51 | 9 |
 | `coordinated_fraud` | LLM-only | 0.31 | 14 |
+| `identity_fraud` | LLM-only | 0.40 | 13 |
 
-**Stabilized** mode applies deterministic task-critical action correction on top of the LLM output. **LLM-only** mode reflects raw model capability with no oracle assistance.
-
-Reproduce:
+**Stabilized** mode: deterministic canonical action sequence, LLM called for reasoning only.  
+**LLM-only** mode: raw model output with minimal repair, no oracle overrides.
 
 ```bash
 export HF_TOKEN=your_token
 export MODEL_NAME=Qwen/Qwen2.5-72B-Instruct
 export API_BASE_URL=https://router.huggingface.co/v1
 
-python inference.py --seed 42             # stabilized
-python inference.py --seed 42 --llm-only  # raw LLM
-python inference.py --task coordinated_fraud --seed 17
+python inference.py --seed 42                          # all 4 tasks, stabilized
+python inference.py --seed 42 --llm-only               # all 4 tasks, raw LLM
+python inference.py --task identity_fraud --seed 17    # single task
 ```
 
 ---
@@ -182,8 +197,6 @@ pip install -r requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 7860
 ```
 
-Then open `http://localhost:7860/` for the API root, or `/tasks` to see available tasks.
-
 ### Run with Docker
 
 ```bash
@@ -191,34 +204,42 @@ docker build -t insurance-claim-env:latest .
 docker run -p 7860:7860 insurance-claim-env:latest
 ```
 
-### Quick episode example
+### Episode example — `identity_fraud`
 
 ```python
 import requests
 
 BASE = "http://localhost:7860"
 
-# Start episode
-r = requests.post(f"{BASE}/reset", json={"task_id": "clean_claim", "seed": 42})
+r = requests.post(f"{BASE}/reset", json={"task_id": "identity_fraud", "seed": 0})
 session_id = r.json()["session_id"]
 
-# Validate documents
-for doc_id in ["DOC-1", "DOC-2", "DOC-3"]:
-    requests.post(f"{BASE}/step", json={
-        "session_id": session_id,
-        "action": {"action_type": "validate_document", "parameters": {"doc_id": doc_id}, "reasoning": "check docs"}
-    })
+def step(action):
+    return requests.post(f"{BASE}/step", json={"action": action, "session_id": session_id}).json()
 
-# Estimate payout and approve
-requests.post(f"{BASE}/step", json={
-    "session_id": session_id,
-    "action": {"action_type": "estimate_payout", "parameters": {"amount_inr": 50500}, "reasoning": "within band"}
-})
-resp = requests.post(f"{BASE}/step", json={
-    "session_id": session_id,
-    "action": {"action_type": "approve_claim", "parameters": {"reason": "all documents consistent"}, "reasoning": "approve"}
-})
-print(f"Final reward: {resp.json()['reward']}")  # ~0.91
+# Cross-check registry — discovers identity_mismatch + hospital_no_record
+step({"action_type": "verify_identity", "parameters": {}, "reasoning": "check registry"})
+
+# Reveal policy age — discovers recent_policy_purchase
+step({"action_type": "lookup_policy_history", "parameters": {}, "reasoning": "check policy age"})
+
+# Validate ID document — discovers dob_inconsistency
+step({"action_type": "validate_document", "parameters": {"doc_id": "DOC-34"}, "reasoning": "check id"})
+
+# Flag all signals with grounded evidence
+for flag_id, evidence in [
+    ("identity_mismatch",    "registry has no record matching id 7821 identity mismatch"),
+    ("hospital_no_record",   "hospital record shows patient not found name mismatch dob"),
+    ("recent_policy_purchase", "policy purchased 5 days before incident 30-day exclusion window"),
+    ("dob_inconsistency",    "dob on id 1988 does not match policy application 1986 inconsistency"),
+]:
+    step({"action_type": "flag_fraud_signal", "parameters": {"flag_id": flag_id, "evidence": evidence}, "reasoning": "flag"})
+
+# Final decision with confidence
+resp = step({"action_type": "deny_claim", "parameters": {"reason": "ghost claimant confirmed"},
+             "reasoning": "deny", "confidence": 0.9})
+print(f"Final reward: {resp['reward']}")         # ~0.86
+print(f"Calibration:  {resp['reward_breakdown']['calibration_score']}")
 ```
 
 ---
@@ -226,20 +247,20 @@ print(f"Final reward: {resp.json()['reward']}")  # ~0.91
 ## Testing
 
 ```bash
-# Unit and reward tests
+# 15 unit tests covering reward, exploits, new features
 PYTHONPATH=. pytest tests/envs/test_insurance_claim_reward_and_exploit.py -q
 
-# Smoke import (step-0 reward == 0.0 for all tasks)
+# Step-0 reward == 0.0 for all 4 tasks
 PYTHONPATH=. python ci/smoke_import.py
 
-# Full clean_claim episode (reward >= 0.70)
+# Full clean_claim episode via HTTP (reward >= 0.70)
 python ci/test_clean_claim_episode.py
 
 # Concurrent session isolation
 python ci/test_concurrent_sessions.py
 ```
 
-The GitHub Actions workflow runs all of these plus a Docker build and live server smoke test on every push.
+CI runs on every push: unit tests and Docker build in parallel, then live server smoke test.
 
 ---
 
@@ -247,18 +268,19 @@ The GitHub Actions workflow runs all of these plus a Docker build and live serve
 
 ```
 app/
-  main.py          # FastAPI server, session management (UUID-keyed, 30min TTL)
-  environment.py   # InsuranceClaimEnvironment — step/reset logic, signal discovery
-  tasks.py         # Task definitions, reward computation, seeded variants
-  models.py        # Pydantic v2 models for Action, Observation, State
+  main.py          # FastAPI server — session management (UUID-keyed, 30-min TTL auto-cleanup)
+  environment.py   # InsuranceClaimEnvironment — step/reset/signal discovery/calibration
+  tasks.py         # 4 task definitions, reward computation, seeded variants, policy history
+  models.py        # Pydantic v2 — Action (with confidence), Observation, State, RewardBreakdown
 
-ci/                # CI test scripts (no server import needed, use HTTP)
-tests/             # Pytest reward and exploit unit tests
-inference.py       # Baseline LLM agent (OpenAI client, stabilized + LLM-only modes)
-scripts/           # Eval report generator, HF Space evaluator
+ci/                # HTTP-based CI test scripts
+tests/             # Pytest unit tests (reward, exploits, calibration, new features)
+inference.py       # Baseline LLM agent — 4 tasks, stabilized + LLM-only modes
+.github/workflows/
+  validate.yml     # Single CI orchestrator (unit-tests ∥ docker-build → server-smoke)
 ```
 
-Session isolation: every `/reset` call returns a `session_id`. All subsequent `/step` and `/state` calls must include it. Sessions are independent in-memory objects; concurrent episodes do not share state.
+**Session isolation:** every `/reset` returns a `session_id`. All `/step` and `/state` calls include it. Sessions are independent in-memory objects with no shared state.
 
 ---
 
@@ -266,11 +288,12 @@ Session isolation: every `/reset` call returns a `session_id`. All subsequent `/
 
 - Synthetic data only — no PHI or proprietary claims data
 - Bounded action grammar — no free-form external tool calls
-- `coordinated_fraud` requires explicit `query_linked_claim` calls; signals are not visible in the initial observation
+- `coordinated_fraud` signals are gated behind `query_linked_claim`; not visible in initial observation
+- `identity_fraud` registry is deterministic (not a live external lookup)
 
 ## Future Extensions
 
-- Richer document modalities (OCR uncertainty, image evidence)
+- Richer document modalities (OCR uncertainty, image tampering detection)
 - Explicit SLA and investigator workload budgets
 - Configurable fraud-prior risk profiles per variant
 - Multilingual claimant narratives
