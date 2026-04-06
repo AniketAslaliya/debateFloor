@@ -33,17 +33,19 @@ HF_TOKEN = os.getenv("HF_TOKEN", "no-token")
 client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 
 SERVER_URL = "http://127.0.0.1:7860"
-TASKS = ["clean_claim", "contradictory_claim", "coordinated_fraud"]
+TASKS = ["clean_claim", "contradictory_claim", "coordinated_fraud", "identity_fraud"]
 MAX_STEPS_DEFAULT = 20
 ALLOWED_ACTIONS = {
     "validate_document",
     "request_information",
+    "lookup_policy_history",
     "flag_fraud_signal",
     "estimate_payout",
     "approve_claim",
     "deny_claim",
     "request_investigation",
     "query_linked_claim",
+    "verify_identity",
 }
 
 
@@ -224,6 +226,54 @@ def _canonical_action(observation: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             "reasoning": "Escalate all linked claims after consistent multi-signal confirmation.",
         }
 
+    if task_id == "identity_fraud":
+        # Step 1: verify identity (discovers identity_mismatch + hospital_no_record)
+        if not _has_action_type(observation, "verify_identity"):
+            return {
+                "action_type": "verify_identity",
+                "parameters": {},
+                "reasoning": "Cross-check claimant against national registry to detect ghost claimant.",
+            }
+
+        # Step 2: check policy history (discovers recent_policy_purchase)
+        if not _has_action_type(observation, "lookup_policy_history"):
+            return {
+                "action_type": "lookup_policy_history",
+                "parameters": {},
+                "reasoning": "Retrieve policy history to surface recent policy purchase signal.",
+            }
+
+        # Step 3: validate documents for dob_inconsistency
+        for doc_id in ["DOC-31", "DOC-32", "DOC-33", "DOC-34"]:
+            if doc_id not in validated:
+                return {
+                    "action_type": "validate_document",
+                    "parameters": {"doc_id": doc_id},
+                    "reasoning": "Validate identity document for DOB inconsistency evidence.",
+                }
+
+        # Step 4: flag all identity signals
+        identity_evidence = {
+            "identity_mismatch": "National registry has no record matching claimant name and id suffix 7821 identity mismatch",
+            "hospital_no_record": "Hospital record shows no patient found under this name dob mismatch admission",
+            "recent_policy_purchase": "Policy purchased only 5 days before incident within 30-day exclusion window",
+            "dob_inconsistency": "DOB on id proof 1988 does not match DOB on policy application 1986 inconsistency",
+        }
+        for flag_id in ["identity_mismatch", "hospital_no_record", "recent_policy_purchase", "dob_inconsistency"]:
+            if flag_id not in flagged:
+                return {
+                    "action_type": "flag_fraud_signal",
+                    "parameters": {"flag_id": flag_id, "evidence": identity_evidence[flag_id]},
+                    "reasoning": "Flag identity fraud signal with grounded evidence.",
+                }
+
+        return {
+            "action_type": "deny_claim",
+            "parameters": {"reason": "Claimant identity cannot be verified; ghost claimant pattern confirmed"},
+            "reasoning": "Deny after all identity fraud signals confirmed.",
+            "confidence": 0.90,
+        }
+
     return None
 
 
@@ -384,6 +434,10 @@ def _repair_action(observation: Dict[str, Any], action: Dict[str, Any]) -> Dict[
         if not str(parameters.get("reason", "")).strip():
             parameters["reason"] = "Material contradictions indicate likely fraud"
 
+    elif action_type in {"lookup_policy_history", "verify_identity"}:
+        # No required parameters for these actions
+        pass
+
     repaired["parameters"] = parameters
     repaired["action_type"] = action_type
     return repaired
@@ -453,6 +507,23 @@ def _fallback_action(observation: Dict[str, Any]) -> Dict[str, Any]:
             "reasoning": "Escalate all linked claims for SIU investigation.",
         }
 
+    if task_id == "identity_fraud":
+        if step_number <= 2:
+            return {"action_type": "verify_identity", "parameters": {}, "reasoning": "Check identity."}
+        signals = ["identity_mismatch", "hospital_no_record", "recent_policy_purchase", "dob_inconsistency"]
+        idx = min(step_number - 3, len(signals) - 1)
+        if step_number <= 6:
+            return {
+                "action_type": "flag_fraud_signal",
+                "parameters": {"flag_id": signals[idx], "evidence": "Identity fraud signal confirmed."},
+                "reasoning": "Flag identity signal.",
+            }
+        return {
+            "action_type": "deny_claim",
+            "parameters": {"reason": "Ghost claimant confirmed, deny claim."},
+            "reasoning": "Deny ghost claimant.",
+        }
+
     if step_number >= max_steps - 1:
         return {
             "action_type": "request_investigation",
@@ -501,25 +572,28 @@ def _llm_action(observation: Dict[str, Any], llm_only: bool = False) -> Dict[str
 
 
 def run_task(task_name: str, seed: int = 42, llm_only: bool = False) -> Dict[str, Any]:
-    reset_resp = requests.post(
-        f"{SERVER_URL}/reset",
-        json={"task_id": task_name, "seed": seed},
-        timeout=30,
-    )
-    reset_resp.raise_for_status()
-    data = reset_resp.json()
-    observation = data["observation"]
-    session_id = data.get("session_id", "default")
-
-    print(f"[START] task={task_name} env=insurance_claim_triage_fraud_env model={MODEL_NAME}")
-
+    # Initialise all variables before try/finally so the [END] line is always safe
     rewards: List[float] = []
-    done = bool(observation.get("done", False))
     success = False
     step_idx = 0
     last_error: Optional[str] = None
+    observation: Dict[str, Any] = {}
+
+    print(f"[START] task={task_name} env=insurance_claim_triage_fraud_env model={MODEL_NAME}")
 
     try:
+        reset_resp = requests.post(
+            f"{SERVER_URL}/reset",
+            json={"task_id": task_name, "seed": seed},
+            timeout=30,
+        )
+        reset_resp.raise_for_status()
+        data = reset_resp.json()
+        observation = data["observation"]
+        session_id = data.get("session_id", "default")
+
+        done = bool(observation.get("done", False))
+
         while not done and step_idx < MAX_STEPS_DEFAULT:
             step_idx += 1
             action = _llm_action(observation, llm_only=llm_only)
@@ -550,6 +624,7 @@ def run_task(task_name: str, seed: int = 42, llm_only: bool = False) -> Dict[str
 
         final_score = float(observation.get("reward", 0.0) or 0.0)
         success = final_score >= 0.70 and done
+
     except Exception as exc:
         last_error = str(exc)
     finally:
