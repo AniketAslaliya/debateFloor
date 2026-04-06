@@ -2,7 +2,7 @@
 from app.environment import InsuranceClaimEnvironment
 
 env = InsuranceClaimEnvironment()
-for task in ["clean_claim", "contradictory_claim", "coordinated_fraud"]:
+for task in ["clean_claim", "contradictory_claim", "coordinated_fraud", "identity_fraud"]:
     obs = env.reset(task_id=task, seed=42)
     assert obs.reward == 0.0, f"{task} step-0 reward must be 0.0, got {obs.reward}"
     print(f"  {task}: step-0 reward={obs.reward}  PASS")

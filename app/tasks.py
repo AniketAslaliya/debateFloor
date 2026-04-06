@@ -23,6 +23,8 @@ class TaskDefinition:
     allowed_final_decisions: List[str]
     payout_band: Optional[tuple[float, float]]
     consistency_group_claim_ids: List[str]
+    policy_history: Dict[str, Any]
+    ground_truth_confidence: float
 
 
 @dataclass
@@ -40,6 +42,8 @@ class RuntimeTask:
     allowed_final_decisions: List[str]
     payout_band: Optional[tuple[float, float]]
     consistency_group_claim_ids: List[str]
+    policy_history: Dict[str, Any]
+    ground_truth_confidence: float
     variant_id: int
 
 
@@ -47,6 +51,7 @@ def _base_available_actions(task_id: str = "") -> List[str]:
     actions = [
         "validate_document",
         "request_information",
+        "lookup_policy_history",   # available in all tasks
         "flag_fraud_signal",
         "estimate_payout",
         "approve_claim",
@@ -55,6 +60,8 @@ def _base_available_actions(task_id: str = "") -> List[str]:
     ]
     if task_id == "coordinated_fraud":
         actions.append("query_linked_claim")
+    if task_id == "identity_fraud":
+        actions.append("verify_identity")
     return actions
 
 
@@ -102,6 +109,14 @@ TASKS: Dict[str, TaskDefinition] = {
         allowed_final_decisions=["approve_claim"],
         payout_band=(45000, 55000),
         consistency_group_claim_ids=[],
+        policy_history={
+            "prior_claims": [],
+            "years_as_customer": 6,
+            "policy_age_days": 2190,
+            "risk_score": "low",
+            "note": "Long-standing customer with no prior claims. Low risk.",
+        },
+        ground_truth_confidence=0.95,
     ),
     "contradictory_claim": TaskDefinition(
         task_id="contradictory_claim",
@@ -155,10 +170,28 @@ TASKS: Dict[str, TaskDefinition] = {
             "date_mismatch",
             "cost_inflation",
             "signature_mismatch",
+            "prior_similar_claim",
         ],
         allowed_final_decisions=["deny_claim", "request_investigation"],
         payout_band=None,
         consistency_group_claim_ids=[],
+        policy_history={
+            "prior_claims": [
+                {
+                    "claim_id": "CLM-MED-008",
+                    "date": "2025-06-14",
+                    "type": "medical_procedure",
+                    "procedure": "appendectomy",
+                    "paid_inr": 95000,
+                    "note": "Claim paid for same procedure 8 months ago at a different hospital.",
+                }
+            ],
+            "years_as_customer": 3,
+            "policy_age_days": 1095,
+            "risk_score": "medium",
+            "note": "Prior claim for identical procedure 8 months ago — statistical anomaly.",
+        },
+        ground_truth_confidence=0.80,
     ),
     "coordinated_fraud": TaskDefinition(
         task_id="coordinated_fraud",
@@ -236,6 +269,95 @@ TASKS: Dict[str, TaskDefinition] = {
         allowed_final_decisions=["request_investigation"],
         payout_band=None,
         consistency_group_claim_ids=["CLM-GROUP-301", "CLM-GROUP-302", "CLM-GROUP-303"],
+        policy_history={
+            "prior_claims": [],
+            "years_as_customer": 0,
+            "policy_age_days": 18,
+            "risk_score": "high",
+            "note": "Policy purchased only 18 days before incident. No claim history — all three claimants opened policies within 30 days of each other.",
+        },
+        ground_truth_confidence=0.90,
+    ),
+    "identity_fraud": TaskDefinition(
+        task_id="identity_fraud",
+        title="Ghost claimant identity fraud",
+        difficulty="hard",
+        max_steps=15,
+        claim_id="CLM-ID-501",
+        claimant={
+            "name": "Aarav Mehta",
+            "policy_number": "POL-HEALTH-7734",
+            "contact": "+91-9711100045",
+            "claim_date": "2026-03-12",
+            "national_id": "XXXX-7821",
+        },
+        incident={
+            "date": "2026-03-07",
+            "location": "Mumbai, Maharashtra",
+            "type": "medical_procedure",
+            "description": "Knee replacement surgery claim with post-op physiotherapy.",
+        },
+        documents=[
+            {
+                "doc_id": "DOC-31",
+                "doc_type": "claim_form",
+                "content": "Claim submitted for knee replacement on 2026-03-07. National ID: XXXX-7821.",
+                "metadata": {
+                    "incident_date": "2026-03-07",
+                    "claimed_cost_inr": 320000,
+                    "national_id_suffix": "7821",
+                },
+            },
+            {
+                "doc_id": "DOC-32",
+                "doc_type": "hospital_record",
+                "content": "Hospital system query: No patient named Aarav Mehta with DOB matching policy found. Record shows admission under a different name with similar ID.",
+                "metadata": {
+                    "patient_found": False,
+                    "name_on_record": "Aarav Kumar",
+                    "dob_mismatch": True,
+                },
+            },
+            {
+                "doc_id": "DOC-33",
+                "doc_type": "policy_inception",
+                "content": "Policy POL-HEALTH-7734 issued on 2026-03-02. Incident date 2026-03-07 falls within the 30-day exclusion window.",
+                "metadata": {
+                    "policy_issue_date": "2026-03-02",
+                    "incident_date": "2026-03-07",
+                    "days_to_claim": 5,
+                    "exclusion_window_days": 30,
+                },
+            },
+            {
+                "doc_id": "DOC-34",
+                "doc_type": "id_proof",
+                "content": "Submitted ID proof shows date of birth 1988-04-15. Policy application on file states DOB 1986-11-22. The national registry has no record matching either entry for this ID number.",
+                "metadata": {
+                    "dob_on_id": "1988-04-15",
+                    "dob_on_policy": "1986-11-22",
+                    "registry_match": False,
+                },
+            },
+        ],
+        linked_claims=[],
+        expected_signals=[
+            "identity_mismatch",
+            "hospital_no_record",
+            "recent_policy_purchase",
+            "dob_inconsistency",
+        ],
+        allowed_final_decisions=["deny_claim", "request_investigation"],
+        payout_band=None,
+        consistency_group_claim_ids=[],
+        policy_history={
+            "prior_claims": [],
+            "years_as_customer": 0,
+            "policy_age_days": 5,
+            "risk_score": "critical",
+            "note": "Policy opened only 5 days before incident. Claimant identity could not be verified at onboarding. KYC status: PENDING.",
+        },
+        ground_truth_confidence=0.90,
     ),
 }
 
@@ -276,6 +398,8 @@ def _copy_runtime_from_task(task: TaskDefinition, variant_id: int) -> RuntimeTas
         allowed_final_decisions=deepcopy(task.allowed_final_decisions),
         payout_band=deepcopy(task.payout_band),
         consistency_group_claim_ids=deepcopy(task.consistency_group_claim_ids),
+        policy_history=deepcopy(task.policy_history),
+        ground_truth_confidence=task.ground_truth_confidence,
         variant_id=variant_id,
     )
 
@@ -331,15 +455,23 @@ def build_runtime_task(task_id: str, seed: Optional[int] = None) -> RuntimeTask:
         ]
         runtime.documents[2]["metadata"]["days_since_purchase"] = purchase_sets[variant_id]
 
+    elif task_id == "identity_fraud":
+        # Vary days_to_claim and policy inception date across variants
+        days_to_claim_variants = [5, 7, 3, 8, 6]
+        days_to_claim = days_to_claim_variants[variant_id]
+        runtime.documents[2]["metadata"]["days_to_claim"] = days_to_claim
+        runtime.documents[2]["content"] = (
+            f"Policy POL-HEALTH-7734 issued 2026-03-{12 - days_to_claim:02d}. "
+            f"Incident date 2026-03-07 falls within the 30-day exclusion window."
+        )
+        runtime.policy_history = deepcopy(task.policy_history)
+        runtime.policy_history["policy_age_days"] = days_to_claim
+
     return runtime
 
 
 def _stub_linked_claims(linked_claims: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Return only claim_id and claimant for each linked claim.
-
-    Full details are intentionally withheld until the agent calls query_linked_claim.
-    This forces multi-hop reasoning on the coordinated_fraud task.
-    """
+    """Return only claim_id and claimant for each linked claim."""
     return [
         {"claim_id": c["claim_id"], "claimant": c["claimant"]}
         for c in linked_claims
@@ -348,7 +480,6 @@ def _stub_linked_claims(linked_claims: List[Dict[str, Any]]) -> List[Dict[str, A
 
 
 def build_initial_payload(runtime_task: RuntimeTask) -> Dict[str, Any]:
-    # For coordinated_fraud, hide fraud signals until agent queries each linked claim.
     if runtime_task.task_id == "coordinated_fraud":
         linked_claims_visible = _stub_linked_claims(runtime_task.linked_claims)
     else:
@@ -361,7 +492,6 @@ def build_initial_payload(runtime_task: RuntimeTask) -> Dict[str, Any]:
         "incident": deepcopy(runtime_task.incident),
         "documents": deepcopy(runtime_task.documents),
         "linked_claims": linked_claims_visible,
-        # Full linked_claims data stored separately for query_linked_claim lookups
         "_full_linked_claims": deepcopy(runtime_task.linked_claims),
         "max_steps": runtime_task.max_steps,
         "variant_id": runtime_task.variant_id,
@@ -375,12 +505,19 @@ def get_evidence_keyword_hints(task_id: str, flag_id: str) -> List[str]:
             "date_mismatch": ["date", "admission", "mismatch", "incident"],
             "cost_inflation": ["cost", "rate", "2.4", "inflation", "overbilled"],
             "signature_mismatch": ["signature", "doctor", "clinic", "dr-xyz"],
+            "prior_similar_claim": ["prior", "previous", "history", "appendectomy", "procedure", "8 months", "clm-med-008"],
         },
         "coordinated_fraud": {
             "shared_repair_shop_far": ["repair", "shop", "distance", "km", "kota", "rapidfix"],
             "shared_emergency_contact": ["contact", "phone", "emergency", "shared", "9000002222"],
             "near_identical_descriptions": ["identical", "description", "narrative", "template", "similarity"],
             "recent_policy_cluster": ["policy", "purchase", "days", "cluster", "30"],
+        },
+        "identity_fraud": {
+            "identity_mismatch": ["identity", "registry", "national", "id", "mismatch", "no record", "7821"],
+            "hospital_no_record": ["hospital", "record", "patient", "not found", "name", "admission"],
+            "recent_policy_purchase": ["policy", "days", "exclusion", "window", "inception", "5", "30"],
+            "dob_inconsistency": ["dob", "date of birth", "1988", "1986", "inconsistency", "mismatch"],
         },
     }
     return hints.get(task_id, {}).get(flag_id, [])
@@ -408,6 +545,18 @@ def score_payout_accuracy(amount: Optional[float], payout_band: Optional[tuple[f
     tolerance = max((high - low) / 2.0, 1.0)
     distance = abs(amount - band_center)
     return clamp01(1.0 - (distance / (2.5 * tolerance)))
+
+
+def score_calibration(agent_confidence: Optional[float], ground_truth_confidence: float) -> float:
+    """Brier-style calibration score.
+
+    Returns 1 - (agent_confidence - ground_truth)^2, in [0, 1].
+    If agent did not provide a confidence, returns 0.0 (no bonus, no penalty).
+    """
+    if agent_confidence is None:
+        return 0.0
+    agent_conf = clamp01(float(agent_confidence))
+    return clamp01(1.0 - (agent_conf - ground_truth_confidence) ** 2)
 
 
 def score_consistency(
@@ -451,11 +600,13 @@ def compute_reward_breakdown(
     exploit_penalty: float,
     penalty_total: float,
     queried_claims: Optional[set] = None,
+    agent_confidence: Optional[float] = None,
+    ground_truth_confidence: float = 1.0,
 ) -> InsuranceClaimReward:
     expected = set(expected_signals)
     found = set(found_signals)
 
-    # --- Fraud detection: partial credit at every step (0.0 before any action is taken) ---
+    # --- Fraud detection ---
     if step_number == 0:
         fraud_detection_score = 0.0
     elif len(expected) == 0:
@@ -463,20 +614,19 @@ def compute_reward_breakdown(
     else:
         fraud_detection_score = clamp01(len(found.intersection(expected)) / float(len(expected)))
 
-    # --- Decision accuracy: only when final_decision is set ---
+    # --- Decision accuracy ---
     if final_decision is None:
         decision_accuracy = 0.0
     else:
         decision_accuracy = 1.0 if final_decision in allowed_decisions else 0.0
 
-    # --- Payout accuracy: 0.0 until step 1; for tasks with no payout band, 1.0 after step 0 ---
+    # --- Payout accuracy ---
     if step_number == 0:
         payout_accuracy = 0.0
     else:
         payout_accuracy = score_payout_accuracy(payout_estimate_inr, payout_band)
 
-    # --- Efficiency: partial credit from step 1 onward if any progress ---
-    # query_linked_claim counts as progress for coordinated_fraud
+    # --- Efficiency ---
     has_queried = queried_claims is not None and len(queried_claims) > 0
     has_progress = len(found) > 0 or payout_estimate_inr is not None or has_queried
     if has_progress or final_decision is not None:
@@ -486,16 +636,19 @@ def compute_reward_breakdown(
 
     consistency_score = 0.0 if step_number == 0 else score_consistency(task_id, found_signals, investigation_targets, queried_claims)
 
-    # --- Evidence quality: partial credit at every step ---
     evidence_quality_score = clamp01(evidence_quality_score)
 
-    exploit_penalty = max(exploit_penalty, 0.0)
+    # --- Calibration: only scored when a final decision is made ---
+    if final_decision is not None:
+        calibration_score = score_calibration(agent_confidence, ground_truth_confidence)
+    else:
+        calibration_score = 0.0
 
+    exploit_penalty = max(exploit_penalty, 0.0)
     false_flag_penalty = 0.25 * false_flags if task_id == "clean_claim" else 0.1 * false_flags
     decision_penalty = 0.35 if (final_decision is not None and decision_accuracy == 0.0) else 0.0
     partial_consistency_penalty = 0.2 if (task_id == "coordinated_fraud" and 0.0 < consistency_score < 1.0) else 0.0
 
-    # For coordinated_fraud: penalize request_investigation without querying at least 2 linked claims
     query_skip_penalty = 0.0
     if (
         task_id == "coordinated_fraud"
@@ -513,14 +666,16 @@ def compute_reward_breakdown(
         + exploit_penalty
     )
 
-    # Weighted sum, then subtract penalties and clamp.
+    # Weights: sum = 1.00
+    # Reduced fraud/decision/evidence slightly to make room for calibration (0.08)
     weighted = (
-        0.30 * fraud_detection_score
-        + 0.22 * decision_accuracy
-        + 0.12 * payout_accuracy
-        + 0.11 * efficiency_score
-        + 0.10 * consistency_score
-        + 0.15 * evidence_quality_score
+        0.28 * fraud_detection_score
+        + 0.20 * decision_accuracy
+        + 0.11 * payout_accuracy
+        + 0.10 * efficiency_score
+        + 0.09 * consistency_score
+        + 0.14 * evidence_quality_score
+        + 0.08 * calibration_score
     )
 
     total = clamp01(weighted - penalty)
@@ -532,6 +687,7 @@ def compute_reward_breakdown(
         efficiency_score=clamp01(efficiency_score),
         consistency_score=clamp01(consistency_score),
         evidence_quality_score=evidence_quality_score,
+        calibration_score=clamp01(calibration_score),
         exploit_penalty=round(exploit_penalty, 4),
         penalty=round(penalty, 4),
         total=round(total, 4),

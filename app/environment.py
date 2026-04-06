@@ -41,6 +41,9 @@ class InsuranceClaimEnvironment:
         self._last_message = "Environment initialized"
         self._queried_claims: set[str] = set()
         self._visible_linked_claims: list = []
+        self._policy_history_checked: bool = False
+        self._identity_verified: bool = False
+        self._agent_confidence: Optional[float] = None
 
     def reset(self, task_id: Optional[str] = None, seed: Optional[int] = None, episode_id: Optional[str] = None) -> InsuranceClaimObservation:
         selected_task = task_id or "clean_claim"
@@ -60,6 +63,9 @@ class InsuranceClaimEnvironment:
         self._last_progress_step = 0
         self._queried_claims = set()
         self._visible_linked_claims = deepcopy(self._payload.get("linked_claims", []))
+        self._policy_history_checked = False
+        self._identity_verified = False
+        self._agent_confidence = None
         self._last_message = (
             f"Task '{task.task_id}' loaded (variant={task.variant_id}). Start investigation."
         )
@@ -134,14 +140,58 @@ class InsuranceClaimEnvironment:
         if action.action_type == "request_information":
             self._request_info_streak += 1
             if self._request_info_streak > 2:
-                # Looping on request_information is an exploit pattern
                 self._exploit_penalty += 0.03
             if self._request_info_streak > 1:
-                # First request is free; subsequent ones consume SLA budget
                 self._state.penalty_total += 0.02
             return "Additional information requested. Useful but consumes time and SLA budget."
 
         self._request_info_streak = 0
+
+        if action.action_type == "lookup_policy_history":
+            task = self._runtime_task or build_runtime_task(self._state.task_id)
+            if self._policy_history_checked:
+                # Second lookup is an exploit — no new info
+                self._exploit_penalty += 0.03
+                return "Policy history already retrieved. No new information available."
+            self._policy_history_checked = True
+            history = task.policy_history
+            # For contradictory_claim: looking up history reveals the prior similar claim signal
+            if task.task_id == "contradictory_claim":
+                if "prior_similar_claim" not in self._found_signals:
+                    self._found_signals.append("prior_similar_claim")
+                    self._last_progress_step = self._state.step_number
+            # For identity_fraud: policy_age_days being very low reveals recent_policy_purchase
+            if task.task_id == "identity_fraud":
+                if history.get("policy_age_days", 999) <= 30:
+                    if "recent_policy_purchase" not in self._found_signals:
+                        self._found_signals.append("recent_policy_purchase")
+                        self._last_progress_step = self._state.step_number
+            return (
+                f"Policy history retrieved: {history['prior_claims']} prior claims. "
+                f"Customer for {history['years_as_customer']} years. "
+                f"Policy age: {history['policy_age_days']} days. "
+                f"Risk score: {history['risk_score']}. Note: {history['note']}"
+            )
+
+        if action.action_type == "verify_identity":
+            task = self._runtime_task or build_runtime_task(self._state.task_id)
+            if task.task_id != "identity_fraud":
+                raise ValueError("'verify_identity' is only available for the identity_fraud task")
+            if self._identity_verified:
+                self._exploit_penalty += 0.03
+                return "Identity verification already performed. No new information."
+            self._identity_verified = True
+            self._last_progress_step = self._state.step_number
+            # Verification reveals both identity_mismatch and hospital_no_record signals
+            for sig in ["identity_mismatch", "hospital_no_record"]:
+                if sig not in self._found_signals:
+                    self._found_signals.append(sig)
+            return (
+                "Identity verification FAILED. National registry has no record matching "
+                "claimant name 'Aarav Mehta' with ID suffix 7821. "
+                "Hospital records show admission under a different name ('Aarav Kumar') with DOB mismatch. "
+                "KYC status at policy inception: PENDING — identity was never confirmed."
+            )
 
         if action.action_type == "validate_document":
             doc_id = str(action.parameters.get("doc_id", "")).strip()
@@ -245,6 +295,10 @@ class InsuranceClaimEnvironment:
             self._state.done = True
             self._state.status = ClaimStatus.DECIDED
 
+            # Capture agent's confidence for calibration scoring
+            if action.confidence is not None:
+                self._agent_confidence = float(action.confidence)
+
             if action.action_type == "request_investigation":
                 targets = action.parameters.get("target_claim_ids", [])
                 if isinstance(targets, list):
@@ -276,6 +330,12 @@ class InsuranceClaimEnvironment:
                 "DOC-21": ["shared_repair_shop_far"],
                 "DOC-22": ["near_identical_descriptions"],
                 "DOC-23": ["recent_policy_cluster"],
+            },
+            "identity_fraud": {
+                "DOC-31": ["identity_mismatch"],
+                "DOC-32": ["hospital_no_record"],
+                "DOC-33": ["recent_policy_purchase"],
+                "DOC-34": ["dob_inconsistency"],
             },
         }
         signal_map = mapping.get(task_id, {})
@@ -325,6 +385,8 @@ class InsuranceClaimEnvironment:
             exploit_penalty=min(self._exploit_penalty, 0.5),
             penalty_total=self._state.penalty_total,
             queried_claims=self._queried_claims,
+            agent_confidence=self._agent_confidence,
+            ground_truth_confidence=task.ground_truth_confidence,
         )
 
         return InsuranceClaimObservation(
@@ -350,6 +412,9 @@ class InsuranceClaimEnvironment:
                 "evidence_hits": self._evidence_hits,
                 "evidence_total": self._evidence_total,
                 "exploit_penalty": round(self._exploit_penalty, 4),
+                "policy_history_checked": self._policy_history_checked,
+                "identity_verified": self._identity_verified,
+                "agent_confidence": self._agent_confidence,
             },
             reward_breakdown=reward_breakdown,
         )

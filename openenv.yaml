@@ -23,7 +23,10 @@ metadata:
     - id: contradictory_claim
       difficulty: medium
       max_steps: 12
-      objective: Detect contradictions and deny/escalate with evidence.
+      objective: >-
+        Detect contradictions (date mismatch, cost inflation, signature mismatch,
+        prior similar claim) and deny/escalate with evidence.
+        Use lookup_policy_history to discover the prior procedure claim.
     - id: coordinated_fraud
       difficulty: hard
       max_steps: 20
@@ -31,15 +34,25 @@ metadata:
         Query linked claims to discover cross-claim fraud patterns, flag all 4 ring
         signals with grounded evidence, and escalate the full cluster for investigation.
         Requires multi-hop reasoning across 3 linked claims.
+    - id: identity_fraud
+      difficulty: hard
+      max_steps: 15
+      objective: >-
+        Detect ghost claimant using verify_identity and document validation.
+        Flag all 4 identity signals (identity_mismatch, hospital_no_record,
+        recent_policy_purchase, dob_inconsistency) and deny or escalate.
+        Use lookup_policy_history to surface the 5-day-old policy as a signal.
   action_space:
     - validate_document
     - request_information
+    - lookup_policy_history
     - flag_fraud_signal
     - estimate_payout
     - approve_claim
     - deny_claim
     - request_investigation
     - query_linked_claim
+    - verify_identity
   observation_space:
     - claim_id
     - task_id

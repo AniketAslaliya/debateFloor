@@ -56,6 +56,7 @@ class InsuranceClaimReward(BaseModel):
     efficiency_score: float = Field(default=0.0, ge=0.0, le=1.0, description="Step efficiency: higher when fewer steps used")
     consistency_score: float = Field(default=0.0, ge=0.0, le=1.0, description="For coordinated_fraud: quality of linked-claim targeting")
     evidence_quality_score: float = Field(default=0.0, ge=0.0, le=1.0, description="Fraction of flagged signals backed by keyword-grounded evidence")
+    calibration_score: float = Field(default=0.0, ge=0.0, le=1.0, description="Brier-style score: 1-(agent_confidence - ground_truth_confidence)^2. Only scored on final decision.")
     exploit_penalty: float = Field(default=0.0, ge=0.0, description="Penalty for looping or duplicate actions")
     penalty: float = Field(default=0.0, description="Total accumulated penalty subtracted from weighted score")
     total: float = Field(default=0.0, ge=0.0, le=1.0, description="Final clamped reward in [0.0, 1.0]")
@@ -65,12 +66,14 @@ class InsuranceClaimAction(Action):
     action_type: Literal[
         "validate_document",
         "request_information",
+        "lookup_policy_history",   # Available in all tasks: reveals prior claim history
         "flag_fraud_signal",
         "estimate_payout",
         "approve_claim",
         "deny_claim",
         "request_investigation",
-        "query_linked_claim",  # Required for coordinated_fraud: reveals full linked claim detail
+        "query_linked_claim",      # coordinated_fraud only: reveals full linked claim detail
+        "verify_identity",         # identity_fraud only: cross-checks claimant against registry
     ] = Field(..., description="The type of action to perform on the claim")
     parameters: Dict[str, Any] = Field(
         default_factory=dict,
@@ -80,6 +83,12 @@ class InsuranceClaimAction(Action):
         default="",
         max_length=4000,
         description="Agent's reasoning for this action. Used for evidence quality scoring.",
+    )
+    confidence: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Agent's confidence in this action (0.0–1.0). Only scored on final decisions (approve_claim, deny_claim, request_investigation). Graded against ground-truth confidence via Brier score.",
     )
 
 
