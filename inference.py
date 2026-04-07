@@ -28,9 +28,10 @@ from openai import OpenAI
 
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
-HF_TOKEN = os.getenv("HF_TOKEN", "no-token")
+# Use API_KEY if injected by the evaluation harness (LiteLLM proxy), else fall back to HF_TOKEN
+API_KEY = os.getenv("API_KEY") or os.getenv("HF_TOKEN", "no-token")
 
-client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
+client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
 
 SERVER_URL = "http://127.0.0.1:7860"
 TASKS = ["clean_claim", "contradictory_claim", "coordinated_fraud", "identity_fraud"]
