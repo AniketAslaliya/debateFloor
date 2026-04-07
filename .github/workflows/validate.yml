@@ -74,10 +74,10 @@ jobs:
           STATUS=$(curl -sf http://localhost:7860/health | python -c "import sys,json; print(json.load(sys.stdin)['status'])")
           test "$STATUS" = "healthy" && echo "OK: $STATUS" || (echo "FAIL: $STATUS" && exit 1)
 
-      - name: GET /tasks → at least 3 tasks
+      - name: GET /tasks → all 4 tasks present
         run: |
           COUNT=$(curl -sf http://localhost:7860/tasks | python -c "import sys,json; print(len(json.load(sys.stdin)['tasks']))")
-          python -c "import sys; c=int('$COUNT'); sys.exit(0 if c >= 3 else 1)" && echo "OK: $COUNT tasks" || (echo "FAIL: $COUNT tasks" && exit 1)
+          python -c "import sys; c=int('$COUNT'); sys.exit(0 if c >= 4 else 1)" && echo "OK: $COUNT tasks" || (echo "FAIL: $COUNT tasks (expected >=4)" && exit 1)
 
       - name: POST /reset → returns session_id
         run: |

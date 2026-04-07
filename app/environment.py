@@ -401,7 +401,8 @@ class InsuranceClaimEnvironment:
             "identity_fraud": {
                 "DOC-31": ["identity_mismatch"],
                 "DOC-32": ["hospital_no_record"],
-                "DOC-33": ["recent_policy_purchase"],
+                # DOC-33 (policy_inception) does NOT reveal recent_policy_purchase here;
+                # that signal is only discoverable via lookup_policy_history.
                 "DOC-34": ["dob_inconsistency"],
             },
         }

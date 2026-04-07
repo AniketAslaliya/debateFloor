@@ -612,7 +612,8 @@ def run_task(task_name: str, seed: int = 42, llm_only: bool = False) -> Dict[str
 
         done = bool(observation.get("done", False))
 
-        while not done and step_idx < MAX_STEPS_DEFAULT:
+        task_max_steps = int(observation.get("max_steps", MAX_STEPS_DEFAULT))
+        while not done and step_idx < task_max_steps:
             step_idx += 1
             action = _llm_action(observation, llm_only=llm_only)
             step_resp = requests.post(
