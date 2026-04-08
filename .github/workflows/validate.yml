@@ -31,6 +31,8 @@ jobs:
         run: pip install -r requirements.txt pytest pytest-asyncio
       - name: Reward and exploit tests (15 tests)
         run: PYTHONPATH=. pytest tests/envs/test_insurance_claim_reward_and_exploit.py -q --tb=short
+      - name: Round-1 submission validator
+        run: PYTHONPATH=. python ci/validate_submission.py
       - name: Smoke-import all tasks (step-0 reward == 0.0)
         run: PYTHONPATH=. python ci/smoke_import.py
 

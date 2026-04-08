@@ -32,6 +32,7 @@ class InsuranceClaimEnvironment:
         self._action_history: List[Dict[str, Any]] = []
         self._flags_raised: List[str] = []
         self._found_signals: List[str] = []
+        self._discovered_signals: List[str] = []
         self._false_flags: int = 0
         self._investigation_targets: List[str] = []
         self._evidence_hits: int = 0
@@ -58,6 +59,7 @@ class InsuranceClaimEnvironment:
         self._action_history = []
         self._flags_raised = []
         self._found_signals = []
+        self._discovered_signals = []
         self._false_flags = 0
         self._investigation_targets = []
         self._evidence_hits = 0
@@ -85,6 +87,7 @@ class InsuranceClaimEnvironment:
             max_steps=task.max_steps,
             status=ClaimStatus.OPEN,
             flags_raised=[],
+            discovered_signals=[],
             found_signals=[],
             penalty_total=0.0,
             done=False,
@@ -169,15 +172,11 @@ class InsuranceClaimEnvironment:
             history = task.policy_history
             # For contradictory_claim: looking up history reveals the prior similar claim signal
             if task.task_id == "contradictory_claim":
-                if "prior_similar_claim" not in self._found_signals:
-                    self._found_signals.append("prior_similar_claim")
-                    self._last_progress_step = self._state.step_number
+                self._record_discovered_signals(["prior_similar_claim"])
             # For identity_fraud: policy_age_days being very low reveals recent_policy_purchase
             if task.task_id == "identity_fraud":
                 if history.get("policy_age_days", 999) <= 30:
-                    if "recent_policy_purchase" not in self._found_signals:
-                        self._found_signals.append("recent_policy_purchase")
-                        self._last_progress_step = self._state.step_number
+                    self._record_discovered_signals(["recent_policy_purchase"])
             return (
                 f"Policy history retrieved: {history['prior_claims']} prior claims. "
                 f"Customer for {history['years_as_customer']} years. "
@@ -193,10 +192,7 @@ class InsuranceClaimEnvironment:
                 self._exploit_penalty += 0.03
                 return "Identity verification already performed. No new information."
             self._identity_verified = True
-            self._last_progress_step = self._state.step_number
-            for sig in ["identity_mismatch", "hospital_no_record"]:
-                if sig not in self._found_signals:
-                    self._found_signals.append(sig)
+            self._record_discovered_signals(["identity_mismatch", "hospital_no_record"])
             return (
                 "Identity verification FAILED. National registry has no record matching "
                 "claimant name 'Aarav Mehta' with ID suffix 7821. "
@@ -227,10 +223,7 @@ class InsuranceClaimEnvironment:
             self._compared_pairs.add(pair)
             signals = get_compare_signals(task.task_id, doc_id_a, doc_id_b)
             if signals:
-                for sig in signals:
-                    if sig not in self._found_signals:
-                        self._found_signals.append(sig)
-                self._last_progress_step = self._state.step_number
+                self._record_discovered_signals(signals)
                 return (
                     f"Cross-document comparison of {doc_id_a} vs {doc_id_b} revealed "
                     f"inconsistencies: {', '.join(signals)}."
@@ -248,10 +241,7 @@ class InsuranceClaimEnvironment:
 
             discovered = self._discover_signals_from_document(doc_id, task.task_id)
             if discovered:
-                for signal in discovered:
-                    if signal not in self._found_signals:
-                        self._found_signals.append(signal)
-                self._last_progress_step = self._state.step_number
+                self._record_discovered_signals(discovered)
                 return f"Validated {doc_id}. Potential inconsistencies detected: {', '.join(discovered)}"
             return f"Validated {doc_id}. No direct inconsistency detected."
 
@@ -272,6 +262,13 @@ class InsuranceClaimEnvironment:
             self._evidence_total += 1
 
             if flag_id in task.expected_signals:
+                if flag_id not in self._discovered_signals:
+                    self._state.penalty_total += 0.08
+                    self._exploit_penalty += 0.02
+                    return (
+                        f"Fraud signal '{flag_id}' was raised before it was discovered. "
+                        "Investigate first, then flag with grounded evidence."
+                    )
                 hints = get_evidence_keyword_hints(task.task_id, flag_id)
                 evidence_lc = evidence.lower()
                 if not hints or any(h in evidence_lc for h in hints):
@@ -351,9 +348,8 @@ class InsuranceClaimEnvironment:
 
             # Querying CLM-GROUP-304 reveals clustered_policy_broker signal
             if match.get("broker_id") and claim_id == "CLM-GROUP-304":
-                if "clustered_policy_broker" not in self._found_signals:
-                    self._found_signals.append("clustered_policy_broker")
-                    hint += " All queried claims share broker_id=BRK-441 (clustered_policy_broker signal)."
+                self._record_discovered_signals(["clustered_policy_broker"])
+                hint += " All queried claims share broker_id=BRK-441 (clustered_policy_broker signal)."
 
             return f"Linked claim detail retrieved for {claim_id}: {match}{hint}{expansion_hint}"
 
@@ -423,8 +419,22 @@ class InsuranceClaimEnvironment:
                 unique_signals.append(signal)
         return unique_signals
 
+    def _record_discovered_signals(self, signals: List[str]) -> None:
+        progressed = False
+        for signal in signals:
+            if signal not in self._discovered_signals:
+                self._discovered_signals.append(signal)
+                progressed = True
+            if signal not in self._found_signals:
+                self._found_signals.append(signal)
+        if progressed:
+            self._last_progress_step = self._state.step_number
+
     def _build_observation(self, message: str) -> InsuranceClaimObservation:
         task = self._runtime_task or build_runtime_task(self._state.task_id)
+        self._state.flags_raised = deepcopy(self._flags_raised)
+        self._state.discovered_signals = deepcopy(self._discovered_signals)
+        self._state.found_signals = deepcopy(self._found_signals)
         if self._state.step_number == 0:
             # No actions taken yet — reward must be 0.0 so the trajectory is meaningful
             evidence_quality_score = 0.0
@@ -471,6 +481,7 @@ class InsuranceClaimEnvironment:
             investigation_budget=self._payload.get("investigation_budget", 0),
             budget_remaining=self._budget_remaining,
             flags_raised=deepcopy(self._flags_raised),
+            discovered_signals=deepcopy(self._discovered_signals),
             status=self._state.status,
             message=message,
             done=self._state.done,
@@ -486,6 +497,7 @@ class InsuranceClaimEnvironment:
                 "identity_verified": self._identity_verified,
                 "agent_confidence": self._agent_confidence,
                 "budget_remaining": self._budget_remaining,
+                "discovered_signals": deepcopy(self._discovered_signals),
                 "compared_pairs": [list(p) for p in self._compared_pairs],
             },
             reward_breakdown=reward_breakdown,

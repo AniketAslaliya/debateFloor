@@ -7,9 +7,9 @@ port: 7860
 metadata:
   title: Insurance Claim Triage and Fraud Detection Environment
   description: >-
-    A deterministic OpenEnv environment for insurance claim processing where
-    agents validate claim evidence, detect fraud signals, estimate payout bands,
-    and make final adjudication decisions.
+    An OpenEnv benchmark for insurance-claim triage where agents must discover
+    grounded fraud signals, justify their decisions, estimate payouts when
+    applicable, and optimize for both accuracy and investigative efficiency.
   tags:
     - openenv
     - insurance
@@ -66,6 +66,7 @@ metadata:
     - step_number
     - max_steps
     - flags_raised
+    - discovered_signals
     - status
     - message
     - reward_breakdown
