@@ -12,8 +12,8 @@ pinned: false
 
 > A production-style [OpenEnv](https://github.com/meta-pytorch/OpenEnv) benchmark for LLM agents that must adjudicate insurance claims under uncertainty, fraud pressure, and operational constraints.
 
-[![CI](https://github.com/AniketAslaliya/insuranceClaim/actions/workflows/validate.yml/badge.svg)](https://github.com/AniketAslaliya/insuranceClaim/actions/workflows/validate.yml)
-[![HuggingFace Space](https://img.shields.io/badge/🤗%20Space-insurance--claim--env-blue)](https://huggingface.co/spaces/AniketAsla/insurance-claim-env)
+[![CI](https://github.com/Mitalimehta02/insuranceClaim/actions/workflows/validate.yml/badge.svg)](https://github.com/Mitalimehta02/insuranceClaim/actions/workflows/validate.yml)
+<!-- Add your deployed Hugging Face Space URL here before final submission. -->
 
 ---
 
@@ -23,7 +23,28 @@ Insurance claims handling is a high-stakes workflow where agents must balance cu
 
 An agent receives a claim file with supporting documents, linked claims, and incident data. It must investigate, flag anomalies, estimate payouts, and reach a final adjudication decision — all within a step budget and under a reward signal that penalizes both over-caution and fraud blindness.
 
-The environment is built on the OpenEnv REST API spec and runs as a live HuggingFace Docker Space.
+The environment is built on the OpenEnv REST API spec and is packaged for Docker and Hugging Face Spaces deployment.
+
+## Problem Statement
+
+The benchmark asks whether an agent can behave like a reliable claim investigator instead of a one-shot classifier. To do well, an agent must:
+
+- inspect evidence incrementally
+- discover fraud signals through the allowed investigative path
+- avoid unsupported guessing
+- make the right final decision
+- stay efficient under a soft investigation budget
+
+This repo is designed as a realistic claim-triage benchmark rather than a toy game.
+
+## What This Project Achieves
+
+- 4 tasks across easy, medium, and hard difficulty
+- deterministic seeded variants for reproducibility
+- typed OpenEnv-style actions, observations, and state
+- grounded reward shaping with calibration and exploit penalties
+- root-level `inference.py` with required `[START]`, `[STEP]`, and `[END]` logs
+- Docker deployment plus local pre-submission validation
 
 ---
 
@@ -148,6 +169,8 @@ Reward is deterministic and clamped to `[0.0, 1.0]`. It is zero at reset and gro
 | Query skip | `request_investigation` without querying ≥2 linked claims (0.15) |
 | Budget overage | Each action unit over `investigation_budget` adds 0.02 to penalty |
 
+**Integrity rule:** expected fraud signals do not receive reward credit until they are actually discovered through the permitted investigative path. Unsupported guessing is penalized.
+
 ---
 
 ## Seeded Variants
@@ -178,6 +201,23 @@ Run with `python inference.py --seed 42` using Qwen2.5-72B-Instruct.
 **Stabilized** mode: deterministic canonical action sequence, LLM called for reasoning only.  
 **LLM-only** mode: raw model output with minimal repair, no oracle overrides.
 
+## Evaluation
+
+`inference.py` is kept compatible with the dashboard requirements:
+
+- root-level script name: `inference.py`
+- OpenAI client usage with `API_BASE_URL`, `MODEL_NAME`, and `HF_TOKEN`
+- required structured stdout markers: `[START]`, `[STEP]`, and `[END]`
+- deterministic default mode for reproducible judging
+
+To produce a seeded multi-task report:
+
+```bash
+python scripts/generate_eval_report.py --base-url http://127.0.0.1:7860 --seeds 7,17,27,42,99
+```
+
+The report generator preserves `session_id`, evaluates all 4 tasks, and writes JSON plus Markdown summaries under `reports/`.
+
 ```bash
 export HF_TOKEN=your_token
 export MODEL_NAME=Qwen/Qwen2.5-72B-Instruct
@@ -195,10 +235,10 @@ python inference.py --task identity_fraud --seed 17    # single task
 ### Run locally
 
 ```bash
-git clone https://github.com/AniketAslaliya/insuranceClaim
+git clone https://github.com/Mitalimehta02/insuranceClaim.git
 cd insuranceClaim
 pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 7860
+PYTHONPATH=. uvicorn app.main:app --host 0.0.0.0 --port 7860
 ```
 
 ### Run with Docker
@@ -286,6 +326,29 @@ inference.py       # Baseline LLM agent — 4 tasks, stabilized + LLM-only modes
 
 **Session isolation:** every `/reset` returns a `session_id`. All `/step` and `/state` calls include it. Sessions are independent in-memory objects with no shared state.
 
+## Dashboard Compliance Checklist
+
+This repository is aligned to the Scaler Round-1 checklist:
+
+- real-world task, not a toy game
+- full OpenEnv interface with typed models
+- at least 3 tasks across difficulty levels
+- deterministic reward in `[0.0, 1.0]`
+- reproducible root-level `inference.py`
+- required `[START]`, `[STEP]`, and `[END]` stdout logs
+- `openenv.yaml`
+- Dockerfile for deployment
+- README with setup, environment description, action space, observation space, and evaluation notes
+- local validator in `ci/validate_submission.py`
+
+## Validation
+
+```bash
+PYTHONPATH=. python ci/validate_submission.py
+PYTHONPATH=. python ci/smoke_import.py
+PYTHONPATH=. pytest tests/envs/test_insurance_claim_reward_and_exploit.py -q
+```
+
 ---
 
 ## Known Limitations
@@ -301,3 +364,13 @@ inference.py       # Baseline LLM agent — 4 tasks, stabilized + LLM-only modes
 - Explicit SLA and investigator workload budgets
 - Configurable fraud-prior risk profiles per variant
 - Multilingual claimant narratives
+
+## Differentiation
+
+This environment is intentionally stronger than a basic fraud benchmark because it combines:
+
+- dynamic ring expansion in `coordinated_fraud`
+- cross-document and cross-claim reasoning
+- grounded discovery before reward credit
+- budget-aware investigation
+- confidence calibration as part of scoring

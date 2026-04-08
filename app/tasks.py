@@ -689,6 +689,9 @@ def compute_reward_breakdown(
     # --- Payout accuracy ---
     if step_number == 0:
         payout_accuracy = 0.0
+    elif payout_band is None:
+        # Non-payout tasks should not receive a free reward bump before a final decision.
+        payout_accuracy = 1.0 if final_decision is not None else 0.0
     else:
         payout_accuracy = score_payout_accuracy(payout_estimate_inr, payout_band)
 
@@ -700,7 +703,9 @@ def compute_reward_breakdown(
     else:
         efficiency_score = 0.0
 
-    consistency_score = 0.0 if step_number == 0 else score_consistency(task_id, found_signals, investigation_targets, queried_claims)
+    consistency_score = 0.0
+    if step_number > 0 and final_decision == "request_investigation":
+        consistency_score = score_consistency(task_id, found_signals, investigation_targets, queried_claims)
 
     evidence_quality_score = clamp01(evidence_quality_score)
 

@@ -110,6 +110,10 @@ class InsuranceClaimObservation(Observation):
     investigation_budget: int = Field(default=0, description="Total budget units for this episode")
     budget_remaining: int = Field(default=0, description="Budget units remaining. Going negative adds a 0.02 penalty per unit over budget.")
     flags_raised: List[str] = Field(default_factory=list, description="Fraud signal flag IDs raised so far")
+    discovered_signals: List[str] = Field(
+        default_factory=list,
+        description="Fraud signals actually discovered through allowed investigative actions.",
+    )
     status: ClaimStatus = Field(default=ClaimStatus.OPEN, description="Current claim processing status")
     message: str = Field(default="", description="Human-readable message describing result of last action")
     reward_breakdown: InsuranceClaimReward = Field(default_factory=InsuranceClaimReward, description="Detailed reward components for current step")
@@ -122,6 +126,7 @@ class InsuranceClaimState(State):
     max_steps: int = 0
     status: ClaimStatus = ClaimStatus.OPEN
     flags_raised: List[str] = Field(default_factory=list)
+    discovered_signals: List[str] = Field(default_factory=list)
     found_signals: List[str] = Field(default_factory=list)
     penalty_total: float = 0.0
     done: bool = False

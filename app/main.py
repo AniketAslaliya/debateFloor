@@ -46,6 +46,7 @@ def _cleanup_sessions() -> None:
 class ResetBody(BaseModel):
     task_id: str | None = None
     seed: int | None = None
+    session_id: str | None = None
     episode_id: str | None = None
 
 
@@ -70,7 +71,7 @@ def index() -> dict:
 @app.post("/reset")
 def reset(body: ResetBody = ResetBody(), background_tasks: BackgroundTasks = BackgroundTasks()) -> dict:
     background_tasks.add_task(_cleanup_sessions)
-    session_id = body.episode_id or str(uuid4())
+    session_id = body.session_id or body.episode_id or str(uuid4())
     env = _get_or_create_session(session_id)
     obs = env.reset(task_id=body.task_id, seed=body.seed, episode_id=session_id)
     return {

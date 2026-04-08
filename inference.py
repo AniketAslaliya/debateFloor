@@ -314,6 +314,7 @@ def _build_prompt(observation: Dict[str, Any]) -> str:
         "status": observation.get("status"),
         "message": observation.get("message"),
         "flags_raised": observation.get("flags_raised", []),
+        "discovered_signals": observation.get("discovered_signals", []),
         "documents": observation.get("documents", []),
         "linked_claims": observation.get("linked_claims", []),
         "action_history": observation.get("action_history", []),
@@ -466,15 +467,19 @@ def _fallback_action(observation: Dict[str, Any]) -> Dict[str, Any]:
     step_number = int(observation.get("step_number", 0))
     max_steps = int(observation.get("max_steps", MAX_STEPS_DEFAULT))
     documents = observation.get("documents", [])
+    discovered = list(observation.get("discovered_signals", []) or [])
+    flagged = list(observation.get("flags_raised", []) or [])
+    queried = _queried_claim_ids(observation)
 
-    if step_number < min(3, len(documents)):
-        return {
-            "action_type": "validate_document",
-            "parameters": {"doc_id": documents[step_number].get("doc_id", "")},
-            "reasoning": "Validate core document before decision.",
-        }
+    next_doc_id = _next_unvalidated_doc_id(observation)
 
     if task_id == "clean_claim":
+        if next_doc_id:
+            return {
+                "action_type": "validate_document",
+                "parameters": {"doc_id": next_doc_id},
+                "reasoning": "Validate clean-claim documents before payout estimation.",
+            }
         if step_number == 3:
             return {
                 "action_type": "estimate_payout",
@@ -488,14 +493,31 @@ def _fallback_action(observation: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     if task_id == "contradictory_claim":
-        if step_number <= 5:
-            flags = ["date_mismatch", "cost_inflation", "signature_mismatch"]
-            flag_idx = min(step_number - 3, len(flags) - 1)
+        if next_doc_id:
             return {
-                "action_type": "flag_fraud_signal",
-                "parameters": {"flag_id": flags[flag_idx], "evidence": "Contradiction confirmed."},
-                "reasoning": "Raise contradiction signal.",
+                "action_type": "validate_document",
+                "parameters": {"doc_id": next_doc_id},
+                "reasoning": "Validate contradictory-claim documents before escalation.",
             }
+        if not _has_action_type(observation, "lookup_policy_history"):
+            return {
+                "action_type": "lookup_policy_history",
+                "parameters": {},
+                "reasoning": "Check for prior similar procedures before final denial.",
+            }
+        evidence = {
+            "date_mismatch": "incident date conflicts with hospital admission date",
+            "cost_inflation": "claimed cost is 2.4x the standard treatment rate",
+            "signature_mismatch": "doctor signature differs from clinic reference signature",
+            "prior_similar_claim": "history shows a prior appendectomy claim 8 months earlier",
+        }
+        for signal in ["date_mismatch", "cost_inflation", "signature_mismatch", "prior_similar_claim"]:
+            if signal in discovered and signal not in flagged:
+                return {
+                    "action_type": "flag_fraud_signal",
+                    "parameters": {"flag_id": signal, "evidence": evidence[signal]},
+                    "reasoning": "Flag a discovered contradiction with grounded evidence.",
+                }
         return {
             "action_type": "deny_claim",
             "parameters": {"reason": "Multiple contradictory records indicate likely fraud."},
@@ -503,39 +525,82 @@ def _fallback_action(observation: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     if task_id == "coordinated_fraud":
-        if step_number <= 6:
-            signals = [
-                "shared_repair_shop_far",
-                "shared_emergency_contact",
-                "near_identical_descriptions",
-                "recent_policy_cluster",
-            ]
-            idx = min(step_number - 3, len(signals) - 1)
+        if next_doc_id:
             return {
-                "action_type": "flag_fraud_signal",
-                "parameters": {"flag_id": signals[idx], "evidence": "Cross-claim correlation evidence."},
-                "reasoning": "Flag coordinated pattern.",
+                "action_type": "validate_document",
+                "parameters": {"doc_id": next_doc_id},
+                "reasoning": "Validate the primary packet before cross-claim queries.",
             }
+        linked = observation.get("linked_claims", [])
+        for claim in linked:
+            cid = claim.get("claim_id") if isinstance(claim, dict) else None
+            if cid and cid not in queried:
+                return {
+                    "action_type": "query_linked_claim",
+                    "parameters": {"claim_id": str(cid)},
+                    "reasoning": "Query linked claims to surface cross-claim fraud patterns.",
+                }
+        evidence = {
+            "shared_repair_shop_far": "linked claims share a repair shop far from the incident locations",
+            "shared_emergency_contact": "queried linked claims share the same emergency contact phone",
+            "near_identical_descriptions": "linked narratives are near-identical across independent claims",
+            "recent_policy_cluster": "all policies were purchased within 30 days of the incident",
+            "clustered_policy_broker": "the surfaced fourth claim shares broker BRK-441 with the cluster",
+        }
+        for signal in [
+            "shared_repair_shop_far",
+            "shared_emergency_contact",
+            "near_identical_descriptions",
+            "recent_policy_cluster",
+            "clustered_policy_broker",
+        ]:
+            if signal in discovered and signal not in flagged:
+                return {
+                    "action_type": "flag_fraud_signal",
+                    "parameters": {"flag_id": signal, "evidence": evidence[signal]},
+                    "reasoning": "Flag a discovered cross-claim signal with grounded evidence.",
+                }
         return {
             "action_type": "request_investigation",
             "parameters": {
-                "target_claim_ids": ["CLM-GROUP-301", "CLM-GROUP-302", "CLM-GROUP-303"],
+                "target_claim_ids": [
+                    str(c.get("claim_id"))
+                    for c in linked
+                    if isinstance(c, dict) and c.get("claim_id")
+                ],
                 "reason": "Linked signals indicate coordinated fraud ring.",
             },
             "reasoning": "Escalate all linked claims for SIU investigation.",
         }
 
     if task_id == "identity_fraud":
-        if step_number <= 2:
+        if not _has_action_type(observation, "verify_identity"):
             return {"action_type": "verify_identity", "parameters": {}, "reasoning": "Check identity."}
-        signals = ["identity_mismatch", "hospital_no_record", "recent_policy_purchase", "dob_inconsistency"]
-        idx = min(step_number - 3, len(signals) - 1)
-        if step_number <= 6:
+        if not _has_action_type(observation, "lookup_policy_history"):
             return {
-                "action_type": "flag_fraud_signal",
-                "parameters": {"flag_id": signals[idx], "evidence": "Identity fraud signal confirmed."},
-                "reasoning": "Flag identity signal.",
+                "action_type": "lookup_policy_history",
+                "parameters": {},
+                "reasoning": "Check policy age and prior history before final denial.",
             }
+        if next_doc_id:
+            return {
+                "action_type": "validate_document",
+                "parameters": {"doc_id": next_doc_id},
+                "reasoning": "Validate identity-fraud documents before flagging.",
+            }
+        evidence = {
+            "identity_mismatch": "national registry has no record matching the claimant identity",
+            "hospital_no_record": "hospital records do not match the claimant name and DOB",
+            "recent_policy_purchase": "policy was purchased only days before the incident within the exclusion window",
+            "dob_inconsistency": "DOB on the ID proof does not match the policy application",
+        }
+        for signal in ["identity_mismatch", "hospital_no_record", "recent_policy_purchase", "dob_inconsistency"]:
+            if signal in discovered and signal not in flagged:
+                return {
+                    "action_type": "flag_fraud_signal",
+                    "parameters": {"flag_id": signal, "evidence": evidence[signal]},
+                    "reasoning": "Flag a discovered identity-fraud signal with grounded evidence.",
+                }
         return {
             "action_type": "deny_claim",
             "parameters": {"reason": "Ghost claimant confirmed, deny claim."},
