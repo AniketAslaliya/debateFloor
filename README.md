@@ -13,17 +13,27 @@ pinned: false
 > A production-style [OpenEnv](https://github.com/meta-pytorch/OpenEnv) benchmark for LLM agents that must adjudicate insurance claims under uncertainty, fraud pressure, and operational constraints.
 
 [![CI](https://github.com/Mitalimehta02/insuranceClaim/actions/workflows/validate.yml/badge.svg)](https://github.com/Mitalimehta02/insuranceClaim/actions/workflows/validate.yml)
-<!-- Add your deployed Hugging Face Space URL here before final submission. -->
+[![Hugging Face Space](https://img.shields.io/badge/Live%20Demo-Hugging%20Face-blue)](https://huggingface.co/spaces/AniketAsla/insurance-claim-env)
 
 ---
 
 ## Overview
 
-Insurance claims handling is a high-stakes workflow where agents must balance customer experience, fraud risk, payout accuracy, and investigation cost simultaneously. This environment models that tension directly as a structured decision problem.
+Insurance claims handling is a high-stakes workflow where agents must balance customer experience, fraud risk, payout accuracy, and investigation cost at the same time. This environment models that tension as a structured decision problem rather than a single-step classifier.
 
 An agent receives a claim file with supporting documents, linked claims, and incident data. It must investigate, flag anomalies, estimate payouts, and reach a final adjudication decision — all within a step budget and under a reward signal that penalizes both over-caution and fraud blindness.
 
-The environment is built on the OpenEnv REST API spec and is packaged for Docker and Hugging Face Spaces deployment.
+The environment follows the OpenEnv REST contract and is packaged for Docker and Hugging Face Spaces deployment.
+
+## Live Demo
+
+Public demo Space: [AniketAsla/insurance-claim-env](https://huggingface.co/spaces/AniketAsla/insurance-claim-env)
+
+Judge quick-check flow:
+
+- open the Space and confirm the environment is live
+- inspect `/health`, `/tasks`, and `/schema`
+- run `scripts/hf_space_eval.py --base-url https://aniketasla-insurance-claim-env.hf.space`
 
 ## Problem Statement
 
@@ -99,7 +109,7 @@ Use `verify_identity` to cross-check the registry (discovers 2 signals in one ca
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/reset` | Start a new episode. Accepts `task_id`, `seed`, `session_id`. Returns `session_id` and initial observation. |
+| `POST` | `/reset` | Start a new episode. Accepts `task_id`, `seed`, `session_id`, and legacy `episode_id`. Returns `session_id` and the initial observation. |
 | `POST` | `/step` | Submit an action. Requires `session_id` and `action` body. Returns observation, reward, done. |
 | `GET`  | `/state` | Current episode state for a session. |
 | `GET`  | `/tasks` | Lists all available task IDs with descriptions. |

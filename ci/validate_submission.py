@@ -19,6 +19,7 @@ OPENENV = ROOT / "openenv.yaml"
 README = ROOT / "README.md"
 DOCKERFILE = ROOT / "Dockerfile"
 REQUIREMENTS = ROOT / "requirements.txt"
+HF_SPACE_EVAL = ROOT / "scripts" / "hf_space_eval.py"
 
 
 def assert_true(condition: bool, message: str) -> None:
@@ -27,7 +28,7 @@ def assert_true(condition: bool, message: str) -> None:
 
 
 def main() -> None:
-    for path in [INFERENCE, OPENENV, README, DOCKERFILE, REQUIREMENTS]:
+    for path in [INFERENCE, OPENENV, README, DOCKERFILE, REQUIREMENTS, HF_SPACE_EVAL]:
         assert_true(path.exists(), f"Missing required file: {path.name}")
 
     inference_text = INFERENCE.read_text(encoding="utf-8")
@@ -43,12 +44,18 @@ def main() -> None:
     readme_text = README.read_text(encoding="utf-8")
     for required_section in [
         "## Problem Statement",
+        "## Live Demo",
         "## Quickstart",
         "## Architecture",
         "## Evaluation",
         "## Dashboard Compliance Checklist",
     ]:
         assert_true(required_section in readme_text, f"README is missing '{required_section}'")
+    assert_true("huggingface.co/spaces/" in readme_text, "README should include the public Space URL")
+
+    hf_eval_text = HF_SPACE_EVAL.read_text(encoding="utf-8")
+    for token in ["/health", "/tasks", "identity_fraud", "session_id"]:
+        assert_true(token in hf_eval_text, f"hf_space_eval.py is missing '{token}'")
 
     client = TestClient(app)
 

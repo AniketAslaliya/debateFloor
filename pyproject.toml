@@ -3,9 +3,9 @@ requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "openenv-core"
+name = "insurance-claim-triage-env"
 version = "0.2.3"
-description = "A unified framework for reinforcement learning environments"
+description = "An OpenEnv-compatible insurance claim triage and fraud detection benchmark"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
