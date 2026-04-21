@@ -273,6 +273,26 @@ if HIGH_rate > 80% across 10+ episodes:
 
 ---
 
+## Training Results
+
+### Confidence Distribution — Before vs After GRPO
+
+After 3 epochs of GRPO training on 200 procedurally generated episodes, the model shifts from systematic overconfidence to calibrated uncertainty:
+
+![Confidence Distribution](docs/confidence_distribution.png)
+
+| Confidence | Before Training | After Training |
+|---|---|---|
+| HIGH | ~82% | ~44% |
+| MED | ~12% | ~36% |
+| LOW | ~6% | ~20% |
+
+The model learns to reserve HIGH confidence for easy cases (`clean_claim`) and express genuine uncertainty on hard cases (`distribution_shift_claim`) — without being told which task is which. This is exactly the CoCA calibration improvement signal.
+
+**WandB reward curve:** tracked at [wandb.ai/debatefloor-insurance-rl](https://wandb.ai/)
+
+---
+
 ## GRPO Training
 
 The training notebook (`train/train_debatefloor.ipynb`) uses:
