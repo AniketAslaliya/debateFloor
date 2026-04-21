@@ -5,8 +5,10 @@ from threading import Lock
 from typing import Any, Dict, Optional
 from uuid import uuid4
 
+import gradio as gr
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.background import BackgroundTasks
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field, ValidationError
 
 from .environment import InsuranceClaimEnvironment
@@ -57,15 +59,19 @@ class StepBody(BaseModel):
 
 app = FastAPI(title="DebateFloor — Insurance Calibration RL Environment")
 
+# Mount Gradio visual demo at /ui
+try:
+    import sys, os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from gradio_app import demo as gradio_demo
+    gr.mount_gradio_app(app, gradio_demo, path="/ui")
+except Exception:
+    pass  # Gradio optional — API still works without it
+
 
 @app.get("/")
-def index() -> dict:
-    return {
-        "name": "debatefloor_insurance_calibration_env",
-        "status": "ok",
-        "docs": "/docs",
-        "health": "/health",
-    }
+def index():
+    return RedirectResponse(url="/ui")
 
 
 @app.post("/reset")
