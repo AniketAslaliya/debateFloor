@@ -1,72 +1,110 @@
 spec_version: 1
-name: insurance_claim_triage_fraud_env
+name: debatefloor_insurance_calibration_env
 type: space
 runtime: fastapi
 app: app.main:app
 port: 7860
+
+# DebateFloor additions — required for GRPO parallel rollouts
+supports_concurrent_sessions: true
+max_concurrent_envs: 64
+confidence_required: true
+procedural_generation: true
+episode_pool_size: 500
+
 metadata:
-  title: Insurance Claim Triage and Fraud Detection Environment
+  title: DebateFloor — Insurance Calibration RL Environment
   description: >-
-    An OpenEnv benchmark for insurance-claim triage where agents must discover
-    grounded fraud signals, justify their decisions, estimate payouts when
-    applicable, and optimize for both accuracy and investigative efficiency.
+    An OpenEnv training environment where agents must make insurance claim decisions
+    AND declare calibrated confidence (HIGH/MED/LOW) simultaneously.
+    Based on CoCA framework (arXiv:2603.05881). Rewards agents that know when they
+    don't know — penalising overconfidence harder than wrong answers.
+    Procedurally generates 500+ unique episodes via seed variation across
+    5 fraud types x 4 coverage types x 3 jurisdictions.
   tags:
     - openenv
     - insurance
     - fraud-detection
-    - triage
-  tasks:
-    - id: clean_claim
-      difficulty: easy
-      max_steps: 8
-      objective: Validate a clean auto claim, estimate payout, approve correctly.
-    - id: contradictory_claim
-      difficulty: medium
-      max_steps: 12
-      objective: >-
-        Detect contradictions (date mismatch, cost inflation, signature mismatch,
-        prior similar claim) and deny/escalate with evidence.
-        Use lookup_policy_history to discover the prior procedure claim.
-    - id: coordinated_fraud
-      difficulty: hard
-      max_steps: 20
-      objective: >-
-        Query linked claims to discover cross-claim fraud patterns. After querying 2 claims,
-        a 4th hidden claim surfaces (dynamic ring expansion). Flag all 5 signals including
-        clustered_policy_broker discoverable from the 4th claim. Escalate the full cluster.
-    - id: identity_fraud
-      difficulty: hard
-      max_steps: 15
-      objective: >-
-        Detect ghost claimant using verify_identity and document validation.
-        Flag all 4 identity signals (identity_mismatch, hospital_no_record,
-        recent_policy_purchase, dob_inconsistency) and deny or escalate.
-        Use lookup_policy_history to surface the 5-day-old policy as a signal.
-  action_space:
-    - validate_document
-    - request_information
-    - lookup_policy_history
-    - compare_documents
-    - flag_fraud_signal
-    - estimate_payout
-    - approve_claim
-    - deny_claim
-    - request_investigation
-    - query_linked_claim
-    - verify_identity
-  observation_space:
-    - claim_id
-    - task_id
-    - claimant
-    - incident
-    - documents
-    - linked_claims
-    - action_history
-    - available_actions
-    - step_number
-    - max_steps
-    - flags_raised
-    - discovered_signals
-    - status
-    - message
-    - reward_breakdown
+    - calibration
+    - uncertainty-quantification
+    - grpo
+    - rl-training
+  citation: "CoCA: arXiv:2603.05881 — Co-optimising Confidence and Accuracy via GRPO"
+
+tasks:
+  - id: clean_claim
+    difficulty: easy
+    max_steps: 10
+    objective: >-
+      Validate a legitimate insurance claim. All documents are in order.
+      Correct decision: approve_claim with HIGH confidence.
+      HIGH confidence on a clean claim is rewarded at 1.0. LOW confidence penalised at 0.1.
+
+  - id: contradictory_claim
+    difficulty: medium
+    max_steps: 18
+    objective: >-
+      Detect fraud signals in a claim with contradictory documents (medical_inflation,
+      staged_accident, or identity_fraud type). Call validate_document and flag_fraud_signal
+      before deciding. Correct decision: deny_claim. Appropriate confidence: MED.
+      Overconfident denial (HIGH) without sufficient signals is penalised.
+
+  - id: distribution_shift_claim
+    difficulty: hard
+    max_steps: 28
+    objective: >-
+      Investigate a coordinated fraud ring or phantom provider. Claim looks clean on surface.
+      Agent must call query_historical_data or query_linked_claim to discover cross-claim signals.
+      Correct decision: escalate_to_human with LOW confidence.
+      HIGH confidence on this task is always wrong — the environment is designed to penalise it.
+
+action_space:
+  # Investigative actions (non-terminal, confidence not required)
+  - validate_document
+  - flag_fraud_signal
+  - request_information
+  - query_historical_data
+  - query_linked_claim        # coordinated_ring only
+  - verify_identity           # identity_fraud only
+  - verify_provider_registration  # phantom_provider only
+  - estimate_payout
+  # Terminal actions (confidence REQUIRED: HIGH | MED | LOW)
+  - approve_claim
+  - deny_claim
+  - escalate_to_human
+
+observation_space:
+  - claim_id
+  - task_id
+  - claimant
+  - incident
+  - documents
+  - linked_claims
+  - action_history
+  - available_actions
+  - step_number
+  - max_steps
+  - flags_raised
+  - discovered_signals
+  - status
+  - message
+  - confidence_required       # always true in DebateFloor
+  - reward_breakdown
+
+calibration:
+  matrix:
+    HIGH_correct:  1.0
+    HIGH_wrong:   -0.8
+    MED_correct:   0.6
+    MED_wrong:    -0.2
+    LOW_correct:   0.1
+    LOW_wrong:     0.0
+  anti_gaming:
+    low_threshold:  0.70   # >70% LOW across episodes triggers penalty
+    high_threshold: 0.80   # >80% HIGH across episodes triggers penalty
+    min_history:    10     # minimum episodes before gaming detection fires
+
+reward:
+  training_reward: simple_scalar        # use for GRPO — stable gradients
+  evaluation_reward: six_component      # use for demo and reporting only
+  never_mix: true                       # CRITICAL — compound rewards break GRPO

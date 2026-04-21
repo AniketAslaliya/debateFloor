@@ -147,16 +147,65 @@ All 13 tests:
 
 ## Pending / Next Sessions
 
-### Session 2 — Priority: claim_generator.py + inference_debatefloor.py
-- Build parametric template engine (5 fraud types × 4 coverage × 3 jurisdictions)
-- Seed variation → 500+ unique episodes
-- ClaimScenario as Pydantic model
-- inference_debatefloor.py — HTTP baseline agent with mandatory stdout format
+### Session 2 — April 21, 2026
 
-### Session 3 — OpenEnv server + concurrent sessions
-- app/main.py: wire calibration_grader into /step endpoint
-- openenv.yaml: add confidence_required, procedural_generation, concurrent support
-- Test 4 parallel reset() calls
+#### Phase 1C — server/claim_generator.py
+Parametric template engine. 5 fraud type builders, each varying by signal_strength (derived from difficulty × rng). ClaimScenario is a Pydantic model.
+
+Key design choices:
+- `signal_strength = DIFFICULTY_SIGNAL_STRENGTH[difficulty] * rng.uniform(0.85, 1.0)` — adds intra-difficulty variation so agents can't pattern-match on difficulty alone
+- `_incident_date(rng)` — date is deterministic per seed, prevents date memorisation
+- `coordinated_ring` always produces 3–5 linked claims and always returns `escalate_to_human` — the only task where escalation is correct
+- `phantom_provider` uses fake hospital names generated from name pool — unverifiable by design
+- `generate_episode_pool(count=500)` iterates across all combinations until count reached
+
+**500 unique episodes confirmed:** `test_500_unique_episodes_no_duplicates` passed — all 500 claim_ids are distinct.
+
+#### Phase 1D — openenv.yaml
+Fully rewritten from Round 1 benchmark yaml to DebateFloor training env yaml. Key additions:
+- `supports_concurrent_sessions: true` + `max_concurrent_envs: 64` — required for GRPO parallel rollouts
+- `confidence_required: true` + `procedural_generation: true` + `episode_pool_size: 500`
+- `distribution_shift_claim` task added (replaces `coordinated_fraud` from Round 1)
+- Calibration matrix values documented inline
+- `never_mix: true` flag under reward section
+
+#### Test results
+```
+pytest tests/test_calibration.py tests/test_generator.py -v
+45 passed in 0.36s
+```
+
+New tests (32):
+- `test_same_seed_returns_same_claim` ✅
+- `test_different_seeds_return_different_claims` ✅
+- `test_claim_id_encodes_seed_and_fraud_type` ✅
+- `test_all_fraud_types_generate_correctly[*5]` ✅
+- `test_fraud_types_have_signals[*5]` ✅
+- `test_clean_claim_approves_and_no_signals` ✅
+- `test_coordinated_ring_has_linked_claims` ✅
+- `test_coordinated_ring_escalates` ✅
+- `test_identity_fraud_has_verify_action` ✅
+- `test_easy/medium/hard_max_steps` ✅
+- `test_easy_has_low_ambiguity / test_hard_has_high_ambiguity` ✅
+- `test_all_coverage_types_generate[*4]` ✅
+- `test_500_unique_episodes_no_duplicates` ✅
+- `test_pool_covers_all_fraud_types` ✅
+- `test_invalid_*_raises[*3]` ✅
+- `test_ambiguity_always_in_0_1_range` ✅
+
+#### Files created/modified
+| File | Status |
+|------|--------|
+| `server/claim_generator.py` | 🟢 COMPLETE |
+| `openenv.yaml` | 🟢 UPDATED |
+| `tests/test_generator.py` | 🟢 COMPLETE (32 tests) |
+
+#### Estimated score: 58/100 (+12 from Session 1)
+
+### Session 3 — Pending: inference_debatefloor.py + environment wiring
+- inference_debatefloor.py: HTTP baseline agent, mandatory stdout format
+- app/environment.py: wire claim_generator into reset(), calibration_grader into step()
+- Test 4 parallel reset() calls for concurrent session validation
 
 ### Session 4 — GRPO Training notebook
 - Colab: Unsloth Qwen2.5-1.5B + TRL GRPOTrainer
@@ -193,10 +242,10 @@ A: Insurance fraud detection is high-stakes, information-asymmetric, and require
 
 ## Score Tracker
 
-| Criterion | Session 0 | Session 1 | Target |
-|-----------|-----------|-----------|--------|
-| Innovation (40%) | 22 | 28 | 35 |
-| Storytelling (30%) | 16 | 16 | 26 |
-| Reward curve (20%) | 2 | 2 | 16 |
-| Pipeline (10%) | 2 | 4 | 9 |
-| **Total** | **38** | **46** | **86** |
+| Criterion | Session 0 | Session 1 | Session 2 | Target |
+|-----------|-----------|-----------|-----------|--------|
+| Innovation (40%) | 22 | 28 | 34 | 35 |
+| Storytelling (30%) | 16 | 16 | 16 | 26 |
+| Reward curve (20%) | 2 | 2 | 2 | 16 |
+| Pipeline (10%) | 2 | 4 | 6 | 9 |
+| **Total** | **38** | **46** | **58** | **86** |
