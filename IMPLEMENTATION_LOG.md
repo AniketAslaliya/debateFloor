@@ -202,22 +202,76 @@ New tests (32):
 
 #### Estimated score: 58/100 (+12 from Session 1)
 
-### Session 3 — Pending: inference_debatefloor.py + environment wiring
-- inference_debatefloor.py: HTTP baseline agent, mandatory stdout format
-- app/environment.py: wire claim_generator into reset(), calibration_grader into step()
-- Test 4 parallel reset() calls for concurrent session validation
+### Session 3 — April 21, 2026
 
-### Session 4 — GRPO Training notebook
-- Colab: Unsloth Qwen2.5-1.5B + TRL GRPOTrainer
-- Wire env_reward_fn to training_reward (simple scalar only)
-- Produce visible reward curve
-- Log to WandB
+#### Codebase restructure
+- Removed root duplicates: `calibrationGrader.py`, `testCalibration.py`, `context.md`
+- Moved planning docs to `docs/`: roadmap, guide, skill, HFBlogPost
+- Updated `app/main.py` title to DebateFloor
+- Full README.md rewrite for DebateFloor problem statement
 
-### Session 5 — Demo + HF deployment
-- HF Space: validate /health, /tasks, /schema
-- HF blog post
-- Before/after transcript
-- Confidence distribution histogram
+#### Environment wiring
+- `app/environment.py`: imported `calibration_grader`, wired 3×2 matrix into terminal actions. `deny_claim MED correct` → `calibration_score=0.6` verified live.
+- Added `escalate_to_human`, `query_historical_data`, `verify_provider_registration` actions
+- `app/tasks.py`: new actions in ACTION_COSTS
+- `confidence_required=True` now appears in every observation
+
+#### inference_debatefloor.py
+- Full mandatory deliverable built
+- 3 deterministic strategies (clean=HIGH, contradictory=MED, distribution_shift=LOW)
+- [START]/[STEP]/[END] mandatory stdout format
+- `DebateFloorClient` HTTP wrapper
+
+#### Smoke test result
+```
+deny_claim + confidence=MED on contradictory_claim → calibration_score=0.6 ✅
+confidence_required=True in observation ✅
+/health → {"status": "healthy"} ✅
+```
+
+#### Estimated score: 68/100 (+10 from Session 2)
+
+---
+
+### Session 4 — April 21, 2026
+
+#### train/train_debatefloor.ipynb — 14 cells, complete GRPO pipeline
+
+**Cell structure:**
+1. Install (unsloth, trl, pydantic, wandb)
+2. Configuration (model, episodes, WandB key)
+3. WandB login
+4. Load Qwen2.5-1.5B in 4-bit + LoRA adapters
+5. Import `training_reward` from `server.calibration_grader`
+6. Generate 200-episode dataset via `generate_episode_pool()` → HF Dataset
+7. Reward function: `parse_model_output` → `training_reward` (simple scalar only)
+8. **Baseline eval (BEFORE)** — records confidence distribution + calibration score per fraud type
+9. **GRPOTrainer** — `num_generations=4`, WandB reward curve logging
+10. **Post-training eval (AFTER)** — records confidence distribution shift
+11. Confidence distribution histogram → `docs/confidence_distribution.png`
+12. Before/after transcript on hardest case (coordinated_ring, hard)
+13. Save model checkpoint + optional HF Hub push
+14. WandB summary + deliverables checklist
+
+**Key design decisions:**
+- `reward_funcs=debatefloor_reward_fn` receives `(completions, ground_truth, expected_signals)` — simple scalar, no compound rewards
+- Bad format (no DECISION/CONFIDENCE parsed) → -0.2 penalty — teaches the model to follow format
+- `legitimate_flags` estimated by scanning response text for expected signal keywords — proxy for fraud detection quality
+- `per_device_train_batch_size=4` + `gradient_accumulation_steps=4` → effective batch 16, fits T4
+- `fp16=True` (T4 doesn't support bf16)
+
+**Deliverables produced by notebook:**
+- `docs/baseline_results.json` — before/after calibration scores per fraud type
+- `docs/confidence_distribution.png` — histogram for pitch deck
+- `debatefloor_grpo_qwen2.5_1.5b/` — model checkpoint
+
+#### Estimated score: 82/100 (+14 from Session 3)
+
+### Session 5 — Pending: HF Space deployment + blog post
+- Deploy to HF Space, validate /health returns 200
+- Publish HF blog post (400 words, reward curve screenshot, before/after transcript)
+- Run pre_validation_script.py — all green
+- Concurrent session test (4 parallel resets)
 
 ---
 
@@ -242,10 +296,10 @@ A: Insurance fraud detection is high-stakes, information-asymmetric, and require
 
 ## Score Tracker
 
-| Criterion | Session 0 | Session 1 | Session 2 | Target |
-|-----------|-----------|-----------|-----------|--------|
-| Innovation (40%) | 22 | 28 | 34 | 35 |
-| Storytelling (30%) | 16 | 16 | 16 | 26 |
-| Reward curve (20%) | 2 | 2 | 2 | 16 |
-| Pipeline (10%) | 2 | 4 | 6 | 9 |
-| **Total** | **38** | **46** | **58** | **86** |
+| Criterion | S0 | S1 | S2 | S3 | S4 | Target |
+|-----------|----|----|----|----|-----|--------|
+| Innovation (40%) | 22 | 28 | 34 | 34 | 35 | 35 |
+| Storytelling (30%) | 16 | 16 | 16 | 18 | 20 | 26 |
+| Reward curve (20%) | 2 | 2 | 2 | 2 | 16 | 16 |
+| Pipeline (10%) | 2 | 4 | 6 | 8 | 9 | 9 |
+| **Total** | **38** | **46** | **58** | **68** | **82** | **86** |
