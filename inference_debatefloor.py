@@ -344,7 +344,7 @@ def main():
             print()  # blank line between tasks
 
     if len(results) > 1:
-        print("\n── Summary ──")
+        print("\n-- Summary --")
         for r in results:
             cs = r.get("calibration_score")
             print(

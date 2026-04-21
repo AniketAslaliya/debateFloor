@@ -13,7 +13,7 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY app /app/app
 COPY openenv.yaml /app/openenv.yaml
-COPY inference.py /app/inference.py
+COPY inference_debatefloor.py /app/inference_debatefloor.py
 COPY README.md /app/README.md
 COPY pyproject.toml /app/pyproject.toml
 COPY server /app/server

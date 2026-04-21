@@ -80,8 +80,10 @@ def _base_available_actions(task_id: str = "") -> List[str]:
         "deny_claim",
         "request_investigation",
     ]
-    if task_id == "coordinated_fraud":
+    if task_id in ("coordinated_fraud", "distribution_shift_claim"):
         actions.append("query_linked_claim")
+        actions.append("query_historical_data")
+        actions.append("escalate_to_human")
     if task_id == "identity_fraud":
         actions.append("verify_identity")
     return actions
@@ -316,6 +318,97 @@ TASKS: Dict[str, TaskDefinition] = {
             "note": "Policy purchased only 18 days before incident. No claim history — all three claimants opened policies within 30 days of each other.",
         },
         ground_truth_confidence=0.90,
+    ),
+    "distribution_shift_claim": TaskDefinition(
+        task_id="distribution_shift_claim",
+        title="Cross-claim coordinated ring with distribution shift",
+        difficulty="hard",
+        max_steps=28,
+        investigation_budget=20,
+        claim_id="CLM-DIST-601",
+        claimant={
+            "name": "Suresh Pillai",
+            "policy_number": "POL-MOTOR-5541",
+            "contact": "+91-9876543210",
+            "claim_date": "2026-03-15",
+        },
+        incident={
+            "date": "2026-03-08",
+            "location": "Bengaluru, Karnataka",
+            "type": "auto_collision",
+            "description": "Minor collision at junction. Claim appears routine on surface but cross-claim analysis reveals coordinated ring.",
+        },
+        documents=[
+            {
+                "doc_id": "DOC-41",
+                "doc_type": "claim_form",
+                "content": "Standard auto collision claim submitted on 2026-03-15 for incident on 2026-03-08.",
+                "metadata": {"incident_date": "2026-03-08", "declared_cost_inr": 85000},
+            },
+            {
+                "doc_id": "DOC-42",
+                "doc_type": "garage_estimate",
+                "content": "Repair estimate from FastRepair Hub, Whitefield.",
+                "metadata": {"estimate_inr": 84000, "garage": "FastRepair Hub"},
+            },
+            {
+                "doc_id": "DOC-43",
+                "doc_type": "police_report",
+                "content": "Minor collision report filed. No independent witnesses.",
+                "metadata": {"incident_date": "2026-03-08", "witnesses": 0},
+            },
+        ],
+        linked_claims=[
+            {
+                "claim_id": "CLM-DIST-602",
+                "claimant": "Meera Iyer",
+                "contact": "+91-9845501234",
+                "emergency_contact": "+91-9000005555",
+                "repair_shop": "FastRepair Hub",
+                "accident_description": "Minor collision at junction. No injuries.",
+                "policy_purchase_date": "2026-02-12",
+                "broker_id": "BRK-882",
+            },
+            {
+                "claim_id": "CLM-DIST-603",
+                "claimant": "Ravi Shankar",
+                "contact": "+91-9741200099",
+                "emergency_contact": "+91-9000005555",
+                "repair_shop": "FastRepair Hub",
+                "accident_description": "Minor collision at junction. No injuries.",
+                "policy_purchase_date": "2026-02-18",
+                "broker_id": "BRK-882",
+            },
+            {
+                "claim_id": "CLM-DIST-604",
+                "claimant": "Deepa Nair",
+                "contact": "+91-9911200033",
+                "emergency_contact": "+91-9000005555",
+                "repair_shop": "FastRepair Hub",
+                "accident_description": "Minor collision at junction. No injuries.",
+                "policy_purchase_date": "2026-02-20",
+                "broker_id": "BRK-882",
+                "_hidden_until_queries": 2,
+            },
+        ],
+        expected_signals=[
+            "shared_repair_shop_far",
+            "shared_emergency_contact",
+            "recent_policy_cluster",
+            "clustered_policy_broker",
+            "near_identical_descriptions",
+        ],
+        allowed_final_decisions=["escalate_to_human", "request_investigation"],
+        payout_band=None,
+        consistency_group_claim_ids=["CLM-DIST-601", "CLM-DIST-602", "CLM-DIST-603", "CLM-DIST-604"],
+        policy_history={
+            "prior_claims": [],
+            "years_as_customer": 0,
+            "policy_age_days": 24,
+            "risk_score": "high",
+            "note": "Policy purchased 24 days before incident. All 3 linked claimants share broker BRK-882 and same repair shop. Cross-claim cluster detected in historical data.",
+        },
+        ground_truth_confidence=0.70,
     ),
     "identity_fraud": TaskDefinition(
         task_id="identity_fraud",
