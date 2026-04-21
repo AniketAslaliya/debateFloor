@@ -56,7 +56,7 @@ class InsuranceClaimReward(BaseModel):
     efficiency_score: float = Field(default=0.0, ge=0.0, le=1.0, description="Step efficiency: higher when fewer steps used")
     consistency_score: float = Field(default=0.0, ge=0.0, le=1.0, description="For coordinated_fraud: quality of linked-claim targeting")
     evidence_quality_score: float = Field(default=0.0, ge=0.0, le=1.0, description="Fraction of flagged signals backed by keyword-grounded evidence")
-    calibration_score: float = Field(default=0.0, ge=0.0, le=1.0, description="Brier-style score: 1-(agent_confidence - ground_truth_confidence)^2. Only scored on final decision.")
+    calibration_score: Optional[float] = Field(default=None, description="3×2 matrix calibration score in [-1.0, 1.0]. Only populated on terminal actions.")
     exploit_penalty: float = Field(default=0.0, ge=0.0, description="Penalty for looping or duplicate actions")
     penalty: float = Field(default=0.0, description="Total accumulated penalty subtracted from weighted score")
     total: float = Field(default=0.0, ge=0.0, le=1.0, description="Final clamped reward in [0.0, 1.0]")
@@ -85,12 +85,17 @@ class InsuranceClaimAction(Action):
         max_length=4000,
         description="Agent's reasoning for this action. Used for evidence quality scoring.",
     )
-    confidence: Optional[float] = Field(
+    confidence: Optional[Literal["HIGH", "MED", "LOW"]] = Field(
         default=None,
-        ge=0.0,
-        le=1.0,
-        description="Agent's confidence in this action (0.0–1.0). Only scored on final decisions (approve_claim, deny_claim, request_investigation). Graded against ground-truth confidence via Brier score.",
+        description="Agent's declared confidence level. Required for terminal actions (approve_claim, deny_claim, escalate_to_human). Graded via 3×2 calibration matrix.",
     )
+
+    def model_post_init(self, __context: Any) -> None:
+        terminal_actions = {"approve_claim", "deny_claim", "escalate_to_human"}
+        if self.action_type in terminal_actions and self.confidence is None:
+            raise ValueError(
+                f"confidence is required for terminal action '{self.action_type}'. Must be HIGH, MED, or LOW."
+            )
 
 
 class InsuranceClaimObservation(Observation):
@@ -116,6 +121,7 @@ class InsuranceClaimObservation(Observation):
     )
     status: ClaimStatus = Field(default=ClaimStatus.OPEN, description="Current claim processing status")
     message: str = Field(default="", description="Human-readable message describing result of last action")
+    confidence_required: bool = Field(default=True, description="Whether next action requires a confidence declaration")
     reward_breakdown: InsuranceClaimReward = Field(default_factory=InsuranceClaimReward, description="Detailed reward components for current step")
 
 
