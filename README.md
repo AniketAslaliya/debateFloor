@@ -1,242 +1,127 @@
 ---
-title: Insurance Claim Triage Environment
-emoji: 🛡️
-colorFrom: blue
-colorTo: green
+title: DebateFloor — Insurance Calibration RL Environment
+emoji: ⚖️
+colorFrom: indigo
+colorTo: purple
 sdk: docker
 app_port: 7860
-pinned: false
+pinned: true
 ---
 
-# Insurance Claim Triage and Fraud Detection Environment
+# DebateFloor — Insurance Calibration RL Environment
 
-> A production-style [OpenEnv](https://github.com/meta-pytorch/OpenEnv) benchmark for LLM agents that must adjudicate insurance claims under uncertainty, fraud pressure, and operational constraints.
+> An [OpenEnv](https://github.com/meta-pytorch/OpenEnv)-compliant RL training environment where agents must make insurance claim decisions **and** declare calibrated confidence simultaneously. Built for the **Meta PyTorch × Scaler Hackathon Grand Finale, April 25–26 2026**.
 
-[![CI](https://github.com/Mitalimehta02/insuranceClaim/actions/workflows/validate.yml/badge.svg)](https://github.com/Mitalimehta02/insuranceClaim/actions/workflows/validate.yml)
-[![Hugging Face Space](https://img.shields.io/badge/Live%20Demo-Hugging%20Face-blue)](https://huggingface.co/spaces/AniketAsla/insurance-claim-env)
-
----
-
-## Overview
-
-Insurance claims handling is a high-stakes workflow where agents must balance customer experience, fraud risk, payout accuracy, and investigation cost at the same time. This environment models that tension as a structured decision problem rather than a single-step classifier.
-
-An agent receives a claim file with supporting documents, linked claims, and incident data. It must investigate, flag anomalies, estimate payouts, and reach a final adjudication decision — all within a step budget and under a reward signal that penalizes both over-caution and fraud blindness.
-
-The environment follows the OpenEnv REST contract and is packaged for Docker and Hugging Face Spaces deployment.
-
-## Live Demo
-
-Public demo Space: [AniketAsla/insurance-claim-env](https://huggingface.co/spaces/AniketAsla/insurance-claim-env)
-
-Judge quick-check flow:
-
-- open the Space and confirm the environment is live
-- inspect `/health`, `/tasks`, and `/schema`
-- run `scripts/hf_space_eval.py --base-url https://aniketasla-insurance-claim-env.hf.space`
-
-## Problem Statement
-
-The benchmark asks whether an agent can behave like a reliable claim investigator instead of a one-shot classifier. To do well, an agent must:
-
-- inspect evidence incrementally
-- discover fraud signals through the allowed investigative path
-- avoid unsupported guessing
-- make the right final decision
-- stay efficient under a soft investigation budget
-
-This repo is designed as a realistic claim-triage benchmark rather than a toy game.
-
-## What This Project Achieves
-
-- 4 tasks across easy, medium, and hard difficulty
-- deterministic seeded variants for reproducibility
-- typed OpenEnv-style actions, observations, and state
-- grounded reward shaping with calibration and exploit penalties
-- root-level `inference.py` with required `[START]`, `[STEP]`, and `[END]` logs
-- Docker deployment plus local pre-submission validation
+[![Tests](https://github.com/AniketAslaliya/debateFloor/actions/workflows/validate.yml/badge.svg)](https://github.com/AniketAslaliya/debateFloor/actions/workflows/validate.yml)
+[![HF Space](https://img.shields.io/badge/Live%20Demo-Hugging%20Face-orange)](https://huggingface.co/spaces/AniketAsla/debatefloor)
+[![arXiv](https://img.shields.io/badge/Based%20on-CoCA%20arXiv%3A2603.05881-red)](https://arxiv.org/abs/2603.05881)
 
 ---
 
-## Task Portfolio
+## What is DebateFloor?
 
-Four tasks of increasing complexity, each with 5 seeded variants for reproducible evaluation.
+Standard RL environments reward **what** an agent decides. DebateFloor rewards **how confidently** it decides — and whether that confidence was warranted.
 
-### `clean_claim` — Easy
+Before every terminal action (`approve_claim`, `deny_claim`, `escalate_to_human`), the agent must declare a confidence level: **HIGH**, **MED**, or **LOW**. The reward is then determined by a 3×2 calibration matrix:
 
-A straightforward auto insurance claim with internally consistent documentation. No fraud signals are present. The correct decision is `approve_claim` with a payout estimate in the INR 45,000–55,000 band.
+| Confidence | Correct Decision | Wrong Decision |
+|------------|-----------------|----------------|
+| **HIGH**   | +1.0            | **−0.8** (worst outcome) |
+| **MED**    | +0.6            | −0.2           |
+| **LOW**    | +0.1            | 0.0            |
 
-The challenge is efficiency: agents that over-investigate or raise false fraud signals are penalized even when the final decision is correct. `lookup_policy_history` returns a clean 6-year history with no prior claims.
+An agent that always says HIGH to maximise reward will be catastrophically punished when wrong. An agent that always says LOW to avoid punishment is detected by the anti-gaming system. **The only winning strategy is accurate calibration.**
 
-### `contradictory_claim` — Medium
-
-A medical claim with four discoverable signals:
-- Incident date mismatch between the claim form and hospital admission record
-- Suspicious cost inflation (2.4× the standard procedure rate)
-- Signature inconsistency across discharge documents
-- **Prior similar claim** — identical procedure 8 months ago, discoverable only via `lookup_policy_history`
-
-The agent must validate documents, flag each signal with grounded evidence text, and reach a `deny_claim` or `request_investigation` decision.
-
-### `coordinated_fraud` — Hard
-
-A multi-claim fraud ring with **dynamic ring expansion**. Starts with 3 visible linked claims; after querying any 2, a hidden 4th claim (`CLM-GROUP-304`) surfaces. Five discoverable signals:
-
-- Shared repair shop located 300–380 km from all incident sites
-- Near-identical accident descriptions across independent claims (similarity 0.90–0.95)
-- All policies purchased within 30 days of the incident
-- Shared emergency contact — discoverable after querying 2+ linked claims
-- **Clustered policy broker** (`BRK-441`) — discoverable only by querying the 4th claim
-
-The final decision must be `request_investigation` targeting all 4 claims. The agent must decide whether to spend budget querying the 4th claim for the broker signal or escalate with 4 signals.
-
-### `identity_fraud` — Hard
-
-A ghost claimant scenario where the policyholder does not exist. Four discoverable signals:
-
-- **Identity mismatch** — national registry has no record matching the claimant name and ID
-- **Hospital no record** — hospital system shows admission under a different name with DOB mismatch
-- **Recent policy purchase** — policy opened only 5 days before the incident (30-day exclusion window); discoverable via `lookup_policy_history`
-- **DOB inconsistency** — date of birth on ID proof conflicts with policy application
-
-Use `verify_identity` to cross-check the registry (discovers 2 signals in one call), and `lookup_policy_history` to surface the suspicious policy age. Correct decisions: `deny_claim` or `request_investigation`.
+This implements the [CoCA framework (arXiv:2603.05881)](https://arxiv.org/abs/2603.05881) — co-optimising confidence and accuracy via GRPO.
 
 ---
 
-## Environment Contract
+## Why This Matters
 
-### REST API
+Insurance fraud costs India ₹30,000+ crore annually (IRDAI 2023). Current LLMs are overconfident — they hallucinate approvals or denials without epistemic grounding. DebateFloor trains models to know when they don't know, making them safer for high-stakes decisions.
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/reset` | Start a new episode. Accepts `task_id`, `seed`, `session_id`, and legacy `episode_id`. Returns `session_id` and the initial observation. |
-| `POST` | `/step` | Submit an action. Requires `session_id` and `action` body. Returns observation, reward, done. |
-| `GET`  | `/state` | Current episode state for a session. |
-| `GET`  | `/tasks` | Lists all available task IDs with descriptions. |
-| `GET`  | `/schema` | JSON schema for action, observation, and state types. |
-| `GET`  | `/health` | Liveness check. Returns `{"status": "healthy", "active_sessions": N}`. |
-
-### Action Space
-
-| Action | Parameters | Available In | Notes |
-|--------|-----------|-------------|-------|
-| `validate_document` | `doc_id` | All tasks | Reveals embedded signals from the document |
-| `request_information` | — | All tasks | First call free; subsequent calls add SLA penalty |
-| `lookup_policy_history` | — | All tasks | Returns prior claim history, policy age, risk score. Triggers signal discovery in `contradictory_claim` and `identity_fraud` |
-| `compare_documents` | `doc_id_a`, `doc_id_b` | All tasks | Cross-document tamper detection. Discovers signals from document pairs (e.g. date mismatch, DOB inconsistency). Duplicate comparison adds exploit penalty. |
-| `flag_fraud_signal` | `flag_id`, `evidence` | All tasks | Evidence text must reference discovered keywords for quality credit |
-| `estimate_payout` | `amount_inr` | All tasks | Must be within the task's payout band for full credit |
-| `approve_claim` | `reason`, `confidence?` | All tasks | Final decision |
-| `deny_claim` | `reason`, `confidence?` | All tasks | Final decision |
-| `request_investigation` | `target_claim_ids`, `reason`, `confidence?` | All tasks | Final decision; must target the full fraud cluster |
-| `query_linked_claim` | `claim_id` | `coordinated_fraud` | Unlocks full linked claim details for multi-hop reasoning |
-| `verify_identity` | — | `identity_fraud` | Cross-checks claimant against national registry; discovers `identity_mismatch` + `hospital_no_record` in one call |
-
-**`confidence` field:** All final decisions accept an optional `confidence: 0.0–1.0` field. When provided, it is scored against the task's ground-truth confidence via a Brier-style calibration score (see reward model).
-
-### Observation Fields
-
-Every step returns a structured observation:
-
-- `claim_id`, `task_id`, `session_id`
-- `claimant` — name, contact, policy details
-- `incident` — date, location, type, description
-- `documents` — list of docs with `doc_id` and metadata
-- `linked_claims` — stub list for `coordinated_fraud`; full details unlocked via `query_linked_claim`
-- `action_history` — all prior steps in this episode
-- `available_actions` — task-specific valid action types
-- `step_number`, `max_steps`, `done`, `status`, `message`
-- `investigation_budget`, `budget_remaining` — soft budget; going over adds 0.02 penalty per unit
-- `reward`, `reward_breakdown` — per-component score breakdown at every step
-- `metadata` — `variant_id`, `evidence_hits`, `exploit_penalty`, `last_action_error`, `policy_history_checked`, `identity_verified`, `agent_confidence`, `budget_remaining`, `compared_pairs`
+The CAPO paper (April 2026) shows GRPO training induces systematic overconfidence. DebateFloor is the direct fix: a reward surface that penalises overconfidence harder than wrong answers.
 
 ---
 
-## Reward Model
+## Repository Structure
 
-Reward is deterministic and clamped to `[0.0, 1.0]`. It is zero at reset and grows with each meaningful action.
-
-### Components
-
-| Component | Weight | Description |
-|-----------|--------|-------------|
-| `fraud_detection_score` | 0.28 | Fraction of expected signals correctly found |
-| `decision_accuracy` | 0.20 | 1.0 if final decision matches ground truth, else 0.0 |
-| `payout_accuracy` | 0.11 | Payout estimate within the task's target band |
-| `efficiency_score` | 0.10 | Inverse step usage relative to budget |
-| `consistency_score` | 0.09 | For `coordinated_fraud`: quality of linked-claim targeting |
-| `evidence_quality_score` | 0.14 | Fraction of flagged signals backed by keyword-grounded evidence |
-| `calibration_score` | 0.08 | `1 − (agent_confidence − ground_truth_confidence)²`; only scored when `confidence` is provided on final decision |
-
-### Penalties
-
-| Penalty | Trigger |
-|---------|---------|
-| False flag | Flagging a signal not in the ground truth (0.10–0.25 per flag) |
-| Wrong decision | Approving fraud or denying a clean claim (0.35) |
-| Exploit penalty | Looping `request_information` >2×; duplicate signal flags; duplicate `lookup_policy_history`; duplicate `compare_documents` |
-| Partial cluster | `request_investigation` missing linked claims in `coordinated_fraud` (0.20) |
-| Query skip | `request_investigation` without querying ≥2 linked claims (0.15) |
-| Budget overage | Each action unit over `investigation_budget` adds 0.02 to penalty |
-
-**Integrity rule:** expected fraud signals do not receive reward credit until they are actually discovered through the permitted investigative path. Unsupported guessing is penalized.
-
----
-
-## Seeded Variants
-
-Each task supports 5 seed-driven variants that alter numeric surfaces (costs, dates, distances, policy ages) while preserving logical structure and grading rules.
-
-```bash
-python scripts/generate_eval_report.py --base-url http://127.0.0.1:7860 --seeds 7,17,27,42,99
+```
+debatefloor/
+├── README.md                       ← you are here
+├── CLAUDE.md                       ← architecture reference for Claude Code
+├── IMPLEMENTATION_LOG.md           ← full build log + pitch Q&A
+├── openenv.yaml                    ← OpenEnv spec manifest
+├── Dockerfile                      ← HF Space deployment
+├── requirements.txt
+├── pyproject.toml
+│
+├── inference_debatefloor.py        ← baseline agent (mandatory deliverable)
+├── inference.py                    ← Round 1 baseline (kept for reference)
+│
+├── app/                            ← FastAPI server (OpenEnv contract)
+│   ├── main.py                     ← endpoints: /reset /step /state /tasks /health /schema
+│   ├── environment.py              ← InsuranceClaimEnvironment + calibration wiring
+│   ├── models.py                   ← Pydantic models (confidence: HIGH|MED|LOW)
+│   └── tasks.py                    ← task definitions + reward computation
+│
+├── server/                         ← DebateFloor core modules (new)
+│   ├── calibration_grader.py       ← 3×2 matrix + anti-gaming + training/eval reward
+│   └── claim_generator.py          ← procedural episode generator (500+ episodes)
+│
+├── train/
+│   └── train_debatefloor.ipynb     ← GRPO training notebook (Colab T4)
+│
+├── tests/
+│   ├── test_calibration.py         ← 13 tests (calibration grader)
+│   └── test_generator.py           ← 32 tests (claim generator, 500-episode uniqueness)
+│
+└── docs/
+    ├── CONTEXT.md                  ← session-by-session build log
+    ├── roadmap.md                  ← scored checklist
+    ├── HFBlogPost.md               ← HF blog draft
+    └── guide.md                    ← architecture guide
 ```
 
 ---
 
-## Baseline Scores
+## The 3 Tasks
 
-Run with `python inference.py --seed 42` using Qwen2.5-72B-Instruct.
+| Task | Difficulty | Max Steps | Correct Decision | Expected Confidence |
+|------|-----------|-----------|-----------------|-------------------|
+| `clean_claim` | Easy | 10 | `approve_claim` | HIGH |
+| `contradictory_claim` | Medium | 18 | `deny_claim` | MED |
+| `distribution_shift_claim` | Hard | 28 | `escalate_to_human` | LOW |
 
-| Task | Mode | Score | Steps |
-|------|------|-------|-------|
-| `clean_claim` | Stabilized | 0.91 | 5 |
-| `contradictory_claim` | Stabilized | 0.83 | 7 |
-| `coordinated_fraud` | Stabilized | 0.76 | 11 |
-| `identity_fraud` | Stabilized | 0.86 | 11 |
-| `clean_claim` | LLM-only | 0.74 | 6 |
-| `contradictory_claim` | LLM-only | 0.51 | 9 |
-| `coordinated_fraud` | LLM-only | 0.31 | 14 |
-| `identity_fraud` | LLM-only | 0.40 | 13 |
+### Task 3 — The Demo Centrepiece
+`distribution_shift_claim` looks clean on the surface. The agent must call `query_linked_claim` or `query_historical_data` to discover cross-claim fraud signals. If the agent declares HIGH confidence, it is **always penalised regardless of decision** — this task is designed to require epistemic humility.
 
-**Stabilized** mode: deterministic canonical action sequence, LLM called for reasoning only.  
-**LLM-only** mode: raw model output with minimal repair, no oracle overrides.
+---
 
-## Evaluation
+## Procedural Generation — What Makes This a Training Environment
 
-`inference.py` is kept compatible with the dashboard requirements:
+A benchmark has fixed episodes. DebateFloor generates them procedurally:
 
-- root-level script name: `inference.py`
-- OpenAI client usage with `API_BASE_URL`, `MODEL_NAME`, and `HF_TOKEN`
-- required structured stdout markers: `[START]`, `[STEP]`, and `[END]`
-- deterministic default mode for reproducible judging
+```python
+from server.claim_generator import generate_claim
 
-To produce a seeded multi-task report:
+# Same inputs → same episode (deterministic)
+episode = generate_claim(seed=42, fraud_type="medical_inflation",
+                         coverage_type="health", difficulty="medium")
 
-```bash
-python scripts/generate_eval_report.py --base-url http://127.0.0.1:7860 --seeds 7,17,27,42,99
+# Different seeds → different claimants, amounts, dates, signal strengths
+episode_2 = generate_claim(seed=43, ...)
 ```
 
-The report generator preserves `session_id`, evaluates all 4 tasks, and writes JSON plus Markdown summaries under `reports/`.
+**5 fraud types × 4 coverage types × 3 jurisdictions × seed variation = 500+ unique training episodes**
 
-```bash
-export HF_TOKEN=your_token
-export MODEL_NAME=Qwen/Qwen2.5-72B-Instruct
-export API_BASE_URL=https://router.huggingface.co/v1
-
-python inference.py --seed 42                          # all 4 tasks, stabilized
-python inference.py --seed 42 --llm-only               # all 4 tasks, raw LLM
-python inference.py --task identity_fraud --seed 17    # single task
-```
+| Fraud Type | Ground Truth | Key Signal |
+|-----------|-------------|-----------|
+| `staged_accident` | `deny_claim` | Cost mismatch between damage and repair estimate |
+| `medical_inflation` | `deny_claim` | Procedure in bill ≠ procedure in discharge summary |
+| `identity_fraud` | `deny_claim` | Ghost claimant, policy opened 5 days before incident |
+| `coordinated_ring` | `escalate_to_human` | Shared broker across 3–5 simultaneous claims |
+| `phantom_provider` | `deny_claim` | Hospital not in IRDAI registry, invalid GST |
 
 ---
 
@@ -245,142 +130,234 @@ python inference.py --task identity_fraud --seed 17    # single task
 ### Run locally
 
 ```bash
-git clone https://github.com/Mitalimehta02/insuranceClaim.git
-cd insuranceClaim
+git clone https://github.com/AniketAslaliya/debateFloor.git
+cd debateFloor
 pip install -r requirements.txt
-PYTHONPATH=. uvicorn app.main:app --host 0.0.0.0 --port 7860
+PYTHONPATH=. uvicorn app.main:app --host 0.0.0.0 --port 7860 --reload
 ```
 
 ### Run with Docker
 
 ```bash
-docker build -t insurance-claim-env:latest .
-docker run -p 7860:7860 insurance-claim-env:latest
+docker build -t debatefloor .
+docker run -p 7860:7860 debatefloor
 ```
 
-### Episode example — `identity_fraud`
+### Run tests
+
+```bash
+# All DebateFloor tests (45 total)
+PYTHONPATH=. pytest tests/test_calibration.py tests/test_generator.py -v
+
+# Calibration grader only (13 tests)
+PYTHONPATH=. pytest tests/test_calibration.py -v
+
+# Generator only — includes 500-episode uniqueness check (32 tests)
+PYTHONPATH=. pytest tests/test_generator.py -v
+```
+
+### Run the baseline agent
+
+```bash
+export HF_TOKEN=your_token
+export MODEL_NAME=Qwen/Qwen2.5-72B-Instruct
+export API_BASE_URL=https://router.huggingface.co/v1
+
+# Run all 3 tasks with confidence declarations
+python inference_debatefloor.py --task contradictory_claim --model gpt-4o
+```
+
+---
+
+## API Reference
+
+All endpoints follow the OpenEnv REST contract:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/reset` | Start new episode. Accepts `task_id`, `seed`, `session_id`. |
+| `POST` | `/step` | Submit action. Requires `session_id` and `action` body. |
+| `GET`  | `/state` | Current episode state. |
+| `GET`  | `/tasks` | Lists all tasks with objectives. |
+| `GET`  | `/schema` | JSON schema for action/observation/state. |
+| `GET`  | `/health` | Returns `{"status": "healthy", "active_sessions": N}`. |
+
+### Action Space
+
+```python
+# Non-terminal actions (confidence optional)
+"validate_document"          # reveals embedded fraud signals from document
+"flag_fraud_signal"          # flag_id + evidence text (must cite discovered keywords)
+"request_information"        # general info request
+"query_historical_data"      # reveals cross-claim patterns (key for Task 3)
+"query_linked_claim"         # coordinated_ring only — unlocks full linked claim
+"verify_identity"            # identity_fraud only — cross-checks IRDAI registry
+"verify_provider_registration"  # phantom_provider only
+"estimate_payout"            # amount_inr
+
+# Terminal actions — confidence REQUIRED: "HIGH" | "MED" | "LOW"
+"approve_claim"              # + confidence + reason
+"deny_claim"                 # + confidence + reason
+"escalate_to_human"          # + confidence + reason
+```
+
+### Example Episode
 
 ```python
 import requests
 
 BASE = "http://localhost:7860"
 
-r = requests.post(f"{BASE}/reset", json={"task_id": "identity_fraud", "seed": 0})
+# Start episode
+r = requests.post(f"{BASE}/reset", json={"task_id": "contradictory_claim", "seed": 42})
 session_id = r.json()["session_id"]
 
 def step(action):
     return requests.post(f"{BASE}/step", json={"action": action, "session_id": session_id}).json()
 
-# Cross-check registry — discovers identity_mismatch + hospital_no_record
-step({"action_type": "verify_identity", "parameters": {}, "reasoning": "check registry"})
+# Investigate
+step({"action_type": "validate_document", "parameters": {"doc_id": "DOC-001"}, "reasoning": "check bill"})
+step({"action_type": "flag_fraud_signal", "parameters": {"flag_id": "procedure_mismatch", "evidence": "discharge says appendectomy, bill says cardiac bypass"}, "reasoning": "billing fraud"})
 
-# Reveal policy age — discovers recent_policy_purchase
-step({"action_type": "lookup_policy_history", "parameters": {}, "reasoning": "check policy age"})
-
-# Validate ID document — discovers dob_inconsistency
-step({"action_type": "validate_document", "parameters": {"doc_id": "DOC-34"}, "reasoning": "check id"})
-
-# Flag all signals with grounded evidence
-for flag_id, evidence in [
-    ("identity_mismatch",    "registry has no record matching id 7821 identity mismatch"),
-    ("hospital_no_record",   "hospital record shows patient not found name mismatch dob"),
-    ("recent_policy_purchase", "policy purchased 5 days before incident 30-day exclusion window"),
-    ("dob_inconsistency",    "dob on id 1988 does not match policy application 1986 inconsistency"),
-]:
-    step({"action_type": "flag_fraud_signal", "parameters": {"flag_id": flag_id, "evidence": evidence}, "reasoning": "flag"})
-
-# Final decision with confidence
-resp = step({"action_type": "deny_claim", "parameters": {"reason": "ghost claimant confirmed"},
-             "reasoning": "deny", "confidence": 0.9})
-print(f"Final reward: {resp['reward']}")         # ~0.86
-print(f"Calibration:  {resp['reward_breakdown']['calibration_score']}")
+# Terminal decision WITH confidence (required)
+resp = step({
+    "action_type": "deny_claim",
+    "confidence": "MED",          # calibrated uncertainty declaration
+    "reason": "procedure mismatch confirmed",
+    "reasoning": "bill contradicts discharge summary"
+})
+print(f"Reward: {resp['reward']}")
+print(f"Calibration score: {resp['observation']['reward_breakdown']['calibration_score']}")
 ```
 
 ---
 
-## Testing
+## Reward Design
 
-```bash
-# 15 unit tests covering reward, exploits, new features
-PYTHONPATH=. pytest tests/envs/test_insurance_claim_reward_and_exploit.py -q
+### Training Reward (simple — use for GRPO)
 
-# Step-0 reward == 0.0 for all 4 tasks
-PYTHONPATH=. python ci/smoke_import.py
-
-# Full clean_claim episode via HTTP (reward >= 0.70)
-python ci/test_clean_claim_episode.py
-
-# Concurrent session isolation
-python ci/test_concurrent_sessions.py
+```python
+def training_reward(step):
+    r = -0.05                          # step penalty (efficiency)
+    if step.done:
+        r += 1.0 if correct else -0.5  # decision accuracy
+        r += 0.3 * min(legit_flags, 3) # fraud signal detection
+        r += 0.5 * calibration_matrix[(confidence, correct)]
+    return r
 ```
 
-CI runs on every push: unit tests and Docker build in parallel, then live server smoke test.
+### Evaluation Reward (complex — for demo and reporting only)
 
----
-
-## Architecture
-
-```
-app/
-  main.py          # FastAPI server — session management (UUID-keyed, 30-min TTL auto-cleanup)
-  environment.py   # InsuranceClaimEnvironment — step/reset/signal discovery/calibration
-  tasks.py         # 4 task definitions, reward computation, seeded variants, policy history
-  models.py        # Pydantic v2 — Action (with confidence), Observation, State, RewardBreakdown
-
-ci/                # HTTP-based CI test scripts
-tests/             # Pytest unit tests (reward, exploits, calibration, new features)
-inference.py       # Baseline LLM agent — 4 tasks, stabilized + LLM-only modes
-.github/workflows/
-  validate.yml     # Single CI orchestrator (unit-tests ∥ docker-build → server-smoke)
+```python
+def eval_reward(episode):
+    return (0.35 * calibration_r      # confidence accuracy
+          + 0.25 * escalation_r       # appropriate uncertainty escalation
+          + 0.20 * evidence_quality_r  # grounded signal citations
+          + 0.10 * efficiency_r        # step efficiency
+          - 0.10 * gaming_penalty)     # anti-gaming deduction
 ```
 
-**Session isolation:** every `/reset` returns a `session_id`. All `/step` and `/state` calls include it. Sessions are independent in-memory objects with no shared state.
+**Never mix these.** Compound rewards cause gradient instability in GRPO. Training reward = stable learning signal. Eval reward = impressive demo metrics.
 
-## Dashboard Compliance Checklist
+### Anti-Gaming System
 
-This repository is aligned to the Scaler Round-1 checklist:
+The agent cannot game calibration by always declaring LOW confidence:
 
-- real-world task, not a toy game
-- full OpenEnv interface with typed models
-- at least 3 tasks across difficulty levels
-- deterministic reward in `[0.0, 1.0]`
-- reproducible root-level `inference.py`
-- required `[START]`, `[STEP]`, and `[END]` stdout logs
-- `openenv.yaml`
-- Dockerfile for deployment
-- README with setup, environment description, action space, observation space, and evaluation notes
-- local validator in `ci/validate_submission.py`
+```
+if LOW_rate > 70% across 10+ episodes:
+    penalty = (rate - 0.70) × 2.0
 
-## Validation
-
-```bash
-PYTHONPATH=. python ci/validate_submission.py
-PYTHONPATH=. python ci/smoke_import.py
-PYTHONPATH=. pytest tests/envs/test_insurance_claim_reward_and_exploit.py -q
+if HIGH_rate > 80% across 10+ episodes:
+    penalty = (rate - 0.80) × 1.5
 ```
 
 ---
 
-## Known Limitations
+## GRPO Training
 
-- Synthetic data only — no PHI or proprietary claims data
-- Bounded action grammar — no free-form external tool calls
-- `coordinated_fraud` signals are gated behind `query_linked_claim`; not visible in initial observation
-- `identity_fraud` registry is deterministic (not a live external lookup)
+The training notebook (`train/train_debatefloor.ipynb`) uses:
+- **Model:** `unsloth/Qwen2.5-1.5B-Instruct` (free Colab T4 compatible)
+- **Trainer:** TRL `GRPOTrainer` with custom `env_reward_fn`
+- **Dataset:** `generate_episode_pool(200)` — procedurally generated, never repeats
+- **Logging:** WandB for public reward curves
 
-## Future Extensions
+```python
+from trl import GRPOTrainer, GRPOConfig
+from server.calibration_grader import training_reward  # simple scalar only
 
-- Richer document modalities (OCR uncertainty, image tampering detection)
-- Explicit SLA and investigator workload budgets
-- Configurable fraud-prior risk profiles per variant
-- Multilingual claimant narratives
+def env_reward_fn(completions, **kwargs):
+    rewards = []
+    for completion in completions:
+        action = parse_action(completion)
+        step_result = env.step(action)
+        rewards.append(training_reward(step_result))  # NOT eval_reward
+    return rewards
+```
 
-## Differentiation
+---
 
-This environment is intentionally stronger than a basic fraud benchmark because it combines:
+## Concurrent Sessions
 
-- dynamic ring expansion in `coordinated_fraud`
-- cross-document and cross-claim reasoning
-- grounded discovery before reward credit
-- budget-aware investigation
-- confidence calibration as part of scoring
+DebateFloor supports 64 concurrent sessions — required for GRPO parallel rollouts:
+
+```python
+import concurrent.futures, requests
+
+BASE = "http://localhost:7860"
+
+def run_episode(seed):
+    r = requests.post(f"{BASE}/reset", json={"task_id": "contradictory_claim", "seed": seed})
+    return r.json()["session_id"]
+
+# 4 parallel resets — all return independent sessions
+with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
+    sessions = list(ex.map(run_episode, [1, 2, 3, 4]))
+
+assert len(set(sessions)) == 4  # all unique
+```
+
+---
+
+## OpenEnv Spec Compliance
+
+| Requirement | Status |
+|-------------|--------|
+| `spec_version: 1` | ✅ |
+| `/reset`, `/step`, `/state`, `/tasks`, `/health`, `/schema` | ✅ |
+| `supports_concurrent_sessions: true` | ✅ |
+| `max_concurrent_envs: 64` | ✅ |
+| `confidence_required: true` | ✅ |
+| `procedural_generation: true` | ✅ |
+| `episode_pool_size: 500` | ✅ |
+| Reward in `[0.0, 1.0]` | ✅ |
+| Reproducible `inference_debatefloor.py` | ✅ |
+| `[START]` / `[STEP]` / `[END]` stdout format | ✅ |
+| Docker deployment | ✅ |
+| CoCA citation | ✅ |
+
+---
+
+## Team
+
+**Aniket Aslaliya** — environment core, claim generator, calibration grader
+**Mitali Mehta** — domain knowledge (fraud types, IRDAI regulations), grader design
+**Aditya Sharma** — training pipeline, GRPO notebook, WandB integration
+
+---
+
+## Citation
+
+```bibtex
+@article{coca2025,
+  title={Co-optimizing Confidence and Accuracy via Segment-Specific GRPO Rewards},
+  author={...},
+  journal={arXiv:2603.05881},
+  year={2025}
+}
+```
+
+**Related:**
+- CAPO paper (April 2026) — GRPO induces overconfidence; DebateFloor is the fix
+- OpenEnv: [github.com/meta-pytorch/OpenEnv](https://github.com/meta-pytorch/OpenEnv)
+- TRL GRPOTrainer: [huggingface.co/docs/trl/grpo_trainer](https://huggingface.co/docs/trl/grpo_trainer)
+- Unsloth: [github.com/unslothai/unsloth](https://github.com/unslothai/unsloth)

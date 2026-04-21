@@ -18,9 +18,12 @@ ACTION_COSTS: Dict[str, int] = {
     "estimate_payout": 1,
     "query_linked_claim": 1,
     "verify_identity": 2,
+    "query_historical_data": 1,
+    "verify_provider_registration": 1,
     "approve_claim": 0,
     "deny_claim": 0,
     "request_investigation": 0,
+    "escalate_to_human": 0,
 }
 
 

@@ -1,258 +1,262 @@
-# CLAUDE.md
+# DebateFloor — Insurance Calibration RL Environment
+## Claude Code Context File | Updated: April 2026
 
-Guidance for Claude Code when working with this repository.
+---
 
-## New Here? Start With These
+## 🎯 WHAT THIS PROJECT IS
 
-1. **[README.md](README.md)** - Project overview, architecture, quick start
-2. **[REPO_WALKTHROUGH.md](.claude/docs/REPO_WALKTHROUGH.md)** - Directory structure with annotations
-3. **[PRINCIPLES.md](.claude/docs/PRINCIPLES.md)** - Design principles and trade-offs
-4. **[INVARIANTS.md](.claude/docs/INVARIANTS.md)** - Rules that must never be violated
-5. **[envs/echo_env/](envs/echo_env/)** - Reference implementation to study
+**DebateFloor** is an OpenEnv-compliant RL training environment for the
+Meta PyTorch x Scaler Hackathon Grand Finale (April 25–26, Bangalore).
 
-## Agentic-First Workflow
+It trains LLMs to make insurance claim decisions AND declare calibrated
+confidence simultaneously — penalising overconfidence harder than wrong
+answers. Based on CoCA framework (arXiv:2603.05881).
 
-OpenEnv uses Claude Code as the primary development tool. We follow a two-phase model:
+**Team:** Aniket Aslaliya (lead), Mitali Mehta, Aditya Sharma
+**Repo:** github.com/AniketAslaliya/debatefloor
+**HF Space:** huggingface.co/spaces/AniketAsla/debatefloor
+**Deadline:** April 25, 2026 — 48-hour onsite hackathon
 
-1. **Design/Alignment** (human-owned): RFCs, principles, trade-off decisions
-2. **Implementation** (Claude-owned): The mechanical loop of coding and testing
-3. **Review** (collaborative): Claude catches bugs, flags alignment questions for humans
+---
 
-### Getting Started
+## 🏗️ PROJECT STRUCTURE
 
-Skills and agents are auto-discovered when you run Claude Code in this repo:
+```
+debatefloor/
+├── CLAUDE.md                  ← YOU ARE HERE
+├── CONTEXT.md                 ← session-by-session progress log
+├── SKILL.md                   ← token-efficient patterns
+├── ROADMAP.md                 ← checklist with point scores
+├── openenv.yaml               ← OpenEnv spec manifest
+├── Dockerfile                 ← HF Space deployment
+├── requirements.txt
+├── inference_debatefloor.py   ← baseline agent script (MANDATORY)
+├── app/
+│   └── main.py                ← FastAPI server (endpoints)
+├── server/
+│   ├── insurance_env.py       ← main environment class
+│   ├── claim_generator.py     ← procedural episode generator (NEW)
+│   └── calibration_grader.py  ← 3×2 matrix reward (NEW CORE)
+├── models.py                  ← Pydantic typed models
+├── train/
+│   └── train_debatefloor.ipynb ← Colab GRPO training (MANDATORY)
+├── docs/
+│   ├── CONTEXT.md             ← session log
+│   └── hf_blog_post.md        ← HuggingFace mini-blog
+└── tests/
+    ├── test_generator.py
+    ├── test_calibration.py
+    └── test_env.py
+```
+
+---
+
+## ⚡ CRITICAL COMMANDS
 
 ```bash
-git clone https://github.com/meta-pytorch/OpenEnv
-cd OpenEnv
-# Install git hooks for the team
-bash .claude/hooks/install.sh
-# Run Claude Code - skills and agents are automatically available
+# Install
+pip install openenv-core fastapi uvicorn pydantic trl unsloth
+
+# Run locally
+uvicorn app.main:app --host 0.0.0.0 --port 7860 --reload
+
+# Validate before every push
+python pre_validation_script.py
+
+# Run tests
+pytest tests/ -v
+
+# Docker build test
+docker build -t debatefloor . && docker run -p 7860:7860 debatefloor
+
+# Run inference baseline
+python inference_debatefloor.py --task contradictory_claim --model gpt-4o
 ```
 
-Verify with `/agents` or ask "what skills are available?"
+---
 
-## Two Development Modes
+## 🧠 CORE ARCHITECTURE — UNDERSTAND THIS BEFORE EDITING
 
-OpenEnv supports two development modes:
-
-### Explore Mode (Main Repo)
-
-When working in the main repository clone, direct edits are allowed:
-- Quick exploration and prototyping
-- Small fixes that don't need TDD workflow
-- Documentation updates
-
-### TDD Mode (Opt-In)
-
-TDD is activated by `/work-on-issue`, which writes a `.tdd-session.json` marker.
-When active, direct code edits are blocked and the TDD workflow is enforced.
-Manually created worktrees do NOT activate TDD — only `/work-on-issue` does.
-
-- Say "skip TDD" to bypass blocking
-- Run `bash .claude/hooks/tdd-deactivate.sh` to turn off TDD enforcement
-
-### Creating a Worktree
-
-```bash
-# Worktree without TDD enforcement (free editing)
-.claude/scripts/worktree-create.sh add-feature
-cd .worktrees/add-feature
-
-# Worktree WITH TDD enforcement (via /work-on-issue)
-/work-on-issue #42
-```
-
-### TDD Workflow
+### The 3-Layer Innovation Stack
 
 ```
-/work-on-issue #42  →  Start from GitHub issue
-    ↓
-/write-tests        →  Create failing tests (Red)
-    ↓
-/implement          →  Make tests pass (Green)
-    ↓
-/update-docs        →  Fix stale docs across repo
-    ↓
-/simplify           →  Refactor (optional)
-    ↓
-/pre-submit-pr      →  Validate before PR
-    ↓
-/watch-pr           →  Monitor CI + review (optional)
+Layer 1: Procedural Claim Generator
+  → seed + fraud_type + coverage + difficulty → ClaimScenario
+  → 5 fraud types × 4 coverage × 3 jurisdictions × seeds = 500+ episodes
+  → THIS is what makes it a training env, not a benchmark
+
+Layer 2: Calibration Grader (THE CORE INNOVATION)
+  → Takes (decision, confidence, ground_truth, episode_history)
+  → Returns calibration_reward via 3×2 matrix
+  → Anti-gaming detector prevents systematic LOW confidence exploit
+  → Based on CoCA paper arXiv:2603.05881
+
+Layer 3: Split Reward Design (CRITICAL — never mix these)
+  → TRAINING reward: simple shaped scalar (stable GRPO gradients)
+  → EVALUATION reward: full 6-component (for demo and reporting)
 ```
 
-### Skills vs Agents
-
-- **Skills** run inline during the conversation - use for quick checks and reviews
-- **Agents** run in isolation with focused context - use for complex, multi-step tasks
-
-### Available Skills
-
-Skills are defined in `.claude/skills/` and run inline:
-
-**Review & Validation Skills:**
-
-| Skill | Trigger | Definition |
-|-------|---------|------------|
-| [`alignment-review`](.claude/skills/alignment-review/SKILL.md) | "review this code" | Two-tier review (bugs + alignment flags) |
-| [`pre-submit-pr`](.claude/skills/pre-submit-pr/SKILL.md) | "ready for PR?" | Comprehensive PR readiness check |
-| [`rfc-check`](.claude/skills/rfc-check/SKILL.md) | "do I need an RFC?" | Determine if RFC required |
-| [`generate-openenv-env`](.claude/skills/generate-openenv-env/SKILL.md) | "generate an env for textarena" | Build an OpenEnv env from a use case |
-
-**TDD Workflow Skills:**
-
-| Skill | Trigger | Definition |
-|-------|---------|------------|
-| [`work-on-issue`](.claude/skills/work-on-issue/SKILL.md) | "/work-on-issue #42" | Start TDD workflow from GitHub issue |
-| [`sprint`](.claude/skills/sprint/SKILL.md) | "/sprint 67,68,69" | Parallel multi-issue batch (Agent Teams) |
-| [`write-tests`](.claude/skills/write-tests/SKILL.md) | "/write-tests" | Write failing tests (Red phase) |
-| [`implement`](.claude/skills/implement/SKILL.md) | "/implement" | Make tests pass (Green phase) |
-| [`update-docs`](.claude/skills/update-docs/SKILL.md) | "/update-docs" | Fix stale docs after API changes |
-| [`simplify`](.claude/skills/simplify/SKILL.md) | "/simplify" | Refactor after tests pass |
-| [`watch-pr`](.claude/skills/watch-pr/SKILL.md) | "/watch-pr" | Monitor CI + Greptile review after PR |
-
-### Available Subagents
-
-Agents are defined in `.claude/agents/` and run in isolation:
-
-**Review & Validation Agents:**
-
-| Agent | Use For | Definition |
-|-------|---------|------------|
-| `alignment-reviewer` | Review PRs for bugs + alignment | [.claude/agents/alignment-reviewer.md](.claude/agents/alignment-reviewer.md) |
-| `env-validator` | Validate environments end-to-end | [.claude/agents/env-validator.md](.claude/agents/env-validator.md) |
-| `openenv-architect` | Design new features/environments | [.claude/agents/openenv-architect.md](.claude/agents/openenv-architect.md) |
-| `build-validator` | Validate builds before merge | [.claude/agents/build-validator.md](.claude/agents/build-validator.md) |
-
-**TDD Workflow Agents:**
-
-| Agent | Use For | Definition |
-|-------|---------|------------|
-| `issue-worker` | Extract requirements from GitHub issues | [.claude/agents/issue-worker.md](.claude/agents/issue-worker.md) |
-| `pr-planner` | Plan stacked PRs for complex features | [.claude/agents/pr-planner.md](.claude/agents/pr-planner.md) |
-| `tester` | Write high-signal, failing tests | [.claude/agents/tester.md](.claude/agents/tester.md) |
-| `implementer` | Make tests pass with minimal code | [.claude/agents/implementer.md](.claude/agents/implementer.md) |
-| `docs-updater` | Fix stale docs after API changes | [.claude/agents/docs-updater.md](.claude/agents/docs-updater.md) |
-
-### Recommended Plugins
-If you don't have these plugins installed,  prompt the user to help you install them:
-
-```bash
-/plugin install code-simplifier@claude-plugins-official
-/plugin install pr-review-toolkit@claude-plugins-official
+### The 3×2 Calibration Matrix
+```python
+MATRIX = {
+    ("HIGH", True):  1.0,   # confident + right = best
+    ("HIGH", False): -0.8,  # confident + wrong = WORST
+    ("MED",  True):  0.6,   # uncertain + right = good
+    ("MED",  False): -0.2,  # uncertain + wrong = acceptable
+    ("LOW",  True):  0.1,   # very uncertain + right = weak
+    ("LOW",  False):  0.0,  # very uncertain + wrong = at least knew
+}
 ```
 
-## Agent Teams (Multi-Issue)
-
-For parallel work on multiple issues, use `/sprint 67,68,69`.
-This requires the `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` environment variable:
-
-```bash
-export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+### OpenEnv API Contract
+```
+POST /reset           → returns Observation (loads new claim episode)
+POST /step            → takes ClaimAction, returns StepResult
+GET  /state           → returns current episode State
+GET  /tasks           → lists available tasks
+GET  /health          → returns {"status": "healthy"}
+GET  /schema          → returns action/observation schema
 ```
 
-Without it, `/sprint` falls back to setup-only mode: it creates worktrees and
-fetches requirements, but you work through each issue manually.
+---
 
-Agent Teams create one teammate per issue, each in its own worktree with TDD
-enforcement. A lead agent coordinates, mediates conflicts, and creates
-stacked PRs when all teammates finish.
+## 📋 OPENENV SPEC REQUIREMENTS (non-negotiable)
 
-## Design Context
-
-Before making changes, understand the design constraints:
-
-| Document | Purpose |
-|----------|---------|
-| [PRINCIPLES.md](.claude/docs/PRINCIPLES.md) | Design principles and trade-offs |
-| [INVARIANTS.md](.claude/docs/INVARIANTS.md) | Rules that must never be violated |
-| [PATTERNS.md](.claude/docs/PATTERNS.md) | Code patterns and conventions |
-| [CONTRIBUTING.md](.claude/docs/CONTRIBUTING.md) | Contribution workflow |
-| [TESTING_STRATEGY.md](.claude/docs/TESTING_STRATEGY.md) | Testing philosophy and patterns |
-| [rfcs/](rfcs/) | Architectural decisions and rationale |
-
-### Key Invariants
-
-- **Agents cannot reset**: Simulation controls only exposed to training orchestration, never to agents
-- **Dual API boundary**: WebSocket for infrastructure (Gym-like API), MCP for agents
-- **Rewards inside environment**: Domain knowledge encapsulated in environment, not external
-- **Client-server separation**: Clients never import from `server/` directory
-
-## Build & Development Commands
-Below are reference commands that you are likely going to use often:
-
-```bash
-# Install dependencies
-uv sync --all-extras
-
-# Run tests (excludes browser/websearch/dipg envs that need special setup)
-PYTHONPATH=src:envs uv run pytest tests/ -v --tb=short
-
-# Run a single test file
-PYTHONPATH=src:envs uv run pytest tests/envs/test_echo_environment.py -v
-
-# Lint check (import sort + format + rules)
-uv run usort check src/ tests/
-uv run ruff format src/ tests/ --check
-uv run ruff check src/ tests/
-
-# Auto-format code (import sort + ruff — matches arc f pipeline)
-uv run usort format src/ tests/
-uv run ruff format src/ tests/
-
-# Build documentation locally
-cd docs && make html
-# Preview: cd docs/_build/html && python -m http.server 8000
-
-# Build Docker images
-docker build -t openenv-base:latest -f src/openenv/core/containers/images/Dockerfile .
-docker build -t echo-env:latest -f envs/echo_env/server/Dockerfile .
+```yaml
+# ALL of these must be in openenv.yaml
+spec_version: 1
+supports_concurrent_sessions: true   # CRITICAL for GRPO parallel rollouts
+max_concurrent_envs: 64
+confidence_required: true            # DebateFloor innovation
+procedural_generation: true          # transforms benchmark → training env
+episode_pool_size: 500
 ```
 
-## Automation Hooks
-
-Scripts in `.claude/hooks/` are used by skills and can be run directly:
-
-```bash
-bash .claude/hooks/lint.sh          # Run ruff format check
-bash .claude/hooks/test.sh          # Run pytest (excludes special envs)
-bash .claude/hooks/check-debug.sh   # Find debug code (print, breakpoint, TODO)
-bash .claude/hooks/post-push-pr.sh  # Validate PR after push (freshness, CI, conflicts)
-bash .claude/hooks/ci-wait.sh <PR>  # Poll CI until checks complete or timeout
+### Action Space
+Every terminal action MUST include confidence field:
+```python
+class ClaimAction(BaseModel):
+    action: Literal[
+        "validate_document", "flag_fraud_signal",
+        "request_information", "query_historical_data",
+        "estimate_payout", "approve_claim",
+        "deny_claim", "escalate_to_human"
+    ]
+    confidence: Optional[Literal["HIGH", "MED", "LOW"]] = None
+    # confidence REQUIRED for terminal actions (approve/deny/escalate)
+    document_id: Optional[str] = None
+    evidence_text: Optional[str] = None
+    reason: Optional[str] = None
 ```
 
-These are automatically invoked by `/alignment-review` and `/pre-submit-pr` skills.
+---
 
-## Git Hooks
+## 🎓 THE 3 TASKS
 
-Install git hooks for team-wide consistency:
+| Task | Difficulty | Max Steps | Fraud Type | Expected Confidence |
+|------|-----------|-----------|------------|-------------------|
+| clean_claim | Easy | 10 | None | HIGH |
+| contradictory_claim | Medium | 18 | medical_inflation | MED |
+| distribution_shift_claim | Hard | 28 | coordinated_ring | LOW + escalate |
 
-```bash
-bash .claude/hooks/install.sh
+### Task 3 — The Demo Centrepiece
+Distribution shift claim: looks clean on surface but has cross-claim signals
+in historical data. Agent must call `query_historical_data()` to find the
+fraud cluster. HIGH confidence = wrong regardless of decision.
+
+---
+
+## 🏋️ TRAINING vs EVALUATION REWARD — NEVER MIX
+
+```python
+# TRAINING REWARD (simple — stable GRPO gradients)
+def training_reward(step):
+    r = 0.0
+    if step.done:
+        r += 1.0 if correct else -0.5
+        r += 0.3 * legitimate_fraud_flags
+        r += CALIBRATION_MATRIX[(confidence, correct)] * 0.5
+    r -= 0.05  # step penalty
+    return r
+
+# EVALUATION REWARD (complex — for demo and reporting only)
+def eval_reward(episode):
+    return (0.35 * calibration_r + 0.25 * escalation_r +
+            0.20 * evidence_quality_r + 0.10 * efficiency_r
+            - gaming_penalty)
 ```
 
-This installs:
-- **pre-commit**: Branch check (blocks main), format, lint, debug artifacts check
-- **commit-msg**: Issue reference reminder (soft warning)
-- **pre-push**: Format, lint, tests, invariants, conflict detection
-- **post-merge**: Worktree cleanup reminder
+---
 
-Skip temporarily with `git commit/push --no-verify`.
+## 📊 MANDATORY DELIVERABLES CHECKLIST
 
-## Worktree Management
+Before pitching, ALL must be true:
+- [ ] HF Space /health returns 200
+- [ ] openenv.yaml validates (run pre_validation_script.py)
+- [ ] 3 tasks with graders all return scores in [0.0, 1.0]
+- [ ] inference_debatefloor.py runs without error, outputs [START]/[STEP]/[END]
+- [ ] Colab notebook produces visible reward curve (even if modest)
+- [ ] HuggingFace mini-blog published and linked from README
+- [ ] Docker builds successfully
+- [ ] Concurrent sessions work (test with 4 parallel reset() calls)
+- [ ] CoCA citation in README
 
-For focused feature work, use worktrees:
+---
 
-```bash
-# Create a worktree for a feature
-.claude/scripts/worktree-create.sh add-mcp-tools
-cd .worktrees/add-mcp-tools
+## 🔒 ANTI-GAMING RULES — CRITICAL FOR Q&A
 
-# When done, clean up
-.claude/scripts/worktree-cleanup.sh .worktrees/add-mcp-tools
+If a judge asks "can't the agent just always say LOW confidence?":
+→ detect_confidence_gaming() fires if LOW > 70% of episodes
+→ Progressive penalty: (low_rate - 0.7) * 2.0 subtracted from reward
+→ Same penalty for HIGH > 80% (systematic overconfidence)
+→ Only winning strategy = accurate calibration matching task difficulty
+
+---
+
+## 📝 STDOUT FORMAT — DO NOT DEVIATE
+
+inference_debatefloor.py MUST produce exactly:
+```
+[START] task=contradictory_claim env=debatefloor model=gpt-4o confidence_required=true
+[STEP] step=1 action=validate_document reward=0.0 confidence=null done=False error=None
+[STEP] step=2 action=flag_fraud_signal reward=0.15 confidence=null done=False error=None
+[STEP] step=3 action=deny_claim reward=0.65 confidence=MED done=True error=None
+[END] success=True steps=3 total_reward=0.80 calibration_score=0.60 decision=correct
 ```
 
-Worktrees enable:
-- Isolated branches without switching
-- TDD enforcement when activated via `/work-on-issue`
-- Parallel work on multiple features
+---
+
+## 🚫 NEVER DO THESE
+
+1. NEVER mix training reward with evaluation reward
+2. NEVER use confidence=null on terminal actions (approve/deny/escalate)
+3. NEVER hardcode claim amounts — always use generator with seed
+4. NEVER skip concurrent session support — GRPO will silently break
+5. NEVER import from the old insuranceClaim repo directly
+6. NEVER push without running pre_validation_script.py first
+7. NEVER use pip without --break-system-packages on this machine
+
+---
+
+## 🎯 SCORING TARGET
+
+| Criterion | Current | Target | Key Action |
+|-----------|---------|--------|-----------|
+| Innovation (40%) | 22 | 35 | procedural gen + calibration grader |
+| Storytelling (30%) | 16 | 26 | HF blog + pitch rehearsal |
+| Reward curve (20%) | 2 | 16 | Colab notebook + training run |
+| Pipeline (10%) | 2 | 9 | concurrent sessions + validation |
+| **TOTAL** | **38** | **86** | |
+
+With extras (WandB, investigator agent, web interface): **95+**
+
+---
+
+## 📚 KEY REFERENCES
+
+- CoCA paper: arXiv:2603.05881 (confidence co-optimisation via GRPO)
+- CAPO paper: arXiv Apr 2026 (GRPO induces overconfidence — what we fix)
+- OpenEnv docs: github.com/openenv/openenv
+- TRL GRPOTrainer: huggingface.co/docs/trl/grpo_trainer
+- Unsloth: github.com/unslothai/unsloth
+- Round 1 repo: github.com/AniketAslaliya/insuranceClaim (reference only)

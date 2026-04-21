@@ -21,6 +21,19 @@ from .tasks import (
     get_evidence_keyword_hints,
     get_task_definition,
 )
+from server.calibration_grader import calibration_reward as compute_calibration_reward
+
+# Map Literal confidence levels to float for Brier-score compatibility
+_CONFIDENCE_TO_FLOAT = {"HIGH": 0.9, "MED": 0.6, "LOW": 0.3}
+
+# Correct terminal action for each task — used by calibration grader
+_TASK_GROUND_TRUTH = {
+    "clean_claim":              "approve_claim",
+    "contradictory_claim":      "deny_claim",
+    "coordinated_fraud":        "escalate_to_human",
+    "identity_fraud":           "deny_claim",
+    "distribution_shift_claim": "escalate_to_human",
+}
 
 
 class InsuranceClaimEnvironment:
@@ -47,6 +60,9 @@ class InsuranceClaimEnvironment:
         self._policy_history_checked: bool = False
         self._identity_verified: bool = False
         self._agent_confidence: Optional[float] = None
+        self._agent_confidence_str: Optional[str] = None  # "HIGH" | "MED" | "LOW"
+        self._calibration_score: Optional[float] = None   # from 3x2 matrix
+        self._episode_history: List[Dict] = []            # for anti-gaming detection
         self._budget_remaining: int = 0
         self._compared_pairs: set[tuple] = set()
 
@@ -72,6 +88,8 @@ class InsuranceClaimEnvironment:
         self._policy_history_checked = False
         self._identity_verified = False
         self._agent_confidence = None
+        self._agent_confidence_str = None
+        self._calibration_score = None
         self._budget_remaining = self._payload.get("investigation_budget", 0)
         self._compared_pairs = set()
         self._last_message = (
@@ -353,16 +371,42 @@ class InsuranceClaimEnvironment:
 
             return f"Linked claim detail retrieved for {claim_id}: {match}{hint}{expansion_hint}"
 
-        if action.action_type in {"approve_claim", "deny_claim", "request_investigation"}:
-            self._state.final_decision = action.action_type
+        if action.action_type in {
+            "approve_claim", "deny_claim", "request_investigation", "escalate_to_human"
+        }:
+            # Normalise escalate_to_human → request_investigation for legacy grader
+            canonical_decision = (
+                "request_investigation"
+                if action.action_type == "escalate_to_human"
+                else action.action_type
+            )
+            self._state.final_decision = canonical_decision
             self._state.done = True
             self._state.status = ClaimStatus.DECIDED
 
-            # Capture agent's confidence for calibration scoring
+            # Capture Literal confidence and convert for Brier-score compatibility
             if action.confidence is not None:
-                self._agent_confidence = float(action.confidence)
+                conf_str = str(action.confidence)
+                self._agent_confidence_str = conf_str
+                self._agent_confidence = _CONFIDENCE_TO_FLOAT.get(conf_str)
 
-            if action.action_type == "request_investigation":
+                # Compute DebateFloor calibration reward via 3x2 matrix
+                ground_truth = _TASK_GROUND_TRUTH.get(self._state.task_id, "deny_claim")
+                # Map escalate_to_human ground truth to canonical for comparison
+                effective_decision = action.action_type
+                effective_ground_truth = (
+                    "escalate_to_human"
+                    if ground_truth == "request_investigation"
+                    else ground_truth
+                )
+                self._calibration_score = compute_calibration_reward(
+                    effective_decision, conf_str, effective_ground_truth,
+                    self._episode_history,
+                )
+                # Record this episode for future gaming detection
+                self._episode_history.append({"confidence": conf_str})
+
+            if canonical_decision == "request_investigation":
                 targets = action.parameters.get("target_claim_ids", [])
                 if isinstance(targets, list):
                     self._investigation_targets = [str(t) for t in targets]
@@ -370,11 +414,36 @@ class InsuranceClaimEnvironment:
                     raise ValueError("'target_claim_ids' must be a list for request_investigation")
 
             reason = str(action.parameters.get("reason", "")).strip()
-            if not reason and action.action_type != "approve_claim":
+            if not reason and action.action_type not in {"approve_claim", "escalate_to_human"}:
                 self._state.penalty_total += 0.03
 
             self._state.status = ClaimStatus.CLOSED
             return f"Final decision submitted: {action.action_type}."
+
+        if action.action_type == "query_historical_data":
+            # Alias for lookup_policy_history — used by distribution_shift_claim task
+            if self._policy_history_checked:
+                self._exploit_penalty += 0.03
+                return "Historical data already retrieved. No new information available."
+            self._policy_history_checked = True
+            task = self._runtime_task or build_runtime_task(self._state.task_id)
+            if task.task_id in {"contradictory_claim", "distribution_shift_claim"}:
+                self._record_discovered_signals(["prior_similar_claim"])
+            if task.task_id == "identity_fraud":
+                history = task.policy_history
+                if history.get("policy_age_days", 999) <= 30:
+                    self._record_discovered_signals(["recent_policy_purchase"])
+            return (
+                "Historical data retrieved. Cross-claim patterns and policy history available. "
+                "Prior claim activity and linked policy data surfaced."
+            )
+
+        if action.action_type == "verify_provider_registration":
+            task = self._runtime_task or build_runtime_task(self._state.task_id)
+            if task.task_id not in {"distribution_shift_claim"}:
+                raise ValueError("'verify_provider_registration' is only available for distribution_shift_claim")
+            self._record_discovered_signals(["unregistered_provider", "invalid_gst_registration"])
+            return "Provider registration check: hospital not found in IRDAI registry. GST number invalid."
 
         raise ValueError(f"Unsupported action_type '{action.action_type}'")
 
@@ -467,6 +536,10 @@ class InsuranceClaimEnvironment:
             ground_truth_confidence=task.ground_truth_confidence,
         )
 
+        # Override calibration_score with DebateFloor 3x2 matrix value when available
+        if self._calibration_score is not None:
+            reward_breakdown.calibration_score = self._calibration_score
+
         return InsuranceClaimObservation(
             claim_id=self._payload["claim_id"],
             task_id=self._payload["task_id"],
@@ -484,6 +557,7 @@ class InsuranceClaimEnvironment:
             discovered_signals=deepcopy(self._discovered_signals),
             status=self._state.status,
             message=message,
+            confidence_required=True,
             done=self._state.done,
             reward=reward_breakdown.total,
             metadata={
@@ -495,7 +569,8 @@ class InsuranceClaimEnvironment:
                 "exploit_penalty": round(self._exploit_penalty, 4),
                 "policy_history_checked": self._policy_history_checked,
                 "identity_verified": self._identity_verified,
-                "agent_confidence": self._agent_confidence,
+                "agent_confidence": self._agent_confidence_str,
+                "calibration_score": self._calibration_score,
                 "budget_remaining": self._budget_remaining,
                 "discovered_signals": deepcopy(self._discovered_signals),
                 "compared_pairs": [list(p) for p in self._compared_pairs],

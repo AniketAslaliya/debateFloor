@@ -55,13 +55,13 @@ class StepBody(BaseModel):
     session_id: str | None = None
 
 
-app = FastAPI(title="Insurance Claim Triage and Fraud Detection Environment")
+app = FastAPI(title="DebateFloor — Insurance Calibration RL Environment")
 
 
 @app.get("/")
 def index() -> dict:
     return {
-        "name": "insurance_claim_triage_fraud_env",
+        "name": "debatefloor_insurance_calibration_env",
         "status": "ok",
         "docs": "/docs",
         "health": "/health",
