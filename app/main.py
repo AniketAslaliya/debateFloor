@@ -88,8 +88,15 @@ def step(body: StepBody) -> dict:
     env = _get_or_create_session(session_id)
     try:
         action = InsuranceClaimAction(**body.action)
-    except ValidationError as exc:
-        raise HTTPException(status_code=422, detail=exc.errors())
+    except (ValidationError, ValueError) as exc:
+        errors = exc.errors() if hasattr(exc, "errors") else [{"msg": str(exc)}]
+        # Ensure errors are JSON-serialisable (strip non-serialisable ctx values)
+        safe = [
+            {k: str(v) if not isinstance(v, (str, int, float, bool, list)) else v
+             for k, v in e.items() if k != "ctx"}
+            for e in errors
+        ]
+        raise HTTPException(status_code=422, detail=safe)
     obs = env.step(action)
     return {
         "observation": obs.model_dump(),
@@ -124,6 +131,6 @@ def tasks() -> dict:
 def health() -> dict:
     return {
         "status": "healthy",
-        "environment": "insurance_claim_triage_fraud_env",
+        "environment": "debatefloor_insurance_calibration_env",
         "active_sessions": len(_sessions),
     }

@@ -66,15 +66,18 @@ class InsuranceClaimAction(Action):
     action_type: Literal[
         "validate_document",
         "request_information",
-        "lookup_policy_history",   # All tasks: reveals prior claim history
-        "compare_documents",       # All tasks: cross-document tamper detection
+        "lookup_policy_history",
+        "compare_documents",
         "flag_fraud_signal",
         "estimate_payout",
+        "query_historical_data",          # DebateFloor: alias for lookup_policy_history
+        "query_linked_claim",             # coordinated_ring: reveals linked claim detail
+        "verify_identity",                # identity_fraud: cross-checks registry
+        "verify_provider_registration",   # phantom_provider: checks IRDAI registry
         "approve_claim",
         "deny_claim",
         "request_investigation",
-        "query_linked_claim",      # coordinated_fraud only: reveals full linked claim detail
-        "verify_identity",         # identity_fraud only: cross-checks claimant against registry
+        "escalate_to_human",              # DebateFloor terminal: for coordinated_ring / hard tasks
     ] = Field(..., description="The type of action to perform on the claim")
     parameters: Dict[str, Any] = Field(
         default_factory=dict,
