@@ -20,6 +20,7 @@ ACTION_COSTS: Dict[str, int] = {
     "verify_identity": 2,
     "query_historical_data": 1,
     "verify_provider_registration": 1,
+    "convene_debate_panel": 2,   # multi-agent deliberation costs 2 budget units
     "approve_claim": 0,
     "deny_claim": 0,
     "request_investigation": 0,

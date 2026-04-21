@@ -49,8 +49,10 @@ TASK_STRATEGIES = {
         {"action_type": "validate_document", "parameters": {"doc_id": "DOC-11"}, "reasoning": "Check hospital admission.", "confidence": None},
         {"action_type": "validate_document", "parameters": {"doc_id": "DOC-12"}, "reasoning": "Check billing summary for inflation.", "confidence": None},
         {"action_type": "query_historical_data", "parameters": {}, "reasoning": "Check prior claim history.", "confidence": None},
-        {"action_type": "flag_fraud_signal", "parameters": {"flag_id": "procedure_mismatch", "evidence": "Discharge names appendectomy, bill charges cardiac bypass."}, "reasoning": "Document contradiction detected.", "confidence": None},
-        {"action_type": "deny_claim", "parameters": {"reason": "Procedure mismatch confirmed."}, "reasoning": "Evidence sufficient — MED confidence due to document complexity.", "confidence": "MED"},
+        {"action_type": "flag_fraud_signal", "parameters": {"flag_id": "date_mismatch", "evidence": "Claim form date differs from hospital admission date."}, "reasoning": "Date inconsistency flagged.", "confidence": None},
+        {"action_type": "flag_fraud_signal", "parameters": {"flag_id": "cost_inflation", "evidence": "Billing is 2.4x the standard rate for this procedure."}, "reasoning": "Cost inflation detected.", "confidence": None},
+        {"action_type": "convene_debate_panel", "parameters": {}, "reasoning": "Seek adversarial perspectives before final decision.", "confidence": None},
+        {"action_type": "deny_claim", "parameters": {"reason": "Procedure mismatch and cost inflation confirmed by debate panel."}, "reasoning": "Panel leans prosecution — MED confidence appropriate.", "confidence": "MED"},
     ],
     "distribution_shift_claim": [
         {"action_type": "validate_document", "parameters": {"doc_id": "DOC-41"}, "reasoning": "Initial document check.", "confidence": None},
@@ -131,9 +133,8 @@ def run_demo(task_id: str, progress=gr.Progress()):
     except Exception as e:
         yield (
             f"❌ Could not connect to environment: {e}",
-            _matrix_html(),
-            "*Reset failed.*",
-            "—", "—", "—", "—",
+            _matrix_html(), "*Reset failed.*",
+            "—", "—", "—", "—", "",
         )
         return
 
@@ -142,10 +143,9 @@ def run_demo(task_id: str, progress=gr.Progress()):
     claim_text = _format_claim(obs)
 
     yield (
-        claim_text,
-        _matrix_html(),
+        claim_text, _matrix_html(),
         "*Episode started — running actions...*",
-        "—", "—", "—", "In progress",
+        "—", "—", "—", "In progress", "",
     )
     time.sleep(0.4)
 
@@ -153,6 +153,7 @@ def run_demo(task_id: str, progress=gr.Progress()):
     final_calib = None
     final_conf = None
     final_outcome = None
+    debate_html = ""
 
     for i, action in enumerate(actions):
         progress((i + 1) / len(actions), desc=f"Step {i+1}: {action['action_type']}")
@@ -169,6 +170,7 @@ def run_demo(task_id: str, progress=gr.Progress()):
                 _matrix_html(),
                 _format_action_log(history),
                 "—", "—", "—", f"Error: {e}",
+                debate_html,
             )
             continue
 
@@ -178,6 +180,11 @@ def run_demo(task_id: str, progress=gr.Progress()):
         rb = step_obs.get("reward_breakdown", {})
         calib = rb.get("calibration_score")
         conf = action.get("confidence")
+
+        # Capture debate transcript when panel is convened
+        debate = step_obs.get("debate_transcript")
+        if debate:
+            debate_html = _debate_html(debate)
 
         entry = {
             "action_type": action["action_type"],
@@ -205,6 +212,7 @@ def run_demo(task_id: str, progress=gr.Progress()):
             f"{calib if calib is not None else '—'}",
             conf or "—",
             "Done ✅" if done else "In progress",
+            debate_html,
         )
         time.sleep(0.5)
 
@@ -218,7 +226,38 @@ def run_demo(task_id: str, progress=gr.Progress()):
         f"{final_calib if final_calib is not None else '—'}",
         final_conf or "—",
         outcome_emoji,
+        debate_html,
     )
+
+
+def _debate_html(transcript: Dict) -> str:
+    if not transcript:
+        return ""
+    p_strength = transcript.get("prosecutor_strength", "?")
+    d_strength = transcript.get("defender_strength", "?")
+    lean = transcript.get("panel_lean", "split")
+    lean_color = {"prosecution": "#ef4444", "defense": "#22c55e", "split": "#f59e0b"}.get(lean, "#6b7280")
+
+    return f"""
+    <div style="font-family:monospace;font-size:13px;border:2px solid {lean_color};border-radius:8px;padding:16px;margin-top:8px;">
+      <div style="font-weight:bold;font-size:15px;color:{lean_color};margin-bottom:12px;">
+        DEBATE PANEL — {transcript.get('step_convened','?')} steps in
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div style="background:#fef2f2;padding:12px;border-radius:6px;border-left:4px solid #ef4444;">
+          <div style="font-weight:bold;color:#ef4444;margin-bottom:6px;">PROSECUTOR [{p_strength}]</div>
+          <div style="color:#374151;line-height:1.5;">{transcript.get('prosecutor_argument','')}</div>
+        </div>
+        <div style="background:#f0fdf4;padding:12px;border-radius:6px;border-left:4px solid #22c55e;">
+          <div style="font-weight:bold;color:#22c55e;margin-bottom:6px;">DEFENDER [{d_strength}]</div>
+          <div style="color:#374151;line-height:1.5;">{transcript.get('defender_argument','')}</div>
+        </div>
+      </div>
+      <div style="margin-top:12px;background:#f3f4f6;padding:10px;border-radius:6px;font-weight:bold;color:{lean_color};">
+        VERDICT: {transcript.get('panel_verdict','')}
+      </div>
+    </div>
+    """
 
 
 def _format_claim(obs: Dict) -> str:
@@ -290,6 +329,10 @@ with gr.Blocks(title="DebateFloor") as demo:
             gr.Markdown("### Action Log")
             action_log = gr.Markdown("*Actions will appear here as the episode runs.*")
 
+    gr.Markdown("### Multi-Agent Debate Panel")
+    gr.Markdown("*Appears when the agent calls `convene_debate_panel` — prosecutor vs defender arguments, then judge decides.*")
+    debate_panel = gr.HTML("")
+
     # Update task description on dropdown change
     def update_desc(task):
         return TASK_DESCRIPTIONS.get(task, "")
@@ -300,7 +343,7 @@ with gr.Blocks(title="DebateFloor") as demo:
     run_btn.click(
         fn=run_demo,
         inputs=[task_dropdown],
-        outputs=[claim_display, matrix_html, action_log, reward_box, calib_box, conf_box, outcome_box],
+        outputs=[claim_display, matrix_html, action_log, reward_box, calib_box, conf_box, outcome_box, debate_panel],
     )
 
     gr.Markdown("""

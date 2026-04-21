@@ -65,6 +65,8 @@ class InsuranceClaimEnvironment:
         self._episode_history: List[Dict] = []            # for anti-gaming detection
         self._budget_remaining: int = 0
         self._compared_pairs: set[tuple] = set()
+        self._debate_transcript: Optional[Dict[str, Any]] = None
+        self._debate_convened: bool = False
 
     def reset(self, task_id: Optional[str] = None, seed: Optional[int] = None, episode_id: Optional[str] = None) -> InsuranceClaimObservation:
         selected_task = task_id or "clean_claim"
@@ -92,6 +94,8 @@ class InsuranceClaimEnvironment:
         self._calibration_score = None
         self._budget_remaining = self._payload.get("investigation_budget", 0)
         self._compared_pairs = set()
+        self._debate_transcript = None
+        self._debate_convened = False
         self._last_message = (
             f"Task '{task.task_id}' loaded (variant={task.variant_id}). Start investigation."
         )
@@ -445,7 +449,106 @@ class InsuranceClaimEnvironment:
             self._record_discovered_signals(["unregistered_provider", "invalid_gst_registration"])
             return "Provider registration check: hospital not found in IRDAI registry. GST number invalid."
 
+        if action.action_type == "convene_debate_panel":
+            if self._debate_convened:
+                self._exploit_penalty += 0.03
+                return "Debate panel already convened this episode. Proceed to terminal decision."
+            self._debate_convened = True
+            self._debate_transcript = self._generate_debate_transcript()
+            self._last_progress_step = self._state.step_number
+            return (
+                f"Debate panel convened. "
+                f"Prosecutor: {self._debate_transcript['prosecutor_argument'][:80]}... "
+                f"Defender: {self._debate_transcript['defender_argument'][:80]}... "
+                f"Panel verdict: {self._debate_transcript['panel_verdict']}. "
+                "Review transcript in observation.debate_transcript, then make your final decision."
+            )
+
         raise ValueError(f"Unsupported action_type '{action.action_type}'")
+
+    def _generate_debate_transcript(self) -> Dict[str, Any]:
+        """Generate a structured prosecutor vs defender debate based on investigation state."""
+        task = self._runtime_task
+        found = self._found_signals
+        discovered = self._discovered_signals
+        claimant_name = self._payload.get("claimant", {}).get("name", "the claimant")
+        incident_type = self._payload.get("incident", {}).get("type", "the incident")
+
+        # Prosecutor builds case from discovered and flagged signals
+        if found:
+            fraud_signals_str = ", ".join(found)
+            prosecutor = (
+                f"PROSECUTOR: The evidence strongly suggests fraud. "
+                f"Investigation has uncovered {len(found)} fraud signal(s): {fraud_signals_str}. "
+                f"These signals are consistent with {task.task_id.replace('_', ' ')} fraud patterns. "
+                f"I recommend denial or escalation — approving this claim would reward deliberate deception."
+            )
+            prosecutor_strength = "STRONG" if len(found) >= 2 else "MODERATE"
+        elif discovered:
+            prosecutor = (
+                f"PROSECUTOR: Suspicious indicators have been discovered: {', '.join(discovered)}. "
+                f"While not yet formally flagged, these anomalies warrant serious scrutiny. "
+                f"The claim by {claimant_name} regarding {incident_type} shows red flags."
+            )
+            prosecutor_strength = "WEAK"
+        else:
+            prosecutor = (
+                f"PROSECUTOR: No fraud signals have been found yet, but the investigation "
+                f"may be incomplete. More documents should be validated before approval. "
+                f"Insufficient investigation is itself a risk."
+            )
+            prosecutor_strength = "INSUFFICIENT"
+
+        # Defender builds case from clean documents and policy context
+        doc_count = len(self._payload.get("documents", []))
+        policy_age = self._payload.get("_policy_history", {}).get("policy_age_days", 0)
+        if task and task.task_id == "clean_claim":
+            defender = (
+                f"DEFENDER: All {doc_count} documents are internally consistent. "
+                f"Claimant {claimant_name} has a clean policy history. "
+                f"No fraud indicators found. This is a legitimate claim — denial would be unjust."
+            )
+            defender_strength = "STRONG"
+        elif found and len(found) >= len(task.expected_signals if task else []) * 0.6:
+            defender = (
+                f"DEFENDER: While anomalies exist, the core claim documentation ({doc_count} docs) "
+                f"has not been fully discredited. Some apparent inconsistencies may have innocent explanations. "
+                f"Burden of proof requires clear evidence, not suspicion."
+            )
+            defender_strength = "WEAK"
+        else:
+            defender = (
+                f"DEFENDER: The claim has {doc_count} supporting documents submitted on time. "
+                f"Without confirmed fraud signals, denial would expose the insurer to legal challenge. "
+                f"Claimant {claimant_name} deserves due process. Standard processing is warranted."
+            )
+            defender_strength = "MODERATE"
+
+        # Panel verdict: which side has stronger case
+        strength_rank = {"STRONG": 3, "MODERATE": 2, "WEAK": 1, "INSUFFICIENT": 0}
+        p_rank = strength_rank.get(prosecutor_strength, 0)
+        d_rank = strength_rank.get(defender_strength, 0)
+
+        if p_rank > d_rank:
+            verdict = f"Panel leans PROSECUTION ({prosecutor_strength} case). Recommended action: deny_claim or escalate_to_human."
+            lean = "prosecution"
+        elif d_rank > p_rank:
+            verdict = f"Panel leans DEFENSE ({defender_strength} case). Recommended action: approve_claim."
+            lean = "defense"
+        else:
+            verdict = "Panel is SPLIT — both sides have comparable arguments. Judge must use independent judgment and declare LOW confidence."
+            lean = "split"
+
+        return {
+            "prosecutor_argument": prosecutor,
+            "prosecutor_strength": prosecutor_strength,
+            "defender_argument": defender,
+            "defender_strength": defender_strength,
+            "panel_verdict": verdict,
+            "panel_lean": lean,
+            "signals_at_debate": list(found),
+            "step_convened": self._state.step_number,
+        }
 
     def _discover_signals_from_document(self, doc_id: str, task_id: str) -> List[str]:
         if task_id == "clean_claim":
@@ -576,6 +679,7 @@ class InsuranceClaimEnvironment:
                 "compared_pairs": [list(p) for p in self._compared_pairs],
             },
             reward_breakdown=reward_breakdown,
+            debate_transcript=deepcopy(self._debate_transcript),
         )
 
 

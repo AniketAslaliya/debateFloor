@@ -74,6 +74,7 @@ class InsuranceClaimAction(Action):
         "query_linked_claim",             # coordinated_ring: reveals linked claim detail
         "verify_identity",                # identity_fraud: cross-checks registry
         "verify_provider_registration",   # phantom_provider: checks IRDAI registry
+        "convene_debate_panel",           # Multi-agent: prosecutor vs defender arguments
         "approve_claim",
         "deny_claim",
         "request_investigation",
@@ -126,6 +127,10 @@ class InsuranceClaimObservation(Observation):
     message: str = Field(default="", description="Human-readable message describing result of last action")
     confidence_required: bool = Field(default=True, description="Whether next action requires a confidence declaration")
     reward_breakdown: InsuranceClaimReward = Field(default_factory=InsuranceClaimReward, description="Detailed reward components for current step")
+    debate_transcript: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Multi-agent debate panel output. Populated after convene_debate_panel action. Contains prosecutor_argument, defender_argument, and panel_verdict.",
+    )
 
 
 class InsuranceClaimState(State):
