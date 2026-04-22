@@ -122,7 +122,6 @@ def main():
         gradient_accumulation_steps=4,
         learning_rate=LR,
         num_generations=4,
-        max_prompt_length=512,
         max_completion_length=100,
         temperature=0.9,
         logging_steps=5,
