@@ -12,11 +12,12 @@ COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY app /app/app
+COPY server /app/server
+COPY gradio_app.py /app/gradio_app.py
 COPY openenv.yaml /app/openenv.yaml
 COPY inference_debatefloor.py /app/inference_debatefloor.py
 COPY README.md /app/README.md
 COPY pyproject.toml /app/pyproject.toml
-COPY server /app/server
 
 EXPOSE 7860
 
