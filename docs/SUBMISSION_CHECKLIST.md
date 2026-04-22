@@ -8,6 +8,7 @@ linked supporting material, not only the source code.
 | Requirement | Repo status | Final action |
 |---|---|---|
 | OpenEnv latest release | `requirements.txt` pins `openenv-core==0.2.3` | Rebuild/redeploy HF Space after this change |
+| OpenEnv base classes | `InsuranceClaimEnvironment` subclasses `Environment`; models inherit OpenEnv `Action` / `Observation` / `State` | Run import smoke test after edits |
 | OpenEnv manifest | `openenv.yaml` present | Keep `spec_version: 1` and Space URL submitted |
 | Hosted HF Space | Live at `AniketAsla/debatefloor` | Run live validation on pitch day |
 | REST endpoints | `/reset`, `/step`, `/state`, `/tasks`, `/health`, `/schema` in `app/main.py` | Validate with `pre_validation_script.py` |
@@ -15,6 +16,7 @@ linked supporting material, not only the source code.
 | Training dependencies | `train/requirements.txt` | Install this in Colab |
 | Training evidence | Script saves `docs/reward_curve.png` and `reports/training_summary.json` | Commit both after real run |
 | Env interaction evidence | `scripts/evaluate_http_rollouts.py` drives `/reset` and `/step` | Commit generated report |
+| Client/server separation | External scripts use HTTP clients instead of importing `app.environment` | Keep server imports limited to tests/training internals |
 | Mini-blog/video/slides | Draft exists at `docs/HFBlogPost.md` | Publish and add URL to README |
 | README links | README has Space, UI, plot, report placeholders | Replace blog placeholder after publish |
 

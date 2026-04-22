@@ -63,14 +63,18 @@ action_space:
   - validate_document
   - flag_fraud_signal
   - request_information
+  - lookup_policy_history
+  - compare_documents
   - query_historical_data
   - query_linked_claim        # coordinated_ring only
   - verify_identity           # identity_fraud only
   - verify_provider_registration  # phantom_provider only
   - estimate_payout
+  - convene_debate_panel
   # Terminal actions (confidence REQUIRED: HIGH | MED | LOW)
   - approve_claim
   - deny_claim
+  - request_investigation
   - escalate_to_human
 
 observation_space:

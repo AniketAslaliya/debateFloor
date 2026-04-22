@@ -4,6 +4,9 @@ from copy import deepcopy
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
+from openenv.core.env_server.interfaces import Environment
+from openenv.core.env_server.types import EnvironmentMetadata
+
 from .models import (
     ClaimStatus,
     InsuranceClaimAction,
@@ -36,10 +39,13 @@ _TASK_GROUND_TRUTH = {
 }
 
 
-class InsuranceClaimEnvironment:
+class InsuranceClaimEnvironment(
+    Environment[InsuranceClaimAction, InsuranceClaimObservation, InsuranceClaimState]
+):
     SUPPORTS_CONCURRENT_SESSIONS: bool = True  # NOW ACTUALLY TRUE - session-managed via main.py
 
     def __init__(self):
+        super().__init__()
         self._state = InsuranceClaimState(episode_id=str(uuid4()), step_count=0)
         self._payload: Dict[str, Any] = {}
         self._action_history: List[Dict[str, Any]] = []
@@ -68,7 +74,16 @@ class InsuranceClaimEnvironment:
         self._debate_transcript: Optional[Dict[str, Any]] = None
         self._debate_convened: bool = False
 
-    def reset(self, task_id: Optional[str] = None, seed: Optional[int] = None, episode_id: Optional[str] = None) -> InsuranceClaimObservation:
+    def reset(
+        self,
+        seed: Optional[int] = None,
+        episode_id: Optional[str] = None,
+        task_id: Optional[str] = None,
+        **kwargs: Any,
+    ) -> InsuranceClaimObservation:
+        self._reset_rubric()
+        if task_id is None:
+            task_id = kwargs.get("task_id")
         selected_task = task_id or "clean_claim"
         task = build_runtime_task(selected_task, seed=seed)
         self._runtime_task = task
@@ -118,14 +133,23 @@ class InsuranceClaimEnvironment:
             final_decision=None,
             final_score=0.0,
         )
-        return self._build_observation(message=self._last_message)
+        return self._apply_transform(self._build_observation(message=self._last_message))
 
-    def step(self, action: InsuranceClaimAction) -> InsuranceClaimObservation:
+    def step(
+        self,
+        action: InsuranceClaimAction,
+        timeout_s: Optional[float] = None,
+        **kwargs: Any,
+    ) -> InsuranceClaimObservation:
         if self._state.task_id == "":
             return self.reset(task_id="clean_claim")
 
         if self._state.done:
-            return self._build_observation(message="Episode already complete. Call reset() to start a new episode.")
+            return self._apply_transform(
+                self._build_observation(
+                    message="Episode already complete. Call reset() to start a new episode."
+                )
+            )
 
         self._state.step_count += 1
         self._state.step_number += 1
@@ -159,11 +183,23 @@ class InsuranceClaimEnvironment:
 
         observation = self._build_observation(message=self._last_message)
         self._state.final_score = float(observation.reward)
-        return observation
+        return self._apply_transform(observation)
 
     @property
     def state(self) -> InsuranceClaimState:
         return self._state
+
+    def get_metadata(self) -> EnvironmentMetadata:
+        return EnvironmentMetadata(
+            name="debatefloor_insurance_calibration_env",
+            description=(
+                "OpenEnv insurance claim investigation environment with calibrated "
+                "confidence rewards and a prosecutor/defender/judge debate panel."
+            ),
+            version="0.2.3",
+            author="Team DebateFloor",
+            documentation_url="https://github.com/AniketAslaliya/debateFloor",
+        )
 
     def _apply_action(self, action: InsuranceClaimAction) -> str:
         task = self._runtime_task or build_runtime_task(self._state.task_id)

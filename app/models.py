@@ -3,21 +3,26 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional, Union
 
+from openenv.core.env_server.types import (
+    Action as OpenEnvAction,
+    Observation as OpenEnvObservation,
+    State as OpenEnvState,
+)
 from pydantic import BaseModel, ConfigDict, Field
 
 
 # ---------------------------------------------------------------------------
 # Inline base classes — removes the openenv package dependency so this module
-# works both inside the monorepo (with src/ on PYTHONPATH) and in the
-# standalone HF Space Docker container.
+# These local aliases subclass OpenEnv core types while preserving the
+# permissive Pydantic behavior expected by the FastAPI schema.
 # ---------------------------------------------------------------------------
 
-class Action(BaseModel):
+class Action(OpenEnvAction):
     """Base class for all environment actions."""
     model_config = ConfigDict(extra="allow", validate_assignment=True)
 
 
-class Observation(BaseModel):
+class Observation(OpenEnvObservation):
     """Base class for all environment observations."""
     model_config = ConfigDict(extra="allow", validate_assignment=True, arbitrary_types_allowed=True)
 
@@ -30,7 +35,7 @@ class Observation(BaseModel):
     )
 
 
-class State(BaseModel):
+class State(OpenEnvState):
     """Base class for environment state."""
     model_config = ConfigDict(extra="allow", validate_assignment=True, arbitrary_types_allowed=True)
 

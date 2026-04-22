@@ -443,6 +443,8 @@ assert len(set(sessions)) == 4  # all unique
 | Requirement | Status |
 |-------------|--------|
 | `spec_version: 1` | ✅ |
+| OpenEnv `Environment` base class | ✅ |
+| OpenEnv `Action` / `Observation` / `State` base types | ✅ |
 | `/reset`, `/step`, `/state`, `/tasks`, `/health`, `/schema` | ✅ |
 | `supports_concurrent_sessions: true` | ✅ |
 | `max_concurrent_envs: 64` | ✅ |
@@ -454,6 +456,11 @@ assert len(set(sessions)) == 4  # all unique
 | `[START]` / `[STEP]` / `[END]` stdout format | ✅ |
 | Docker deployment | ✅ |
 | CoCA citation | ✅ |
+
+The server keeps a strict client/server split: external clients and evaluation
+scripts interact through HTTP (`/reset`, `/step`, `/state`) and do not import
+environment internals. No MCP tools are exposed with reserved names such as
+`reset`, `step`, `state`, or `close`.
 
 ---
 
