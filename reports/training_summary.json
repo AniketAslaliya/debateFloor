@@ -1,0 +1,159 @@
+{
+  "model": "Qwen/Qwen2.5-0.5B-Instruct",
+  "episodes": 100,
+  "epochs": 2,
+  "batch_size": 2,
+  "learning_rate": 5e-06,
+  "global_step": 100,
+  "training_loss": 0.005647065229713917,
+  "log_history": [
+    {
+      "step": 5,
+      "epoch": 0.1,
+      "loss": 0.01336662620306015,
+      "reward": -0.34249999523162844,
+      "rewards/reward_fn/mean": -0.34249999523162844
+    },
+    {
+      "step": 10,
+      "epoch": 0.2,
+      "loss": 0.025705522298812865,
+      "reward": 0.2637499958276749,
+      "rewards/reward_fn/mean": 0.2637499958276749
+    },
+    {
+      "step": 15,
+      "epoch": 0.3,
+      "loss": 0.06642892956733704,
+      "reward": 0.29124999046325684,
+      "rewards/reward_fn/mean": 0.29124999046325684
+    },
+    {
+      "step": 20,
+      "epoch": 0.4,
+      "loss": 0.004432414472103119,
+      "reward": 0.7774999856948852,
+      "rewards/reward_fn/mean": 0.7774999856948852
+    },
+    {
+      "step": 25,
+      "epoch": 0.5,
+      "loss": -0.0010391265153884889,
+      "reward": 0.7449999868869781,
+      "rewards/reward_fn/mean": 0.7449999868869781
+    },
+    {
+      "step": 30,
+      "epoch": 0.6,
+      "loss": -0.05872739553451538,
+      "reward": 0.712499988079071,
+      "rewards/reward_fn/mean": 0.712499988079071
+    },
+    {
+      "step": 35,
+      "epoch": 0.7,
+      "loss": 0.0017842426896095276,
+      "reward": 1.1662500143051147,
+      "rewards/reward_fn/mean": 1.1662500143051147
+    },
+    {
+      "step": 40,
+      "epoch": 0.8,
+      "loss": 0.005293203890323639,
+      "reward": 0.6962499976158142,
+      "rewards/reward_fn/mean": 0.6962499976158142
+    },
+    {
+      "step": 45,
+      "epoch": 0.9,
+      "loss": 0.018578009307384492,
+      "reward": 1.1775000095367432,
+      "rewards/reward_fn/mean": 1.1775000095367432
+    },
+    {
+      "step": 50,
+      "epoch": 1.0,
+      "loss": 0.025169315934181213,
+      "reward": 0.8787499904632569,
+      "rewards/reward_fn/mean": 0.8787499904632569
+    },
+    {
+      "step": 55,
+      "epoch": 1.1,
+      "loss": -0.0014619484543800354,
+      "reward": 1.1650000095367432,
+      "rewards/reward_fn/mean": 1.1650000095367432
+    },
+    {
+      "step": 60,
+      "epoch": 1.2,
+      "loss": -0.0015385635197162628,
+      "reward": 0.9812500074505806,
+      "rewards/reward_fn/mean": 0.9812500074505806
+    },
+    {
+      "step": 65,
+      "epoch": 1.3,
+      "loss": -0.008150088787078857,
+      "reward": 0.4837500095367432,
+      "rewards/reward_fn/mean": 0.4837500095367432
+    },
+    {
+      "step": 70,
+      "epoch": 1.4,
+      "loss": 0.01547137349843979,
+      "reward": 1.0175000071525573,
+      "rewards/reward_fn/mean": 1.0175000071525573
+    },
+    {
+      "step": 75,
+      "epoch": 1.5,
+      "loss": 0.0,
+      "reward": 0.8700000047683716,
+      "rewards/reward_fn/mean": 0.8700000047683716
+    },
+    {
+      "step": 80,
+      "epoch": 1.6,
+      "loss": -0.004821690917015076,
+      "reward": 1.1412500023841858,
+      "rewards/reward_fn/mean": 1.1412500023841858
+    },
+    {
+      "step": 85,
+      "epoch": 1.7,
+      "loss": 0.006092557311058044,
+      "reward": 0.6850000023841858,
+      "rewards/reward_fn/mean": 0.6850000023841858
+    },
+    {
+      "step": 90,
+      "epoch": 1.8,
+      "loss": 0.005856531858444214,
+      "reward": 0.7975000098347664,
+      "rewards/reward_fn/mean": 0.7975000098347664
+    },
+    {
+      "step": 95,
+      "epoch": 1.9,
+      "loss": -0.006881323456764221,
+      "reward": 0.987500011920929,
+      "rewards/reward_fn/mean": 0.987500011920929
+    },
+    {
+      "step": 100,
+      "epoch": 2.0,
+      "loss": 0.007382714748382568,
+      "reward": 0.8275000095367432,
+      "rewards/reward_fn/mean": 0.8275000095367432
+    },
+    {
+      "step": 100,
+      "epoch": 2.0,
+      "train_runtime": 1123.636,
+      "train_samples_per_second": 0.178,
+      "train_steps_per_second": 0.089,
+      "train_loss": 0.005647065229713917
+    }
+  ]
+}
