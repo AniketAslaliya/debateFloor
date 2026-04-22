@@ -10,7 +10,17 @@ pinned: true
 
 # DebateFloor — Insurance Calibration RL Environment
 
-> An [OpenEnv](https://github.com/meta-pytorch/OpenEnv)-compliant RL training environment where agents must make insurance claim decisions **and** declare calibrated confidence simultaneously. Built for the **Meta PyTorch × Scaler Hackathon Grand Finale, April 25–26 2026**.
+> An [OpenEnv](https://github.com/meta-pytorch/OpenEnv)-compliant RL training environment where AI agents investigate insurance claims, debate adversarially, and must declare **calibrated confidence** before every terminal decision. Built for the **Meta PyTorch × Scaler Hackathon Grand Finale, April 25–26 2026**.
+
+## Theme Coverage
+
+| Theme | Bonus Prize | What We Built |
+|-------|-------------|---------------|
+| **Theme 3.1** — World Modeling (Professional) | **Scaler AI Labs**: Multi-App RL for Enterprise Workflows | 5 fraud types, multi-doc investigation, IRDAI registry, policy history |
+| **Theme 1** — Multi-Agent Interactions | **Fleet AI**: Scalable Oversight | 3-agent Debate Panel: Prosecutor + Defender + Judge |
+| **Theme 4** — Self-Improvement | Curriculum / difficulty escalation | easy→medium→hard + anti-gaming detector |
+
+---
 
 [![Tests](https://github.com/AniketAslaliya/debateFloor/actions/workflows/validate.yml/badge.svg)](https://github.com/AniketAslaliya/debateFloor/actions/workflows/validate.yml)
 [![HF Space](https://img.shields.io/badge/Live%20Demo-Hugging%20Face-orange)](https://huggingface.co/spaces/AniketAsla/debatefloor)
@@ -30,9 +40,57 @@ Before every terminal action (`approve_claim`, `deny_claim`, `escalate_to_human`
 | **MED**    | +0.6            | −0.2           |
 | **LOW**    | +0.1            | 0.0            |
 
-An agent that always says HIGH to maximise reward will be catastrophically punished when wrong. An agent that always says LOW to avoid punishment is detected by the anti-gaming system. **The only winning strategy is accurate calibration.**
+An agent that always says HIGH to maximise reward will be catastrophically punished when wrong. An agent that always says LOW is caught by the anti-gaming system. **The only winning strategy is accurate calibration.**
 
-This implements the [CoCA framework (arXiv:2603.05881)](https://arxiv.org/abs/2603.05881) — co-optimising confidence and accuracy via GRPO.
+Based on the [CoCA framework (arXiv:2603.05881)](https://arxiv.org/abs/2603.05881) — co-optimising confidence and accuracy via GRPO.
+
+---
+
+## 3-Agent Debate Panel (Theme 1 + Fleet AI Bonus)
+
+Before making a terminal decision, the investigator calls `convene_debate_panel`, triggering adversarial reasoning from two independent roles:
+
+```
+AGENT 1: INVESTIGATOR
+├── validate_document      → discovers fraud signals
+├── flag_fraud_signal      → formally raises grounded signal
+├── query_historical_data  → reveals cross-claim patterns
+└── Builds evidence base over N steps
+                ↓
+ACTION: convene_debate_panel  (costs 2 budget units)
+                ↓
+┌─────────────────────┐    ┌─────────────────────────┐
+│  AGENT 2: PROSECUTOR│    │  AGENT 3: DEFENDER       │
+│  Built from:        │    │  Built from:             │
+│  • found_signals    │    │  • doc consistency       │
+│  • discovered sigs  │    │  • policy history        │
+│  Strength: STRONG / │    │  Strength: STRONG /      │
+│  MODERATE / WEAK    │    │  MODERATE / WEAK         │
+└─────────────────────┘    └─────────────────────────┘
+                ↓
+PANEL VERDICT: recommendation (prosecution / defense / split)
+                ↓
+JUDGE (investigator, informed by transcript):
+→ approve_claim / deny_claim / escalate_to_human
++ confidence: HIGH / MED / LOW → calibration_score via 3×2 matrix
+```
+
+Debate transcript in `observation.debate_transcript`:
+
+```json
+{
+  "prosecutor_argument": "PROSECUTOR: 2 fraud signals found: date_mismatch, cost_inflation...",
+  "prosecutor_strength": "STRONG",
+  "defender_argument": "DEFENDER: Documents are internally consistent...",
+  "defender_strength": "WEAK",
+  "panel_verdict": "Prosecution substantially outweighs defense. Recommend denial.",
+  "panel_lean": "prosecution",
+  "signals_at_debate": ["date_mismatch", "cost_inflation"],
+  "step_convened": 6
+}
+```
+
+**Fleet AI Scalable Oversight:** The Judge reads adversarial arguments from two independent reasoning contexts before deciding — oversight agents explaining each other's behavior to a third decision-maker.
 
 ---
 
@@ -70,7 +128,8 @@ debatefloor/
 │   └── claim_generator.py          ← procedural episode generator (500+ episodes)
 │
 ├── train/
-│   └── train_debatefloor.ipynb     ← GRPO training notebook (Colab T4)
+│   ├── train_minimal.py            ← Pure TRL, Qwen2.5-0.5B, T4 in 15 min (USE THIS)
+│   └── train_debatefloor.ipynb     ← GRPO training notebook (Unsloth variant)
 │
 ├── tests/
 │   ├── test_calibration.py         ← 13 tests (calibration grader)
@@ -185,20 +244,23 @@ All endpoints follow the OpenEnv REST contract:
 ### Action Space
 
 ```python
-# Non-terminal actions (confidence optional)
-"validate_document"          # reveals embedded fraud signals from document
-"flag_fraud_signal"          # flag_id + evidence text (must cite discovered keywords)
-"request_information"        # general info request
-"query_historical_data"      # reveals cross-claim patterns (key for Task 3)
-"query_linked_claim"         # coordinated_ring only — unlocks full linked claim
-"verify_identity"            # identity_fraud only — cross-checks IRDAI registry
-"verify_provider_registration"  # phantom_provider only
-"estimate_payout"            # amount_inr
+# Non-terminal (confidence optional)
+"validate_document"            # reveals embedded fraud signals
+"flag_fraud_signal"            # flag_id + evidence (must cite discovered signal)
+"request_information"
+"lookup_policy_history"
+"compare_documents"
+"estimate_payout"              # amount_inr
+"query_historical_data"        # cross-claim patterns (key for Task 3)
+"query_linked_claim"           # coordinated_ring / distribution_shift only
+"verify_identity"              # identity_fraud only
+"verify_provider_registration" # distribution_shift only
+"convene_debate_panel"         # MULTI-AGENT: triggers Prosecutor + Defender transcript
 
-# Terminal actions — confidence REQUIRED: "HIGH" | "MED" | "LOW"
-"approve_claim"              # + confidence + reason
-"deny_claim"                 # + confidence + reason
-"escalate_to_human"          # + confidence + reason
+# Terminal — confidence REQUIRED: "HIGH" | "MED" | "LOW"
+"approve_claim"
+"deny_claim"
+"escalate_to_human"
 ```
 
 ### Example Episode
@@ -275,11 +337,13 @@ if HIGH_rate > 80% across 10+ episodes:
 
 ## Training Results
 
+Training via `train/train_minimal.py` — Qwen2.5-0.5B, TRL GRPOTrainer, T4 GPU, ~15 min:
+
+### GRPO Reward Curve
+
+![WandB Reward Curve](docs/reward_curve.png)
+
 ### Confidence Distribution — Before vs After GRPO
-
-After 3 epochs of GRPO training on 200 procedurally generated episodes, the model shifts from systematic overconfidence to calibrated uncertainty:
-
-![Confidence Distribution](docs/confidence_distribution.png)
 
 | Confidence | Before Training | After Training |
 |---|---|---|
@@ -287,9 +351,9 @@ After 3 epochs of GRPO training on 200 procedurally generated episodes, the mode
 | MED | ~12% | ~36% |
 | LOW | ~6% | ~20% |
 
-The model learns to reserve HIGH confidence for easy cases (`clean_claim`) and express genuine uncertainty on hard cases (`distribution_shift_claim`) — without being told which task is which. This is exactly the CoCA calibration improvement signal.
+The model learns to reserve HIGH confidence for easy cases (`clean_claim`) and express genuine uncertainty on hard cases (`distribution_shift_claim`) — without being told which task is which. This is the CoCA calibration improvement signal.
 
-**WandB reward curve:** tracked at [wandb.ai/debatefloor-insurance-rl](https://wandb.ai/)
+The reward curve is modest in absolute value — the real signal is **the confidence distribution shift**. The model learns WHEN to be confident, not just what to say.
 
 ---
 
