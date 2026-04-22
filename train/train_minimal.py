@@ -19,6 +19,8 @@ import os
 import re
 import sys
 
+import torch
+
 sys.path.insert(0, ".")
 
 import wandb
@@ -29,14 +31,19 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import GRPOConfig, GRPOTrainer
 
 # ── Config ──────────────────────────────────────────────────────────
-MODEL_NAME   = "Qwen/Qwen2.5-0.5B-Instruct"  # tiny — runs on T4 in 15 min
-EPISODES     = 100
-EPOCHS       = 2
-BATCH_SIZE   = 2
-LR           = 5e-6
-SEED         = 42
-USE_WANDB    = bool(os.getenv("WANDB_API_KEY", ""))
-WANDB_KEY    = os.getenv("WANDB_API_KEY", "")
+MODEL_NAME  = "Qwen/Qwen2.5-0.5B-Instruct"  # tiny — runs on T4 in 15 min
+EPISODES    = 100
+EPOCHS      = 2
+BATCH_SIZE  = 2
+LR          = 5e-6
+SEED        = 42
+USE_WANDB   = bool(os.getenv("WANDB_API_KEY", ""))
+WANDB_KEY   = os.getenv("WANDB_API_KEY", "")
+
+# T4 supports float16 but NOT bfloat16 for AMP grad scaling
+HAS_BF16    = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+USE_FP16    = torch.cuda.is_available() and not HAS_BF16
+DTYPE       = torch.bfloat16 if HAS_BF16 else torch.float16
 # ────────────────────────────────────────────────────────────────────
 
 SYSTEM = (
@@ -98,6 +105,9 @@ def reward_fn(completions, ground_truth, expected_signals, **kwargs):
 
 
 def main():
+    print(f"GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}")
+    print(f"dtype={DTYPE} | fp16={USE_FP16} | bf16={HAS_BF16}")
+
     if USE_WANDB:
         wandb.login(key=WANDB_KEY)
         wandb.init(project="debatefloor-insurance-rl", name="grpo-qwen0.5b")
@@ -107,7 +117,12 @@ def main():
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
 
-    model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, torch_dtype="auto", device_map="auto")
+    # Force explicit dtype — never "auto" on T4 (auto picks bfloat16, breaks fp16 AMP)
+    model = AutoModelForCausalLM.from_pretrained(
+        MODEL_NAME,
+        torch_dtype=DTYPE,
+        device_map="auto",
+    )
 
     print(f"Generating {EPISODES} training episodes...")
     episodes = generate_episode_pool(count=EPISODES)
@@ -130,8 +145,8 @@ def main():
         run_name="debatefloor-grpo-qwen0.5b",
         max_grad_norm=0.3,
         seed=SEED,
-        bf16=False,
-        fp16=True,
+        bf16=HAS_BF16,
+        fp16=USE_FP16,
     )
 
     trainer = GRPOTrainer(
