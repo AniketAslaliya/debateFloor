@@ -85,8 +85,12 @@ def _base_available_actions(task_id: str = "") -> List[str]:
         actions.append("query_linked_claim")
         actions.append("query_historical_data")
         actions.append("escalate_to_human")
+    if task_id == "distribution_shift_claim":
+        actions.append("verify_provider_registration")
     if task_id == "identity_fraud":
         actions.append("verify_identity")
+    if task_id != "clean_claim":
+        actions.append("convene_debate_panel")
     return actions
 
 

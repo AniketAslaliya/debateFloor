@@ -157,6 +157,13 @@ def _strategy_contradictory_claim(client: DebateFloorClient, obs: Dict) -> List[
         "reasoning": "Document contradiction is a strong fraud indicator.",
     })
 
+    # Convene debate panel — adversarial review before terminal decision
+    actions.append({
+        "action_type": "convene_debate_panel",
+        "parameters": {},
+        "reasoning": "Contradictory evidence warrants adversarial review. Panel will pressure-test fraud signals.",
+    })
+
     # Terminal: deny with MED confidence (evidence found but some uncertainty remains)
     actions.append({
         "action_type": "deny_claim",
@@ -207,6 +214,13 @@ def _strategy_distribution_shift_claim(client: DebateFloorClient, obs: Dict) -> 
             "evidence": "Multiple claims share same broker code and incident timing — coordinated ring pattern.",
         },
         "reasoning": "Cross-claim evidence of coordinated fraud ring.",
+    })
+
+    # Convene debate panel — complex cross-claim fraud demands adversarial review
+    actions.append({
+        "action_type": "convene_debate_panel",
+        "parameters": {},
+        "reasoning": "Cross-claim fraud ring detected. Panel will stress-test evidence before escalation decision.",
     })
 
     # Terminal: escalate with LOW confidence (complex cross-claim fraud, expert review needed)
