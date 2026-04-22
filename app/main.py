@@ -75,11 +75,10 @@ except Exception as _e:
 @app.get("/")
 def index():
     if _gradio_mounted:
-        return RedirectResponse(url="/ui")
+        return RedirectResponse(url="/ui/", status_code=302)
     return {
         "name": "DebateFloor — Insurance Calibration RL Environment",
         "status": "running",
-        "ui": "not available (Gradio failed to mount)",
         "endpoints": ["/health", "/tasks", "/schema", "/reset", "/step", "/state"],
         "docs": "/docs",
     }
