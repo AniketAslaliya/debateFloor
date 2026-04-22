@@ -60,18 +60,29 @@ class StepBody(BaseModel):
 app = FastAPI(title="DebateFloor — Insurance Calibration RL Environment")
 
 # Mount Gradio visual demo at /ui
+_gradio_mounted = False
 try:
-    import sys, os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    import sys, os as _os
+    sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
     from gradio_app import demo as gradio_demo
     gr.mount_gradio_app(app, gradio_demo, path="/ui")
-except Exception:
-    pass  # Gradio optional — API still works without it
+    _gradio_mounted = True
+    print("Gradio UI mounted at /ui")
+except Exception as _e:
+    print(f"WARNING: Gradio not mounted: {_e}")
 
 
 @app.get("/")
 def index():
-    return RedirectResponse(url="/ui")
+    if _gradio_mounted:
+        return RedirectResponse(url="/ui")
+    return {
+        "name": "DebateFloor — Insurance Calibration RL Environment",
+        "status": "running",
+        "ui": "not available (Gradio failed to mount)",
+        "endpoints": ["/health", "/tasks", "/schema", "/reset", "/step", "/state"],
+        "docs": "/docs",
+    }
 
 
 @app.post("/reset")
