@@ -28,6 +28,16 @@ pinned: true
 
 ---
 
+## Submission Links
+
+- **Live OpenEnv Space:** https://huggingface.co/spaces/AniketAsla/debatefloor
+- **Visual demo:** https://aniketasla-debatefloor.hf.space/ui
+- **Mini-blog:** pending publication from `docs/HFBlogPost.md`
+- **Training plot:** `docs/reward_curve.png` after the Colab run
+- **HTTP rollout report:** `reports/http_rollout_eval.md` after running `scripts/evaluate_http_rollouts.py`
+
+---
+
 ## What is DebateFloor?
 
 Standard RL environments reward **what** an agent decides. DebateFloor rewards **how confidently** it decides — and whether that confidence was warranted.
@@ -226,6 +236,20 @@ export API_BASE_URL=https://router.huggingface.co/v1
 python inference_debatefloor.py --task contradictory_claim --model gpt-4o
 ```
 
+### Validate HTTP rollouts
+
+This script drives the hosted environment through `/reset` and `/step`, then
+compares a naive overconfident baseline with the calibrated scripted policy.
+
+```bash
+python scripts/evaluate_http_rollouts.py --base-url https://aniketasla-debatefloor.hf.space
+```
+
+It writes:
+
+- `reports/http_rollout_eval.json`
+- `reports/http_rollout_eval.md`
+
 ---
 
 ## API Reference
@@ -359,6 +383,12 @@ The reward curve is modest in absolute value — the real signal is **the confid
 
 ## GRPO Training
 
+Install training-only dependencies in Colab:
+
+```bash
+pip install -r train/requirements.txt
+```
+
 The training notebook (`train/train_debatefloor.ipynb`) uses:
 - **Model:** `unsloth/Qwen2.5-1.5B-Instruct` (free Colab T4 compatible)
 - **Trainer:** TRL `GRPOTrainer` with custom `env_reward_fn`
@@ -377,6 +407,12 @@ def env_reward_fn(completions, **kwargs):
         rewards.append(training_reward(step_result))  # NOT eval_reward
     return rewards
 ```
+
+The minimal TRL script (`train/train_minimal.py`) saves local artifacts after
+training so the submission does not depend only on notebook output:
+
+- `docs/reward_curve.png`
+- `reports/training_summary.json`
 
 ---
 

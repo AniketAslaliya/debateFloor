@@ -139,7 +139,7 @@ This produces a stable learning curve. The complex eval reward runs separately f
 
 The GRPO training reward rises from ~0.2 at initialization to ~0.7 after 3 epochs, with the calibration component accounting for ~30% of the signal. The reward curve is tracked at [wandb.ai/debatefloor-insurance-rl](https://wandb.ai/).
 
-![WandB reward curve — training reward rises as calibration improves](docs/confidence_distribution.png)
+![WandB reward curve - training reward rises as calibration improves](docs/reward_curve.png)
 
 ### Confidence distribution shift (before → after GRPO training)
 

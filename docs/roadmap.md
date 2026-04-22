@@ -49,7 +49,7 @@
 - [ ] **Publish HF blog post** → mandatory minimum requirement ← BLOCKING
 - [ ] Sponsor API integration (pending email details)
 - [ ] Add 3rd full agent role (full escalation agent as separate role)
-- [ ] docs/confidence_distribution.png from training run
+- [ ] docs/reward_curve.png from training run
 - [ ] README: add WandB curve screenshot
 
 ---
@@ -118,7 +118,7 @@ Publish → copy URL → add to README
 ```
 
 ### April 23 — Polish
-- [ ] Add confidence_distribution.png to README (from training run)
+- [ ] Add reward_curve.png to README (from training run)
 - [ ] Add WandB link to README and HFBlogPost
 - [ ] Sponsor API integration (waiting for email details)
 - [ ] Test Gradio demo flow on HF Space end-to-end

@@ -18,6 +18,7 @@ import json
 import os
 import re
 import sys
+from pathlib import Path
 
 import torch
 
@@ -39,6 +40,8 @@ LR          = 5e-6
 SEED        = 42
 USE_WANDB   = bool(os.getenv("WANDB_API_KEY", ""))
 WANDB_KEY   = os.getenv("WANDB_API_KEY", "")
+PLOT_PATH   = Path("docs/reward_curve.png")
+SUMMARY_PATH = Path("reports/training_summary.json")
 
 # T4 supports float16 but NOT bfloat16 for AMP grad scaling
 HAS_BF16    = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
@@ -104,6 +107,74 @@ def reward_fn(completions, ground_truth, expected_signals, **kwargs):
     return rewards
 
 
+def save_training_artifacts(trainer, result) -> None:
+    """Save local training evidence for the README and submission review."""
+    SUMMARY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    PLOT_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    log_history = list(getattr(trainer.state, "log_history", []) or [])
+    summary = {
+        "model": MODEL_NAME,
+        "episodes": EPISODES,
+        "epochs": EPOCHS,
+        "batch_size": BATCH_SIZE,
+        "learning_rate": LR,
+        "global_step": int(getattr(result, "global_step", 0) or 0),
+        "training_loss": float(getattr(result, "training_loss", 0.0) or 0.0),
+        "log_history": log_history,
+    }
+    SUMMARY_PATH.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+
+    try:
+        import matplotlib.pyplot as plt
+    except Exception as exc:
+        print(f"Skipping plot generation: matplotlib unavailable ({exc})")
+        return
+
+    loss_steps = []
+    losses = []
+    reward_steps = []
+    rewards = []
+    for row in log_history:
+        step = row.get("step")
+        if step is None:
+            continue
+        if "loss" in row:
+            loss_steps.append(step)
+            losses.append(row["loss"])
+        reward_value = row.get("reward")
+        if reward_value is None:
+            reward_value = row.get("rewards/mean")
+        if reward_value is not None:
+            reward_steps.append(step)
+            rewards.append(reward_value)
+
+    if not loss_steps and not reward_steps:
+        print(f"Saved training summary to {SUMMARY_PATH}; no plottable log rows found.")
+        return
+
+    fig, ax1 = plt.subplots(figsize=(10, 5.5))
+    if losses:
+        ax1.plot(loss_steps, losses, color="#26547c", linewidth=2, label="Training loss")
+        ax1.set_ylabel("Loss", color="#26547c")
+        ax1.tick_params(axis="y", labelcolor="#26547c")
+    ax1.set_xlabel("Training step")
+    ax1.grid(True, alpha=0.25)
+
+    if rewards:
+        ax2 = ax1.twinx()
+        ax2.plot(reward_steps, rewards, color="#06a77d", linewidth=2, label="Mean reward")
+        ax2.set_ylabel("Mean reward", color="#06a77d")
+        ax2.tick_params(axis="y", labelcolor="#06a77d")
+
+    fig.suptitle("DebateFloor GRPO Training Progress")
+    fig.tight_layout()
+    fig.savefig(PLOT_PATH, dpi=180)
+    plt.close(fig)
+    print(f"Saved training summary to {SUMMARY_PATH}")
+    print(f"Saved reward curve to {PLOT_PATH}")
+
+
 def main():
     print(f"GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}")
     print(f"dtype={DTYPE} | fp16={USE_FP16} | bf16={HAS_BF16}")
@@ -164,6 +235,8 @@ def main():
     if USE_WANDB:
         wandb.finish()
         print("WandB run complete.")
+
+    save_training_artifacts(trainer, result)
 
     model.save_pretrained("./debatefloor_checkpoint")
     tok.save_pretrained("./debatefloor_checkpoint")
