@@ -142,6 +142,7 @@ Insurance claim review is not just about being correct. A system that is right f
 - **Visual demo:** https://aniketasla-debatefloor.hf.space/ui
 - **Mini-blog draft (repo):** [docs/HFBlogPost.md](docs/HFBlogPost.md)
 - **Short presentation deck:** [docs/PITCH_DECK.md](docs/PITCH_DECK.md)
+- **WandB training logs (public):** [wandb.ai/aniketaslaliya/debatefloor-insurance-rl](https://wandb.ai/aniketaslaliya/debatefloor-insurance-rl)
 - **Training plot (loss + reward):** [docs/reward_curve.svg](docs/reward_curve.svg)
 - **Component shift plot:** [docs/component_shift.svg](docs/component_shift.svg)
 - **Training run logs:** [reports/training_summary.json](reports/training_summary.json)
@@ -574,14 +575,15 @@ Training via `train/train_minimal.py` — Qwen2.5-0.5B, TRL GRPOTrainer, T4 GPU,
 ### GRPO Training Signals
 
 Training via `train/train_minimal.py` now saves both the reward curve and the component-shift eval summary.
+Live training logs are available at [wandb.ai/aniketaslaliya/debatefloor-insurance-rl](https://wandb.ai/aniketaslaliya/debatefloor-insurance-rl).
 
-![WandB Reward Curve](docs/reward_curve.png)
+![WandB Reward Curve](docs/reward_curve.svg)
 
 The saved curve includes both training loss and mean reward from a real run.
 
 ### Component Score Shift
 
-![Component score shift before vs after training](docs/component_shift.png)
+![Component score shift before vs after training](docs/component_shift.svg)
 
 This plot compares the held-out validation sweep before and after training across fraud detection, decision accuracy, evidence grounding, and calibration.
 
@@ -629,8 +631,8 @@ def env_reward_fn(completions, **kwargs):
 The minimal TRL script (`train/train_minimal.py`) saves local artifacts after
 training so the submission does not depend only on notebook output:
 
-- `docs/reward_curve.png`
-- `docs/component_shift.png`
+- `docs/reward_curve.svg`
+- `docs/component_shift.svg`
 - `reports/training_summary.json`
 - `reports/component_shift_summary.json`
 

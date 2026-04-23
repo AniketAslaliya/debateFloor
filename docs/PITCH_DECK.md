@@ -50,8 +50,8 @@
 
 ## Slide 6 - Training Evidence
 - Real run artifacts saved in repo:
-  - docs/reward_curve.png (loss + reward plot)
-  - docs/component_shift.png (held-out before/after component shift)
+  - docs/reward_curve.svg (loss + reward plot)
+  - docs/component_shift.svg (held-out before/after component shift)
   - reports/training_summary.json (step-wise logs)
   - reports/component_shift_summary.json (component means + deltas)
 - Rollout quality report:

@@ -5,6 +5,11 @@ Runs on free Colab T4 in ~15 minutes.
 Produces a real WandB reward curve using pure TRL GRPOTrainer.
 Also saves a before-vs-after component score plot from a held-out eval sweep.
 
+Environment variables:
+  WANDB_API_KEY  Set to your WandB key to enable public training logs.
+  WANDB_ENTITY   Your WandB username/org (default: 'aniketaslaliya').
+                 Public project: wandb.ai/{WANDB_ENTITY}/debatefloor-insurance-rl
+
 Usage (Colab):
   !git clone https://github.com/AniketAslaliya/debateFloor && cd debateFloor
   !pip install trl>=0.9.0 transformers peft accelerate datasets wandb requests
@@ -43,6 +48,7 @@ LR          = 5e-6
 SEED        = 42
 USE_WANDB   = bool(os.getenv("WANDB_API_KEY", ""))
 WANDB_KEY   = os.getenv("WANDB_API_KEY", "")
+WANDB_ENTITY = os.getenv("WANDB_ENTITY", "aniketaslaliya")  # Set to your WandB username
 PLOT_PATH   = Path("docs/reward_curve.svg")
 COMPONENT_PLOT_PATH = Path("docs/component_shift.svg")
 SUMMARY_PATH = Path("reports/training_summary.json")
@@ -345,7 +351,14 @@ def main():
 
     if USE_WANDB:
         wandb.login(key=WANDB_KEY)
-        wandb.init(project="debatefloor-insurance-rl", name="grpo-qwen0.5b")
+        wandb.init(
+            project="debatefloor-insurance-rl",
+            entity=WANDB_ENTITY,
+            name="grpo-qwen0.5b",
+            notes="DebateFloor GRPO training: calibrated confidence via 3x2 matrix reward. "
+                  "See github.com/AniketAslaliya/debateFloor for environment details.",
+            tags=["grpo", "calibration", "insurance", "openenv"],
+        )
 
     print(f"Loading {MODEL_NAME}...")
     tok = AutoTokenizer.from_pretrained(MODEL_NAME)

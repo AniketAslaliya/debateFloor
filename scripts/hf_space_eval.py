@@ -61,8 +61,9 @@ def run_clean_claim(base_url: str) -> Dict[str, Any]:
         session_id,
         {
             "action_type": "approve_claim",
+            "confidence": "HIGH",
             "parameters": {"payout_amount": 50000, "reason": "consistent docs"},
-            "reasoning": "approve",
+            "reasoning": "Clean claim with consistent documentation — HIGH confidence justified.",
         },
     )
 
@@ -108,9 +109,9 @@ def run_contradictory_claim(base_url: str) -> Dict[str, Any]:
         session_id,
         {
             "action_type": "deny_claim",
-            "parameters": {"reason": "multiple contradictions"},
-            "reasoning": "deny",
-            "confidence": 0.8,
+            "confidence": "MED",
+            "parameters": {"reason": "multiple contradictions detected across documents"},
+            "reasoning": "Sufficient fraud evidence to deny; complexity warrants MED not HIGH confidence.",
         },
     )
 
@@ -157,13 +158,12 @@ def run_coordinated_fraud(base_url: str) -> Dict[str, Any]:
         base_url,
         session_id,
         {
-            "action_type": "request_investigation",
+            "action_type": "escalate_to_human",
+            "confidence": "LOW",
             "parameters": {
-                "target_claim_ids": ["CLM-GROUP-301", "CLM-GROUP-302", "CLM-GROUP-303", "CLM-GROUP-304"],
-                "reason": "coordinated pattern",
+                "reason": "Coordinated fraud ring across multiple linked claims — full scope unclear, human expert required.",
             },
-            "reasoning": "escalate",
-            "confidence": 0.9,
+            "reasoning": "Cross-claim fraud detected but full ring membership unverified; LOW confidence correct epistemic state.",
         },
     )
 
@@ -218,9 +218,9 @@ def run_identity_fraud(base_url: str) -> Dict[str, Any]:
         session_id,
         {
             "action_type": "deny_claim",
-            "parameters": {"reason": "ghost claimant pattern confirmed"},
-            "reasoning": "deny",
-            "confidence": 0.9,
+            "confidence": "HIGH",
+            "parameters": {"reason": "Ghost claimant pattern confirmed — identity mismatch across all verification checks."},
+            "reasoning": "Strong convergent evidence from registry, hospital records, and DOB check — HIGH confidence denial.",
         },
     )
 
@@ -239,8 +239,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Evaluate an HF Space deployment quickly.")
     parser.add_argument(
         "--base-url",
-        default="https://aniketasla-insurance-claim-env.hf.space",
-        help="Base URL of deployed Space",
+        default="https://aniketasla-debatefloor.hf.space",
+        help="Base URL of deployed Space (default: DebateFloor HF Space)",
     )
     args = parser.parse_args()
 

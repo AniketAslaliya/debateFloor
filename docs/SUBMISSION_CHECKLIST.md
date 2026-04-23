@@ -18,7 +18,7 @@ linked supporting material, not only the source code.
 | Curriculum | Start from the easiest useful task, then add branching and hard cases only after non-zero reward appears | Keep the first successful trajectory visible |
 | Training dependencies | `train/requirements.txt` | Install this in Colab |
 | Reward design | Training reward stays separate from eval reward; checks cover success, correctness, format, timeouts, resource usage, safety, anti-cheating | Keep the optimization signal simple and hard to game |
-| Training evidence | Script saves `docs/reward_curve.png`, `docs/component_shift.png`, `reports/training_summary.json`, and `reports/component_shift_summary.json` | Commit artifacts after real run |
+| Training evidence | Script saves `docs/reward_curve.svg`, `docs/component_shift.svg`, `reports/training_summary.json`, and `reports/component_shift_summary.json` | Commit artifacts after real run |
 | Env interaction evidence | `scripts/evaluate_http_rollouts.py` drives `/reset` and `/step` | Commit generated report |
 | Client/server separation | External scripts use HTTP clients instead of importing `app.environment` | Keep server imports limited to tests/training internals |
 | Mini-blog/video/slides | Draft exists at `docs/HFBlogPost.md` | Publish and add URL to README |

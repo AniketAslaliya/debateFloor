@@ -6,3 +6,5 @@ datasets>=2.19.0
 wandb>=0.17.0
 requests>=2.32.0
 matplotlib>=3.8.0
+# env server deps (train_minimal.py imports server.calibration_grader + server.claim_generator)
+openenv-core>=0.2.3
