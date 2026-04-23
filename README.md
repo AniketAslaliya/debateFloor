@@ -28,6 +28,16 @@ pinned: true
 
 ---
 
+## Problem Statement
+
+Insurance claim review is not just about being correct. A system that is right for the wrong reason, or right while being overconfident, is still unsafe in a high-stakes workflow. DebateFloor trains an agent to investigate claims, reason adversarially, and declare calibrated confidence before each final decision.
+
+## Live Demo
+
+- Hugging Face Space: https://huggingface.co/spaces/AniketAsla/debatefloor
+- Visual reviewer UI: https://aniketasla-debatefloor.hf.space/ui
+- Try `contradictory_claim` first to see the full investigation, debate panel, and calibrated decision flow.
+
 ## Submission Links
 
 - **Live OpenEnv Space:** https://huggingface.co/spaces/AniketAsla/debatefloor
@@ -39,6 +49,36 @@ pinned: true
 - **Training run logs:** [reports/training_summary.json](reports/training_summary.json)
 - **Component shift summary:** [reports/component_shift_summary.json](reports/component_shift_summary.json)
 - **HTTP rollout report:** [reports/http_rollout_eval.md](reports/http_rollout_eval.md)
+
+## Architecture
+
+DebateFloor is built as an OpenEnv-compatible insurance calibration environment with four main layers:
+
+- Procedural claim generation for deterministic but varied training episodes.
+- A calibration-aware reward surface that rewards accurate confidence, not just correct answers.
+- A multi-agent debate panel that generates prosecutor and defender arguments before terminal decisions.
+- A FastAPI + Gradio serving layer for live review, validation, and demo playback.
+
+## Evaluation
+
+The repository includes both fast local checks and training evidence:
+
+- `python pre_validation_script.py --base-url http://localhost:7860`
+- `PYTHONPATH=. pytest tests/test_calibration.py tests/test_generator.py -v`
+- `PYTHONPATH=. pytest tests/envs/test_insurance_claim_reward_and_exploit.py -q --tb=short`
+- `reports/training_summary.json` and `reports/component_shift_summary.json` for training evidence
+- `reports/http_rollout_eval.md` for hosted rollout validation
+
+## Dashboard Compliance Checklist
+
+- [x] `README.md` includes the live Space URL
+- [x] `openenv.yaml` defines the required OpenEnv manifest fields
+- [x] `inference.py` includes the required baseline tokens and log markers
+- [x] `scripts/hf_space_eval.py` covers `/health`, `/tasks`, `identity_fraud`, and `session_id`
+- [x] `/health` returns `200`
+- [x] `/tasks` exposes at least four tasks
+- [x] `/schema` exposes action, observation, and state schemas
+- [x] `/reset` respects `session_id` and returns zero step-0 reward
 
 ---
 
