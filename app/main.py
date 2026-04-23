@@ -8,7 +8,8 @@ from uuid import uuid4
 import gradio as gr
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.background import BackgroundTasks
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
 
 from .environment import InsuranceClaimEnvironment
@@ -59,23 +60,21 @@ class StepBody(BaseModel):
 
 app = FastAPI(title="DebateFloor — Insurance Calibration RL Environment")
 
-# Mount Gradio visual demo at /ui
-_gradio_mounted = False
-try:
-    import sys, os as _os
-    sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
-    from gradio_app import demo as gradio_demo
-    gr.mount_gradio_app(app, gradio_demo, path="/ui")
-    _gradio_mounted = True
-    print("Gradio UI mounted at /ui")
-except Exception as _e:
-    print(f"WARNING: Gradio not mounted: {_e}")
+import os
+_frontend_dist = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend", "dist")
+_react_mounted = False
 
+if os.path.isdir(_frontend_dist):
+    app.mount("/assets", StaticFiles(directory=os.path.join(_frontend_dist, "assets")), name="assets")
+    _react_mounted = True
+    print("React UI mounted from frontend/dist")
+else:
+    print(f"WARNING: React UI not mounted. Missing directory: {_frontend_dist}")
 
 @app.get("/")
 def index():
-    if _gradio_mounted:
-        return RedirectResponse(url="/ui/", status_code=302)
+    if _react_mounted:
+        return FileResponse(os.path.join(_frontend_dist, "index.html"))
     return {
         "name": "DebateFloor — Insurance Calibration RL Environment",
         "status": "running",
