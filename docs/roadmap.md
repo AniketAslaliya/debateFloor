@@ -28,6 +28,8 @@
 ## CURRENT STATUS (April 22, 2026)
 
 ### DONE ✅
+- [x] Environment contract defined first (`reset`, `step`, `state`, `reward`, anti-abuse); trainer sits on top of it
+- [x] OpenEnv scaffolding used as the starting point: package + FastAPI wrapper + action/observation/state split
 - [x] FastAPI server — all 6 OpenEnv endpoints
 - [x] 3 tasks: clean_claim, contradictory_claim, distribution_shift_claim
 - [x] 3×2 calibration matrix (core innovation)
@@ -46,6 +48,7 @@
 
 ### IN PROGRESS / PENDING
 - [ ] **Run train_minimal.py on Colab** → get WandB training signals ← MOST URGENT (20% criterion)
+- [ ] Start from the easiest useful task before adding harder curriculum cases
 - [ ] **Publish HF blog post** → mandatory minimum requirement ← BLOCKING
 - [ ] Sponsor API integration (pending email details)
 - [ ] Add 3rd full agent role (full escalation agent as separate role)
@@ -118,11 +121,18 @@ Publish → copy URL → add to README
 ```
 
 ### April 23 — Polish
+- [ ] Recheck the environment contract before any trainer tweaks: `reset`, `step`, `state`, `reward`, anti-abuse
+- [ ] Keep the 1-day plan in mind: narrow task → environment → rewards → deploy → tiny train → inspect → curriculum → scale → demo
 - [ ] Add training plots to README (from training run)
 - [ ] Add WandB link to README and HFBlogPost
 - [ ] Sponsor API integration (waiting for email details)
 - [ ] Test Gradio demo flow on HF Space end-to-end
 - [ ] Timed pitch rehearsal: 3 minutes exactly
+
+### Reviewer-Winning Demo
+- [ ] Baseline attempt, then reward/verifier output, then trained attempt
+- [ ] Show measurable improvement and briefly explain the safeguards
+- [ ] Call out reward hacking prevention explicitly
 
 ### April 24 — Buffer + Final Checks
 - [ ] Run pre_validation_script.py against HF Space → all 37 green

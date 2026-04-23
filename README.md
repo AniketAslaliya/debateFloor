@@ -29,6 +29,87 @@ DebateFloor is an insurance-claim training environment where an agent investigat
 2. Run `contradictory_claim` first.
 3. Watch the prosecutor, defender, and judge context appear before the final decision.
 
+## Why this is the right RL task
+
+DebateFloor follows the hackathon rule of picking a task that is step-by-step, programmatically verifiable, and still hard enough to matter.
+
+- The model acts step by step: it can validate documents, query history, flag signals, convene a debate panel, and then make a terminal decision.
+- Success is objective: the environment can score each episode from the observed actions, the terminal decision, and the declared confidence.
+- The task is difficult but not impossible: easy claims are solvable, medium claims require more evidence, and hard claims still have a non-zero path to reward.
+- The reward is crisp: if the agent learns the right calibration, it gets rewarded; if it is overconfident, it gets punished.
+
+## The minimum RL loop
+
+The practical RL loop here is simple:
+
+1. Give the model a claim investigation prompt.
+2. Let it generate an action, strategy, or terminal answer.
+3. Execute that output in the environment or verifier.
+4. Convert the result into reward.
+5. Update the model so higher-reward behavior becomes more likely.
+
+That is the core training signal: the system samples many outputs, scores them, and shifts probability mass away from bad behavior and toward better behavior.
+
+Think of it as repeated in-context improvement with memory. Instead of stuffing examples back into the prompt, the model stores what worked in its weights.
+
+## Build with OpenEnv scaffolding
+
+We start from the OpenEnv contract and scaffold the environment as a Python package with a FastAPI wrapper.
+
+The build order is:
+
+1. Define the action dataclass.
+2. Define the observation dataclass.
+3. Define the state representation.
+4. Implement `reset()` and `step()`.
+5. Expose the same interface through FastAPI for training and evaluation.
+
+This keeps the responsibilities clean: the environment handles world dynamics and scoring, the trainer handles optimization, and the model only learns to act inside the interface.
+
+## Design the environment first
+
+Before you think about the trainer, define the environment as a first-class artifact:
+
+- `reset()` starts a fresh episode.
+- `step(action)` applies one action and returns the next result.
+- `state()` / observation tells the agent what it can see.
+- `reward` tells the trainer what counts as progress or success.
+- Anti-abuse rules stop infinite loops, repeated probing, and confidence gaming.
+
+OpenEnv standardizes this contract so the same training code can work across many environments instead of every team inventing a new API.
+
+The design order matters:
+
+1. What does the agent observe?
+2. What actions can it take?
+3. What ends an episode?
+4. How do you compute reward?
+5. How do you stop abuse, infinite loops, or cheating?
+
+## Keep the task simple at first
+
+Start with the easiest useful task, not the hardest benchmark.
+
+- Easy tasks should have short horizons and obvious success conditions.
+- Medium tasks should add a little branching only after the model can already reach reward.
+- Hard tasks should come later, after the policy has a stable path to non-zero reward.
+
+If the model never sees success, learning stalls.
+
+## Design rewards carefully
+
+Reward is the task specification, so it should include multiple independent checks.
+
+- Execution success
+- Correctness
+- Format compliance
+- Timeouts
+- Resource usage
+- Safety constraints
+- Anti-cheating checks
+
+Training reward stays separate from evaluation reward so the optimization signal remains stable and the reporting signal stays expressive.
+
 ## Theme Coverage
 
 | Theme | Bonus Prize | What We Built |
@@ -69,12 +150,15 @@ Insurance claim review is not just about being correct. A system that is right f
 
 ## Architecture
 
-DebateFloor is built as an OpenEnv-compatible insurance calibration environment with four main layers:
+DebateFloor is built as a full RL system, not just a fine-tuned model:
 
-- Procedural claim generation for deterministic but varied training episodes.
-- A calibration-aware reward surface that rewards accurate confidence, not just correct answers.
-- A multi-agent debate panel that generates prosecutor and defender arguments before terminal decisions.
-- A FastAPI + Gradio serving layer for live review, validation, and demo playback.
+`Environment -> verifier/reward functions -> TRL trainer -> Unsloth efficiency layer -> OpenEnv / Hugging Face Spaces deployment`
+
+- The environment procedurally generates insurance claims so training episodes are varied but deterministic.
+- Verifier and reward functions score evidence quality, fraud signals, and calibration before terminal decisions.
+- TRL's GRPO trainer learns the policy from environment rollouts.
+- Unsloth keeps the training path efficient enough for Colab/T4-style runs.
+- OpenEnv-compatible FastAPI + Gradio serving makes the same system easy to ship as a live Space demo.
 
 ## Evaluation
 
@@ -85,6 +169,40 @@ The repository includes both fast local checks and training evidence:
 - `PYTHONPATH=. pytest tests/envs/test_insurance_claim_reward_and_exploit.py -q --tb=short`
 - `reports/training_summary.json` and `reports/component_shift_summary.json` for training evidence
 - `reports/http_rollout_eval.md` for hosted rollout validation
+
+## One-Day Execution Plan
+
+1. Pick a narrow task: start with the easiest verifiable environment and make success possible early.
+2. Build the environment: wire `reset`, `step`, and `state`, then get a local loop working.
+3. Build rewards: use 2-4 independent checks, plus timeout and anti-cheat logic.
+4. Deploy: run locally with Uvicorn or push to a Space so teammates use the same interface.
+5. Train small: run a tiny TRL + Unsloth experiment first and inspect generations, not just metrics.
+6. Inspect for hacking: sample outputs, check for globals, hacks, environment abuse, or shortcuts.
+7. Add curriculum: simplify tasks or add easier start states if reward stays near zero.
+8. Train bigger: scale only after the loop is stable.
+9. Save and demo: export the model correctly, test inference, and show before/after behavior.
+
+## What Reviewers Find Compelling
+
+The strongest submissions usually show a clear environment design, objective reward functions, visible model improvement, reward-hacking prevention, a reproducible deployment story, and a sharp demo.
+
+A simple demo format works well:
+
+1. Baseline model attempt.
+2. Reward/verifier output.
+3. Trained model attempt.
+4. Measurable improvement.
+5. Short explanation of the safeguards.
+
+## Common Mistakes To Avoid
+
+- Picking a task so hard that success probability is effectively zero.
+- Using only one reward function.
+- Not checking for reward hacking.
+- Training before the environment is stable.
+- Watching only average reward instead of inspecting outputs.
+- Forgetting timeouts and sandbox limits.
+- Saving LoRA / QLoRA weights incorrectly.
 
 ## Dashboard Compliance Checklist
 
@@ -430,6 +548,22 @@ if LOW_rate > 70% across 10+ episodes:
 if HIGH_rate > 80% across 10+ episodes:
     penalty = (rate - 0.80) × 1.5
 ```
+
+## Do you need SFT first?
+
+Use a simple rule:
+
+- If you have a lot of good traces, do SFT first.
+- If you can verify outputs programmatically but do not have ideal traces, use RL.
+- In practice, a small amount of SFT plus RL is often the best path.
+
+DebateFloor follows the second path with light warm-starting only:
+
+- Start from a capable instruct model.
+- Add minimal formatting priming and task scaffolding so valid rollouts happen.
+- Use RL to improve calibration, evidence use, and decision quality.
+
+That fits the hackathon rule exactly: the environment can score outcomes objectively, so RL is doing the real work. SFT would be optional only if we later collect high-quality traces that are worth imitating.
 
 ---
 

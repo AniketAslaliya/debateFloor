@@ -122,6 +122,13 @@ supports_concurrent_sessions: true
 max_concurrent_envs: 64
 ```
 
+**Build order:** bootstrap the OpenEnv skeleton first, then fill in behavior.
+
+1. Define action, observation, and state.
+2. Implement `reset()` and `step()`.
+3. Expose the environment through FastAPI.
+4. Keep trainer logic outside the environment.
+
 ---
 
 ## PROBLEM 5: Inference script times out (>20 min)
@@ -168,6 +175,16 @@ Is learning rate too high?
 → Show confidence distribution shift instead of reward curve
 → A distribution shift from 85% HIGH to 45% HIGH is compelling evidence
 → Judges understand behaviour change better than loss curves
+
+**Reward design rule:** prefer multiple independent checks over one fragile score.
+
+- execution success
+- correctness
+- format compliance
+- timeouts
+- resource usage
+- safety constraints
+- anti-cheating checks
 
 ---
 

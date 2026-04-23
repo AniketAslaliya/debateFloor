@@ -29,6 +29,77 @@ Nobody had built a training environment specifically designed to fix this. So we
 
 The agent cannot just say `deny_claim`. It must say `deny_claim` + `MED` (medium confidence), and the reward is determined by whether the confidence matched reality.
 
+## Why This Is the Right RL Task
+
+We followed the simple hackathon rule: choose a task the model can solve step by step, verify programmatically, and still fail often enough to learn from.
+
+- The agent acts step by step through document validation, historical lookup, linked-claim queries, debate-panel creation, and terminal adjudication.
+- Success is objective because the environment can score the decision, the evidence, and the declared confidence.
+- The task is hard but not hopeless because the episodes are designed to have a non-zero reward path for a capable instruct model.
+- That balance matters: if the model never reaches reward, RL burns compute and learns nothing.
+
+## The Minimum RL Loop
+
+The loop is straightforward:
+
+1. Give the model a prompt.
+2. Let it generate an action, strategy, answer, or code.
+3. Execute that output in the environment or verifier.
+4. Convert the result into reward.
+5. Update the model so higher-reward behavior becomes more likely.
+
+In practice, this is just repeated sampling plus score feedback, where backprop stores what worked in the weights instead of forcing the prompt to carry every example.
+
+## Build with OpenEnv Scaffolding
+
+The intended workflow is to bootstrap the environment skeleton first and then fill in behavior.
+
+OpenEnv gives the package structure and FastAPI wrapper so the environment can define:
+
+- action dataclasses
+- observation dataclasses
+- state representation
+- `reset()` and `step()`
+- the client-server interface used by training and evaluation
+
+That separation is the point: the environment handles world dynamics and scoring, the trainer handles optimization, and the model only learns to act inside the interface.
+
+## Keep the Task Simple at First
+
+We started with the easiest version that still proves the concept, then left room for curriculum learning.
+
+- Easy tasks have short horizons.
+- Medium tasks add branching after the policy can already get reward.
+- Hard tasks come later, once the model has a stable path to non-zero reward.
+
+This is the practical hackathon rule: make success possible early, or learning stalls.
+
+## Design Rewards Carefully
+
+Reward is the task specification, so use multiple independent checks instead of a single fragile score.
+
+- execution success
+- correctness
+- format compliance
+- timeouts
+- resource usage
+- safety constraints
+- anti-cheating checks
+
+We keep training reward and evaluation reward separate so the optimization signal stays stable while the demo/reporting signal stays expressive.
+
+## Design the Environment First
+
+We treated the environment as the first-class artifact before choosing the trainer.
+
+- `reset()` starts a fresh investigation.
+- `step(action)` applies a document, lookup, or terminal action and returns the next result.
+- `state()` / observation defines what the agent can see at each turn.
+- `reward` defines progress: evidence quality, decision correctness, and calibration.
+- Abuse controls prevent infinite loops, repeated probing, and confidence gaming.
+
+That order is what makes the project trainable: the environment defines the task surface, and the trainer just learns from it.
+
 ### The 3×2 Calibration Matrix — the core innovation
 
 | | Correct Decision | Wrong Decision |

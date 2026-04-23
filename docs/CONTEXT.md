@@ -35,6 +35,7 @@ After EVERY coding session, Claude Code updates this file with:
 
 - [x] Round 1: insuranceClaim env built and validated (11 runs, Phase 1+2 passed)
 - [x] Architecture decision: DebateFloor = Round 1 + calibration grader + procedural generator
+- [x] Environment-first workflow clarified: OpenEnv scaffold, easy-first curriculum, multi-check reward design
 - [x] All documentation files created (CLAUDE.md, CONTEXT.md, SKILL.md, ROADMAP.md)
 - [x] Phase 0: Repo structure scaffolded (server/, train/, tests/, docs/, placeholders)
 - [x] Phase 1A: app/models.py updated — confidence: Literal["HIGH","MED","LOW"], confidence_required, calibration_score
@@ -49,6 +50,7 @@ After EVERY coding session, Claude Code updates this file with:
 - [ ] Forking Round 1 repo into debatefloor
 - [ ] Designing 5 fraud type templates (Mitali)
 - [ ] Verifying TRL + Unsloth on Colab T4 (Aditya)
+- [ ] Review the easiest task first before adding harder curriculum cases
 
 ---
 

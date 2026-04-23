@@ -12,6 +12,8 @@
 
 ### Day 1 — April 22 (TODAY)
 - [x] Verify HF Space live and all endpoints working
+- [x] Verify the environment contract first: `reset`, `step`, `state`, `reward`, anti-abuse
+- [x] Verify the OpenEnv scaffold is in place: package, FastAPI wrapper, action/observation/state split
 - [x] Validate all 3 tasks produce correct calibration scores
 - [x] Confirm multi-agent debate panel visible in inference logs
 - [ ] **HIGH PRIORITY**: Check if Colab training has completed and WandB curve is saved
@@ -22,18 +24,22 @@
 - [ ] Verify README.md image references for both plots render correctly
 - [ ] Git commit + push training artifacts
 - [ ] Final validation: re-run `python pre_validation_script.py --base-url https://aniketasla-debatefloor.hf.space`
+- [ ] Confirm the simplest task still succeeds before widening the curriculum
 
 ### Day 3 — April 24 (Buffer Day)
 - [ ] Rehearse 3-minute pitch demo using Gradio UI at /ui
 - [ ] Review CLAUDE.md Q&A section for any last-minute answers
 - [ ] Create slide deck (if required by hackathon format)
-- [ ] Test all API calls one more time against live Space
+- [ ] Test the core environment calls one more time against live Space: `/reset`, `/step`, `/state`, `/schema`, `/health`
+- [ ] Rehearse the reward story: multiple checks, simple training reward, separate eval reward
+- [ ] Rehearse the reviewer story: baseline attempt → verifier output → trained attempt → measurable improvement
 
 ### Morning of April 25 (Pitch Day)
 - [ ] **Verify HF Space is still up** (curl /health before leaving home)
 - [ ] Open Gradio UI at https://aniketasla-debatefloor.hf.space/ui in presentation laptop browser
 - [ ] Have backup laptop with localhost uvicorn running (in case HF Space goes down)
 - [ ] Print out: CLAUDE.md Q&A section for quick reference during live Q&A
+- [ ] Keep a short list of common mistakes to mention if asked: too-hard task, one reward, no hacking checks, unstable environment
 
 ---
 

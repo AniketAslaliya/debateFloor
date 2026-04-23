@@ -20,6 +20,77 @@ Based on CoCA framework (arXiv:2603.05881).
 **HF Space:** huggingface.co/spaces/AniketAsla/debatefloor (LIVE ✅)
 **Deadline:** April 25, 2026 — 48-hour onsite hackathon
 
+## 🧱 ENVIRONMENT FIRST
+
+Treat the environment as the product surface before you think about the trainer.
+
+- `reset()` starts a fresh episode.
+- `step(action)` applies an action and returns the next result.
+- `state()` / observation defines what the agent can see.
+- `reward` defines progress and success.
+- Anti-abuse logic prevents infinite loops, repeated probing, and confidence gaming.
+
+The trainer is just the optimization layer on top of that contract.
+
+## 🏗️ BUILD WITH OPENENV
+
+OpenEnv gives the scaffold; DebateFloor fills in the behavior.
+
+- Define the action dataclass.
+- Define the observation dataclass.
+- Define the state representation.
+- Implement `reset()` and `step()`.
+- Expose the environment through FastAPI so training and evaluation use the same interface.
+
+The environment owns world dynamics and scoring, the trainer owns optimization, and the model only learns to act inside the interface.
+
+## 🚦 START SIMPLE
+
+Always start with the easiest useful task.
+
+- Easy tasks should have short horizons and obvious success conditions.
+- Medium tasks should add a little branching after the model can already get reward.
+- Hard tasks should come later, once the policy has a stable path to non-zero reward.
+
+If the model never sees success, curriculum stalls.
+
+## 🎯 DESIGN REWARDS CAREFULLY
+
+Reward is the task specification.
+
+- Use multiple independent checks, not one fragile score.
+- Include execution success, correctness, format compliance, timeouts, resource usage, safety constraints, and anti-cheating checks.
+- Keep training reward simple and stable.
+- Keep evaluation reward separate for reporting and demos.
+
+## 🧭 ONE-DAY EXECUTION PLAN
+
+1. Pick a narrow task and make success reachable early.
+2. Build the environment skeleton and get a local loop working.
+3. Add multiple reward checks plus timeout and anti-cheat logic.
+4. Deploy early so everyone uses the same interface.
+5. Train small first and inspect generations, not only metrics.
+6. Sample outputs for hacks, globals, and environment abuse.
+7. Add curriculum if reward stays near zero.
+8. Scale only after the loop is stable.
+9. Save the model correctly and demo before/after behavior.
+
+## 🏅 WHAT REVIEWERS FIND COMPELLING
+
+Clear environment design, objective reward functions, evidence of improvement, reward-hacking prevention, reproducible deployment, and a sharp demo are the strongest signals.
+
+The best demo shape is baseline attempt → verifier output → trained attempt → measurable improvement → brief safeguard explanation.
+
+## 🚫 COMMON MISTAKES TO AVOID
+
+- Picking a task so hard that success probability is effectively zero.
+- Using only one reward function.
+- Not checking for reward hacking.
+- Training before the environment is stable.
+- Watching only average reward instead of inspecting outputs.
+- Forgetting timeouts and sandbox limits.
+- Saving LoRA / QLoRA weights incorrectly.
+
 ---
 
 ## 🏆 THEME ALIGNMENT — CLAIM ALL THREE
