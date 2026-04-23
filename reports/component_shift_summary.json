@@ -1,0 +1,20 @@
+{
+  "before": {
+    "Fraud detection": 0.42,
+    "Decision accuracy": 0.33,
+    "Evidence quality": 0.21,
+    "Calibration": 0.28
+  },
+  "after": {
+    "Fraud detection": 0.71,
+    "Decision accuracy": 0.86,
+    "Evidence quality": 0.68,
+    "Calibration": 0.79
+  },
+  "delta": {
+    "Fraud detection": 0.29,
+    "Decision accuracy": 0.53,
+    "Evidence quality": 0.47,
+    "Calibration": 0.51
+  }
+}

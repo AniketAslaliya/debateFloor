@@ -34,8 +34,8 @@ pinned: true
 - **Visual demo:** https://aniketasla-debatefloor.hf.space/ui
 - **Mini-blog draft (repo):** [docs/HFBlogPost.md](docs/HFBlogPost.md)
 - **Short presentation deck:** [docs/PITCH_DECK.md](docs/PITCH_DECK.md)
-- **Training plot (loss + reward):** [docs/reward_curve.png](docs/reward_curve.png)
-- **Component shift plot:** [docs/component_shift.png](docs/component_shift.png)
+- **Training plot (loss + reward):** [docs/reward_curve.svg](docs/reward_curve.svg)
+- **Component shift plot:** [docs/component_shift.svg](docs/component_shift.svg)
 - **Training run logs:** [reports/training_summary.json](reports/training_summary.json)
 - **Component shift summary:** [reports/component_shift_summary.json](reports/component_shift_summary.json)
 - **HTTP rollout report:** [reports/http_rollout_eval.md](reports/http_rollout_eval.md)
@@ -48,7 +48,7 @@ If you only have 3 to 5 minutes, this is the shortest path:
 
 1. Open the live demo: https://aniketasla-debatefloor.hf.space/ui
 2. Run `contradictory_claim` first. It shows the full investigation flow, the debate panel, and a calibrated terminal decision.
-3. Then open [docs/component_shift.png](docs/component_shift.png) and [docs/reward_curve.png](docs/reward_curve.png) to see what changed after training.
+3. Then open [docs/component_shift.svg](docs/component_shift.svg) and [docs/reward_curve.svg](docs/reward_curve.svg) to see what changed after training.
 4. If you want the full picture, skim the sections below in this order: What is DebateFloor, Training Signals, Why This Matters.
 
 ---

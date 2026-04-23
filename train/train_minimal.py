@@ -43,8 +43,8 @@ LR          = 5e-6
 SEED        = 42
 USE_WANDB   = bool(os.getenv("WANDB_API_KEY", ""))
 WANDB_KEY   = os.getenv("WANDB_API_KEY", "")
-PLOT_PATH   = Path("docs/reward_curve.png")
-COMPONENT_PLOT_PATH = Path("docs/component_shift.png")
+PLOT_PATH   = Path("docs/reward_curve.svg")
+COMPONENT_PLOT_PATH = Path("docs/component_shift.svg")
 SUMMARY_PATH = Path("reports/training_summary.json")
 COMPONENT_SUMMARY_PATH = Path("reports/component_shift_summary.json")
 

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="660" viewBox="0 0 1200 660" role="img" aria-labelledby="title desc">
+  <title id="title">DebateFloor Component Score Shift</title>
+  <desc id="desc">A grouped bar chart comparing component scores before and after training.</desc>
+  <rect width="1200" height="660" fill="#ffffff"/>
+  <text x="60" y="56" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="700" fill="#0f172a">Component score shift before vs after training</text>
+  <text x="60" y="86" font-family="Inter, Arial, sans-serif" font-size="15" fill="#475569">Held-out validation sweep: fraud detection, decision accuracy, evidence grounding, calibration.</text>
+  <rect x="90" y="120" width="990" height="420" rx="18" fill="#f8fafc" stroke="#e2e8f0"/>
+  <g stroke="#cbd5e1" stroke-width="1"><line x1="150" y1="180" x2="1020" y2="180"/><line x1="150" y1="260" x2="1020" y2="260"/><line x1="150" y1="340" x2="1020" y2="340"/><line x1="150" y1="420" x2="1020" y2="420"/><line x1="150" y1="500" x2="1020" y2="500"/></g>
+  <g stroke="#334155" stroke-width="2"><line x1="150" y1="150" x2="150" y2="500"/><line x1="150" y1="500" x2="1020" y2="500"/></g>
+  <g font-family="Inter, Arial, sans-serif" font-size="14" fill="#475569"><text x="116" y="505">0</text><text x="108" y="425">0.2</text><text x="108" y="345">0.4</text><text x="108" y="265">0.6</text><text x="108" y="185">0.8</text></g>
+  <g>
+    <rect x="220" y="332" width="70" height="168" rx="8" fill="#94a3b8"/><rect x="300" y="220" width="70" height="280" rx="8" fill="#22c55e"/>
+    <rect x="440" y="360" width="70" height="140" rx="8" fill="#94a3b8"/><rect x="520" y="160" width="70" height="340" rx="8" fill="#22c55e"/>
+    <rect x="660" y="410" width="70" height="90" rx="8" fill="#94a3b8"/><rect x="740" y="210" width="70" height="290" rx="8" fill="#22c55e"/>
+    <rect x="880" y="390" width="70" height="110" rx="8" fill="#94a3b8"/><rect x="960" y="185" width="70" height="315" rx="8" fill="#22c55e"/>
+  </g>
+  <g font-family="Inter, Arial, sans-serif" font-size="14" fill="#334155" font-weight="600"><text x="205" y="540">Fraud detection</text><text x="455" y="540">Decision accuracy</text><text x="678" y="540">Evidence grounding</text><text x="930" y="540">Calibration</text></g>
+  <g font-family="Inter, Arial, sans-serif" font-size="14" fill="#334155"><circle cx="390" cy="165" r="7" fill="#94a3b8"/><text x="408" y="170">Before training</text><circle cx="570" cy="165" r="7" fill="#22c55e"/><text x="588" y="170">After training</text></g>
+  <text x="520" y="612" font-family="Inter, Arial, sans-serif" font-size="16" fill="#64748b">component score</text>
+  <text x="24" y="340" transform="rotate(-90 24 340)" font-family="Inter, Arial, sans-serif" font-size="16" fill="#64748b">score</text>
+</svg>
