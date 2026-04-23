@@ -12,6 +12,23 @@ pinned: true
 
 > An [OpenEnv](https://github.com/meta-pytorch/OpenEnv)-compliant RL training environment where AI agents investigate insurance claims, debate adversarially, and must declare **calibrated confidence** before every terminal decision. Built for the **Meta PyTorch × Scaler Hackathon Grand Finale, April 25–26 2026**.
 
+## DebateFloor in one sentence
+
+DebateFloor is an insurance-claim training environment where an agent investigates evidence, convenes a prosecutor-versus-defender debate, and must declare calibrated confidence before every terminal decision.
+
+### Why it stands out
+
+- It is a training environment, not a fixed benchmark: episodes are procedurally generated from seeds.
+- It teaches calibration, not just accuracy: overconfident wrong answers are punished more than uncertainty.
+- It is multi-agent by design: the final decision is informed by an adversarial debate panel.
+- It is judge-ready: the live UI, baseline agent, and validation scripts are already in the repo.
+
+### Start here
+
+1. Open the live UI: https://aniketasla-debatefloor.hf.space/ui
+2. Run `contradictory_claim` first.
+3. Watch the prosecutor, defender, and judge context appear before the final decision.
+
 ## Theme Coverage
 
 | Theme | Bonus Prize | What We Built |
@@ -169,7 +186,7 @@ The CAPO paper (April 2026) shows GRPO training induces systematic overconfidenc
 
 ---
 
-## Repository Structure
+## Code Map
 
 ```
 debatefloor/
