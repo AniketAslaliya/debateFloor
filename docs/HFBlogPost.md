@@ -135,11 +135,19 @@ This produces a stable learning curve. The complex eval reward runs separately f
 
 ## Results
 
-### Reward Curve (WandB)
+### Training Signals (WandB + held-out eval)
 
-The GRPO training reward rises from ~0.2 at initialization to ~0.7 after 3 epochs, with the calibration component accounting for ~30% of the signal. The reward curve is tracked at [wandb.ai/debatefloor-insurance-rl](https://wandb.ai/).
+The GRPO training run tracks both the reward curve and a held-out component-shift summary. The reward curve is tracked at [wandb.ai/debatefloor-insurance-rl](https://wandb.ai/), while the component shift plot is saved to [docs/component_shift.png](docs/component_shift.png).
 
 ![WandB reward curve - training reward rises as calibration improves](docs/reward_curve.png)
+
+### Component score shift
+
+![Component score shift before vs after training](docs/component_shift.png)
+
+This companion plot shows how the held-out validation sweep changes before and after training across fraud detection, decision accuracy, evidence grounding, and calibration.
+
+The script also writes [reports/component_shift_summary.json](reports/component_shift_summary.json) so the before/after component means are easy to inspect.
 
 ### Confidence distribution shift (before → after GRPO training)
 

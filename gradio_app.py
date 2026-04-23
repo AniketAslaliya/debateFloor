@@ -29,12 +29,18 @@ CALIB_MATRIX = {
     ("MED",  "wrong"):   (-0.2, "#fca5a5"),   # light red
     ("LOW",  "correct"): (0.1,  "#d1fae5"),   # pale green
     ("LOW",  "wrong"):   (0.0,  "#f3f4f6"),   # grey
+        ("HIGH", "correct"): (1.0,  "#dcfce7"),   # soft green
+        ("HIGH", "wrong"):   (-0.8, "#fee2e2"),   # soft red
+        ("MED",  "correct"): (0.6,  "#f0fdf4"),   # very light green
+        ("MED",  "wrong"):   (-0.2, "#ffedd5"),   # light amber
+        ("LOW",  "correct"): (0.1,  "#eff6ff"),   # light blue
+        ("LOW",  "wrong"):   (0.0,  "#f8fafc"),   # neutral
 }
 
 TASK_DESCRIPTIONS = {
-    "clean_claim": "Easy | Auto collision, all docs consistent | Correct: approve + HIGH",
-    "contradictory_claim": "Medium | Medical claim, procedure mismatch in billing | Correct: deny + MED",
-    "distribution_shift_claim": "Hard | Looks clean — fraud only visible cross-claim | Correct: escalate + LOW",
+        "clean_claim": "Easy: all documents agree. Correct action: approve_claim with HIGH confidence.",
+        "contradictory_claim": "Medium: documents disagree. Correct action: deny_claim with MED confidence.",
+        "distribution_shift_claim": "Hard: looks normal at first. Correct action: escalate_to_human with LOW confidence.",
 }
 
 TASK_STRATEGIES = {
@@ -81,16 +87,18 @@ def _matrix_html(highlight_conf: Optional[str] = None, highlight_outcome: Option
     rows = [("HIGH", "correct", "wrong"), ("MED", "correct", "wrong"), ("LOW", "correct", "wrong")]
     html = """
     <style>
-      .matrix-table { border-collapse: collapse; width: 100%; font-family: monospace; font-size: 14px; }
-      .matrix-table th { background: #1e1b4b; color: white; padding: 10px 16px; text-align: center; }
-      .matrix-table td { padding: 12px 16px; text-align: center; border: 1px solid #e5e7eb; font-weight: bold; }
-      .matrix-cell-active { outline: 3px solid #7c3aed; outline-offset: -3px; transform: scale(1.05); }
-      .matrix-label { background: #f3f4f6; font-weight: bold; color: #374151; }
+            .matrix-table { border-collapse: collapse; width: 100%; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 14px; background: white; }
+            .matrix-table th { background: #f8fafc; color: #0f172a; padding: 10px 16px; text-align: center; border: 1px solid #e2e8f0; }
+            .matrix-table td { padding: 12px 16px; text-align: center; border: 1px solid #e2e8f0; font-weight: 600; color: #0f172a; }
+            .matrix-cell-active { outline: 3px solid #2563eb; outline-offset: -3px; transform: scale(1.03); }
+            .matrix-label { background: #f8fafc; font-weight: 700; color: #334155; }
+            .matrix-note { margin-top: 8px; color: #475569; font-size: 13px; }
     </style>
     <table class="matrix-table">
       <tr>
         <th>Confidence</th><th>✅ Correct Decision</th><th>❌ Wrong Decision</th>
       </tr>
+    <div class="matrix-note">Higher confidence is only good when the decision is right. The worst cell is HIGH + wrong.</div>
     """
     for conf in ["HIGH", "MED", "LOW"]:
         html += "<tr>"
@@ -108,7 +116,7 @@ def _matrix_html(highlight_conf: Optional[str] = None, highlight_outcome: Option
 
 def _format_action_log(history: List[Dict]) -> str:
     if not history:
-        return "*No actions yet.*"
+        return "No actions yet. Click Run Episode to see the investigation unfold."
     lines = []
     for i, entry in enumerate(history, 1):
         action = entry.get("action_type", "?")
@@ -116,8 +124,8 @@ def _format_action_log(history: List[Dict]) -> str:
         conf = entry.get("confidence", "")
         conf_str = f" | confidence={conf}" if conf else ""
         calib = entry.get("calibration_score")
-        calib_str = f" | **calibration={calib}**" if calib is not None else ""
-        lines.append(f"**Step {i}:** `{action}`{conf_str} → reward={reward:.3f}{calib_str}")
+        calib_str = f" | calibration={calib}" if calib is not None else ""
+        lines.append(f"Step {i}: {action}{conf_str} -> reward={reward:.3f}{calib_str}")
     return "\n\n".join(lines)
 
 
@@ -239,21 +247,21 @@ def _debate_html(transcript: Dict) -> str:
     lean_color = {"prosecution": "#ef4444", "defense": "#22c55e", "split": "#f59e0b"}.get(lean, "#6b7280")
 
     return f"""
-    <div style="font-family:monospace;font-size:13px;border:2px solid {lean_color};border-radius:8px;padding:16px;margin-top:8px;">
-      <div style="font-weight:bold;font-size:15px;color:{lean_color};margin-bottom:12px;">
-        DEBATE PANEL — {transcript.get('step_convened','?')} steps in
+        <div style="font-family:Inter, ui-sans-serif, system-ui, sans-serif;font-size:13px;border:1px solid #cbd5e1;border-radius:12px;padding:16px;margin-top:8px;background:#ffffff;box-shadow:0 8px 20px rgba(15,23,42,0.06);">
+            <div style="font-weight:700;font-size:15px;color:{lean_color};margin-bottom:12px;">
+                Debate panel opened at step {transcript.get('step_convened','?')}
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-        <div style="background:#fef2f2;padding:12px;border-radius:6px;border-left:4px solid #ef4444;">
-          <div style="font-weight:bold;color:#ef4444;margin-bottom:6px;">PROSECUTOR [{p_strength}]</div>
-          <div style="color:#374151;line-height:1.5;">{transcript.get('prosecutor_argument','')}</div>
+                <div style="background:#fff7ed;padding:12px;border-radius:10px;border-left:4px solid #f97316;">
+                    <div style="font-weight:700;color:#c2410c;margin-bottom:6px;">Prosecutor [{p_strength}]</div>
+                    <div style="color:#334155;line-height:1.55;">{transcript.get('prosecutor_argument','')}</div>
         </div>
-        <div style="background:#f0fdf4;padding:12px;border-radius:6px;border-left:4px solid #22c55e;">
-          <div style="font-weight:bold;color:#22c55e;margin-bottom:6px;">DEFENDER [{d_strength}]</div>
-          <div style="color:#374151;line-height:1.5;">{transcript.get('defender_argument','')}</div>
+                <div style="background:#eff6ff;padding:12px;border-radius:10px;border-left:4px solid #2563eb;">
+                    <div style="font-weight:700;color:#1d4ed8;margin-bottom:6px;">Defender [{d_strength}]</div>
+                    <div style="color:#334155;line-height:1.55;">{transcript.get('defender_argument','')}</div>
         </div>
       </div>
-      <div style="margin-top:12px;background:#f3f4f6;padding:10px;border-radius:6px;font-weight:bold;color:{lean_color};">
+            <div style="margin-top:12px;background:#f8fafc;padding:10px;border-radius:10px;font-weight:700;color:{lean_color};border:1px solid #e2e8f0;">
         VERDICT: {transcript.get('panel_verdict','')}
       </div>
     </div>
@@ -288,14 +296,31 @@ def _format_claim(obs: Dict) -> str:
 # ─────────────────────────────────────────────
 
 HEADER = """
-# DebateFloor ⚖️ — Insurance Calibration RL Environment
-### *An agent must decide AND declare how confident it is. Wrong + overconfident = worst outcome.*
+## DebateFloor ⚖️
+### Insurance claims, calibrated confidence, and multi-agent debate in one environment.
 
+An agent must decide and declare confidence before every terminal action. The worst case is being wrong and overconfident.
 Based on [CoCA arXiv:2603.05881](https://arxiv.org/abs/2603.05881) · Built for Meta PyTorch × Scaler Hackathon 2026
 """
 
-with gr.Blocks(title="DebateFloor") as demo:
+INTRO = """
+### How to use this demo
+1. Pick a task from the dropdown.
+2. Read the claim and the short task summary.
+3. Click **Run Episode**.
+4. Watch the action log, matrix, and debate panel update together.
+"""
+
+with gr.Blocks(title="DebateFloor", theme=gr.themes.Soft()) as demo:
     gr.Markdown(HEADER)
+    gr.Markdown(INTRO)
+    gr.HTML(
+        """
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:14px 16px;margin-bottom:14px;">
+          <strong>What to look for:</strong> the highlighted matrix cell shows the confidence/outcome pair, the action log shows the investigation sequence, and the debate panel explains why the final decision changed.
+        </div>
+        """
+    )
 
     with gr.Row():
         with gr.Column(scale=1):
@@ -303,7 +328,7 @@ with gr.Blocks(title="DebateFloor") as demo:
                 choices=list(TASK_STRATEGIES.keys()),
                 value="contradictory_claim",
                 label="Select Task",
-                info="Easy → Medium → Hard (confidence requirements differ)",
+                info="Start with contradictory_claim to see the full flow. distribution_shift_claim shows the hardest case.",
             )
             task_desc = gr.Markdown(TASK_DESCRIPTIONS["contradictory_claim"])
             run_btn = gr.Button("▶ Run Episode", variant="primary", size="lg")
@@ -318,19 +343,19 @@ with gr.Blocks(title="DebateFloor") as demo:
 
         with gr.Column(scale=2):
             gr.Markdown("### 3×2 Calibration Matrix")
-            gr.Markdown("*The highlighted cell shows the agent's confidence × outcome. HIGH+wrong = −0.8, the worst penalty.*")
+            gr.Markdown("*The highlighted cell shows the agent's confidence × outcome. HIGH + wrong = −0.8, the worst penalty.*")
             matrix_html = gr.HTML(_matrix_html())
 
     with gr.Row():
         with gr.Column(scale=1):
             gr.Markdown("### Claim Details")
-            claim_display = gr.Markdown("*Select a task and click Run Episode.*")
+            claim_display = gr.Markdown("Select a task and click Run Episode.")
         with gr.Column(scale=1):
             gr.Markdown("### Action Log")
-            action_log = gr.Markdown("*Actions will appear here as the episode runs.*")
+            action_log = gr.Markdown("Actions will appear here as the episode runs.")
 
     gr.Markdown("### Multi-Agent Debate Panel")
-    gr.Markdown("*Appears when the agent calls `convene_debate_panel` — prosecutor vs defender arguments, then judge decides.*")
+    gr.Markdown("*Appears when the agent calls `convene_debate_panel` — prosecutor vs defender arguments, then the judge decides.*")
     debate_panel = gr.HTML("")
 
     # Update task description on dropdown change

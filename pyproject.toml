@@ -9,7 +9,7 @@ description = "An OpenEnv-compatible insurance claim triage and fraud detection 
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "openenv-core>=0.2.0",
+    "openenv-core>=0.2.3",
     # Core shared dependencies - minimal set required for all environments
     # Heavy dependencies (torch, numpy, smolagents, etc.) should be in
     # individual environment pyproject.toml files

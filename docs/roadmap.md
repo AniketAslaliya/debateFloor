@@ -19,7 +19,7 @@
 |-----------|-----------|--------|-----------|
 | Innovation (40%) | 35 | 38 | 3-agent debate panel + curriculum |
 | Storytelling (30%) | 20 | 28 | Gradio live demo + HF blog |
-| Reward curve (20%) | 0 | 16 | Run train_minimal.py → WandB curve |
+| Reward curve (20%) | 0 | 16 | Run train_minimal.py → WandB training signals |
 | Pipeline (10%) | 9 | 9 | All green ✅ |
 | **TOTAL** | **64** | **91** | |
 
@@ -45,12 +45,12 @@
 - [x] train_minimal.py — pure TRL, no Unsloth, runs T4 in 15 min
 
 ### IN PROGRESS / PENDING
-- [ ] **Run train_minimal.py on Colab** → get WandB reward curve ← MOST URGENT (20% criterion)
+- [ ] **Run train_minimal.py on Colab** → get WandB training signals ← MOST URGENT (20% criterion)
 - [ ] **Publish HF blog post** → mandatory minimum requirement ← BLOCKING
 - [ ] Sponsor API integration (pending email details)
 - [ ] Add 3rd full agent role (full escalation agent as separate role)
-- [ ] docs/reward_curve.png from training run
-- [ ] README: add WandB curve screenshot
+- [ ] docs/reward_curve.png and docs/component_shift.png from training run
+- [ ] README: add training plots
 
 ---
 
@@ -104,8 +104,8 @@ Open Colab → T4 runtime
 !pip install trl>=0.9.0 transformers peft accelerate datasets wandb requests
 # Set WANDB_API_KEY in env
 !cd debateFloor && python train/train_minimal.py
-→ Screenshot WandB reward curve
-→ Save to docs/reward_curve.png
+→ Screenshot WandB training signals
+→ Save to docs/reward_curve.png and docs/component_shift.png
 → Add to README and HF blog
 ```
 
@@ -118,7 +118,7 @@ Publish → copy URL → add to README
 ```
 
 ### April 23 — Polish
-- [ ] Add reward_curve.png to README (from training run)
+- [ ] Add training plots to README (from training run)
 - [ ] Add WandB link to README and HFBlogPost
 - [ ] Sponsor API integration (waiting for email details)
 - [ ] Test Gradio demo flow on HF Space end-to-end
@@ -139,7 +139,7 @@ Publish → copy URL → add to README
 □ pre_validation_script.py — all 37 checks green
 □ inference_debatefloor.py --all-tasks — all 3 success=True
 □ Gradio UI loads and demo runs (contradictory_claim + debate panel)
-□ WandB reward curve is public and accessible
+□ WandB training signals are public and accessible
 □ HF blog is live and linked from README
 □ Confidence distribution histogram saved locally
 □ Pitch timed at 2m 55s

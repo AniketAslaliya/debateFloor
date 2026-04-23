@@ -7,6 +7,7 @@ from uuid import uuid4
 from openenv.core.env_server.interfaces import Environment
 from openenv.core.env_server.types import EnvironmentMetadata
 
+from .rubrics import DebateFloorRubric
 from .models import (
     ClaimStatus,
     InsuranceClaimAction,
@@ -45,7 +46,7 @@ class InsuranceClaimEnvironment(
     SUPPORTS_CONCURRENT_SESSIONS: bool = True  # NOW ACTUALLY TRUE - session-managed via main.py
 
     def __init__(self):
-        super().__init__()
+        super().__init__(rubric=DebateFloorRubric())
         self._state = InsuranceClaimState(episode_id=str(uuid4()), step_count=0)
         self._payload: Dict[str, Any] = {}
         self._action_history: List[Dict[str, Any]] = []
@@ -73,6 +74,7 @@ class InsuranceClaimEnvironment(
         self._compared_pairs: set[tuple] = set()
         self._debate_transcript: Optional[Dict[str, Any]] = None
         self._debate_convened: bool = False
+        self._last_rubric_components: Dict[str, float] = {}
 
     def reset(
         self,
@@ -111,6 +113,7 @@ class InsuranceClaimEnvironment(
         self._compared_pairs = set()
         self._debate_transcript = None
         self._debate_convened = False
+        self._last_rubric_components = {}
         self._last_message = (
             f"Task '{task.task_id}' loaded (variant={task.variant_id}). Start investigation."
         )
@@ -182,6 +185,7 @@ class InsuranceClaimEnvironment(
             self._last_message = "Max steps reached before final adjudication. Episode closed."
 
         observation = self._build_observation(message=self._last_message)
+        self._sync_rubric_telemetry(action, observation)
         self._state.final_score = float(observation.reward)
         return self._apply_transform(observation)
 
@@ -673,11 +677,8 @@ class InsuranceClaimEnvironment(
             queried_claims=self._queried_claims,
             agent_confidence=self._agent_confidence,
             ground_truth_confidence=task.ground_truth_confidence,
+            calibration_override=self._calibration_score,
         )
-
-        # Override calibration_score with DebateFloor 3x2 matrix value when available
-        if self._calibration_score is not None:
-            reward_breakdown.calibration_score = self._calibration_score
 
         return InsuranceClaimObservation(
             claim_id=self._payload["claim_id"],
@@ -699,6 +700,8 @@ class InsuranceClaimEnvironment(
             confidence_required=True,
             done=self._state.done,
             reward=reward_breakdown.total,
+            rubric_reward=0.0,
+            rubric_components={},
             metadata={
                 "last_action_error": self._state.last_action_error,
                 "investigation_targets": self._investigation_targets,
@@ -717,6 +720,23 @@ class InsuranceClaimEnvironment(
             reward_breakdown=reward_breakdown,
             debate_transcript=deepcopy(self._debate_transcript),
         )
+
+    def _sync_rubric_telemetry(
+        self,
+        action: InsuranceClaimAction,
+        observation: InsuranceClaimObservation,
+    ) -> None:
+        rubric_reward = self._apply_rubric(action, observation)
+        observation.rubric_reward = float(rubric_reward)
+
+        if self.rubric is not None and hasattr(self.rubric, "component_scores"):
+            component_scores = self.rubric.component_scores()
+            observation.rubric_components = dict(component_scores)
+            self._last_rubric_components = dict(component_scores)
+            observation.metadata["rubric_components"] = dict(component_scores)
+        else:
+            self._last_rubric_components = {}
+            observation.metadata["rubric_components"] = {}
 
 
 def available_task_ids() -> List[str]:

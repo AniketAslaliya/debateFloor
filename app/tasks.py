@@ -769,6 +769,7 @@ def compute_reward_breakdown(
     queried_claims: Optional[set] = None,
     agent_confidence: Optional[float] = None,
     ground_truth_confidence: float = 1.0,
+    calibration_override: Optional[float] = None,
 ) -> InsuranceClaimReward:
     expected = set(expected_signals)
     found = set(found_signals)
@@ -812,7 +813,10 @@ def compute_reward_breakdown(
 
     # --- Calibration: only scored when a final decision is made ---
     if final_decision is not None:
-        calibration_score = score_calibration(agent_confidence, ground_truth_confidence)
+        if calibration_override is not None:
+            calibration_score = calibration_override
+        else:
+            calibration_score = score_calibration(agent_confidence, ground_truth_confidence)
     else:
         calibration_score = 0.0
 

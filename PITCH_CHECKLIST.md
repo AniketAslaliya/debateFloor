@@ -18,9 +18,9 @@
 - [ ] Create README figure: Confidence Distribution table (if training complete)
 
 ### Day 2 — April 23
-- [ ] **CRITICAL**: Download reward_curve.png from WandB → save to docs/reward_curve.png
-- [ ] Verify README.md image reference: `![WandB Reward Curve](docs/reward_curve.png)` renders correctly
-- [ ] Git commit + push reward curve file
+- [ ] **CRITICAL**: Download reward_curve.png and component_shift.png from the run → save to docs/
+- [ ] Verify README.md image references for both plots render correctly
+- [ ] Git commit + push training artifacts
 - [ ] Final validation: re-run `python pre_validation_script.py --base-url https://aniketasla-debatefloor.hf.space`
 
 ### Day 3 — April 24 (Buffer Day)
@@ -75,7 +75,7 @@
 ### Reward Curve (Target: 16/20)
 - [ ] **Training Results**: GRPO on Qwen2.5-0.5B, T4 GPU, 100 episodes × 2 epochs
 - [ ] **Metrics**: Loss curve + confidence distribution shift (HIGH 82%→44%, MED 12%→36%, LOW 6%→20%)
-- [ ] **Visualization**: WandB screenshot or docs/reward_curve.png in README
+- [ ] **Visualization**: WandB screenshot or docs/component_shift.png in README
 - [ ] **Interpretation**: Model learns WHEN to be confident, not just what to say
 
 ### Pipeline & Reproducibility (Target: 9/10)
@@ -174,7 +174,7 @@ A: It can. The panel is optional. But optimal play involves reading the adversar
 
 ## Before You Leave for Bangalore (Checklist)
 
-- [ ] Reward curve screenshot saved and committed
+- [ ] Training plots saved and committed
 - [ ] README.md renders correctly in browser
 - [ ] HF Space /ui loads without errors
 - [ ] Pre-validation script passes: `python pre_validation_script.py --base-url https://aniketasla-debatefloor.hf.space`
@@ -197,7 +197,7 @@ python inference_debatefloor.py --task contradictory_claim --base-url https://an
 python inference_debatefloor.py --task distribution_shift_claim --base-url https://aniketasla-debatefloor.hf.space
 
 # 3. Verify reward curve in README
-grep -i "reward_curve.png" README.md
+grep -Ei "reward_curve.png|component_shift.png" README.md
 
 # 4. Verify git is clean
 git status  # should be: nothing to commit, working tree clean

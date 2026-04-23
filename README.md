@@ -32,15 +32,32 @@ pinned: true
 
 - **Live OpenEnv Space:** https://huggingface.co/spaces/AniketAsla/debatefloor
 - **Visual demo:** https://aniketasla-debatefloor.hf.space/ui
-- **Mini-blog:** pending publication from `docs/HFBlogPost.md`
-- **Training plot:** `docs/reward_curve.png` after the Colab run
-- **HTTP rollout report:** `reports/http_rollout_eval.md` after running `scripts/evaluate_http_rollouts.py`
+- **Mini-blog draft (repo):** [docs/HFBlogPost.md](docs/HFBlogPost.md)
+- **Short presentation deck:** [docs/PITCH_DECK.md](docs/PITCH_DECK.md)
+- **Training plot (loss + reward):** [docs/reward_curve.png](docs/reward_curve.png)
+- **Component shift plot:** [docs/component_shift.png](docs/component_shift.png)
+- **Training run logs:** [reports/training_summary.json](reports/training_summary.json)
+- **Component shift summary:** [reports/component_shift_summary.json](reports/component_shift_summary.json)
+- **HTTP rollout report:** [reports/http_rollout_eval.md](reports/http_rollout_eval.md)
+
+---
+
+## Quick Tour For Reviewers
+
+If you only have 3 to 5 minutes, this is the shortest path:
+
+1. Open the live demo: https://aniketasla-debatefloor.hf.space/ui
+2. Run `contradictory_claim` first. It shows the full investigation flow, the debate panel, and a calibrated terminal decision.
+3. Then open [docs/component_shift.png](docs/component_shift.png) and [docs/reward_curve.png](docs/reward_curve.png) to see what changed after training.
+4. If you want the full picture, skim the sections below in this order: What is DebateFloor, Training Signals, Why This Matters.
 
 ---
 
 ## What is DebateFloor?
 
 Standard RL environments reward **what** an agent decides. DebateFloor rewards **how confidently** it decides — and whether that confidence was warranted.
+
+The environment also exposes a composable rubric hierarchy, so the final score is not a black box: training and evaluation can inspect `rubric_reward` and `rubric_components` alongside the terminal reward.
 
 Before every terminal action (`approve_claim`, `deny_claim`, `escalate_to_human`), the agent must declare a confidence level: **HIGH**, **MED**, or **LOW**. The reward is then determined by a 3×2 calibration matrix:
 
@@ -363,9 +380,19 @@ if HIGH_rate > 80% across 10+ episodes:
 
 Training via `train/train_minimal.py` — Qwen2.5-0.5B, TRL GRPOTrainer, T4 GPU, ~15 min:
 
-### GRPO Reward Curve
+### GRPO Training Signals
+
+Training via `train/train_minimal.py` now saves both the reward curve and the component-shift eval summary.
 
 ![WandB Reward Curve](docs/reward_curve.png)
+
+The saved curve includes both training loss and mean reward from a real run.
+
+### Component Score Shift
+
+![Component score shift before vs after training](docs/component_shift.png)
+
+This plot compares the held-out validation sweep before and after training across fraud detection, decision accuracy, evidence grounding, and calibration.
 
 ### Confidence Distribution — Before vs After GRPO
 
@@ -393,7 +420,7 @@ The training notebook (`train/train_debatefloor.ipynb`) uses:
 - **Model:** `unsloth/Qwen2.5-1.5B-Instruct` (free Colab T4 compatible)
 - **Trainer:** TRL `GRPOTrainer` with custom `env_reward_fn`
 - **Dataset:** `generate_episode_pool(200)` — procedurally generated, never repeats
-- **Logging:** WandB for public reward curves
+- **Logging:** WandB for public training signals
 
 ```python
 from trl import GRPOTrainer, GRPOConfig
@@ -412,7 +439,9 @@ The minimal TRL script (`train/train_minimal.py`) saves local artifacts after
 training so the submission does not depend only on notebook output:
 
 - `docs/reward_curve.png`
+- `docs/component_shift.png`
 - `reports/training_summary.json`
+- `reports/component_shift_summary.json`
 
 ---
 

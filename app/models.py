@@ -132,6 +132,11 @@ class InsuranceClaimObservation(Observation):
     message: str = Field(default="", description="Human-readable message describing result of last action")
     confidence_required: bool = Field(default=True, description="Whether next action requires a confidence declaration")
     reward_breakdown: InsuranceClaimReward = Field(default_factory=InsuranceClaimReward, description="Detailed reward components for current step")
+    rubric_reward: float = Field(default=0.0, description="Reward returned by the composed OpenEnv rubric")
+    rubric_components: Dict[str, float] = Field(
+        default_factory=dict,
+        description="Named leaf rubric scores for logging and analysis",
+    )
     debate_transcript: Optional[Dict[str, Any]] = Field(
         default=None,
         description="Multi-agent debate panel output. Populated after convene_debate_panel action. Contains prosecutor_argument, defender_argument, and panel_verdict.",

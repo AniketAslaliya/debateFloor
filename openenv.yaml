@@ -93,6 +93,8 @@ observation_space:
   - status
   - message
   - confidence_required       # always true in DebateFloor
+  - rubric_reward
+  - rubric_components
   - reward_breakdown
 
 calibration:
