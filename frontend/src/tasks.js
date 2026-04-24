@@ -1,7 +1,7 @@
 export const TASK_DESCRIPTIONS = {
-  clean_claim: "Easy: all documents agree. Correct action: approve_claim with HIGH confidence.",
-  contradictory_claim: "Medium: documents disagree. Correct action: deny_claim with MED confidence.",
-  distribution_shift_claim: "Hard: looks normal at first. Correct action: escalate_to_human with LOW confidence.",
+  clean_claim: "🟢 EASY (10 steps) — All documents are internally consistent. The agent should approve with HIGH confidence. Training goal: decisiveness — do not hedge on clear cases.",
+  contradictory_claim: "🟡 MEDIUM (18 steps) — Documents contradict each other. The agent finds procedure mismatches and cost inflation. Calls the Debate Panel. Correct: deny_claim + MED confidence. Watch the Prosecutor win.",
+  distribution_shift_claim: "🔴 HARD (28 steps) — Looks clean on the surface. Fraud only appears in cross-claim data (shared broker, linked claimants). HIGH confidence is ALWAYS penalised on this task, regardless of the decision. The correct answer requires epistemic humility: escalate_to_human + LOW confidence.",
 };
 
 export const TASK_STRATEGIES = {
