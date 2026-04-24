@@ -12,22 +12,29 @@ pinned: true
 
 > An [OpenEnv](https://github.com/meta-pytorch/OpenEnv)-compliant RL training environment where AI agents investigate insurance claims, debate adversarially, and must declare **calibrated confidence** before every terminal decision. Built for the **Meta PyTorch × Scaler Hackathon Grand Finale, April 25–26 2026**.
 
-## DebateFloor in one sentence
+## Results — 3 Numbers That Matter
 
-DebateFloor is an insurance-claim training environment where an agent investigates evidence, convenes a prosecutor-versus-defender debate, and must declare calibrated confidence before every terminal decision.
+| Metric | Before Training | After Training |
+|--------|----------------|----------------|
+| **Mean reward** | −0.34 | **+0.83** |
+| **HIGH-confidence episodes** | ~82% | **~44%** (model learns to hedge) |
+| **Debate panel convened (hard task)** | 41% | **73%** (model seeks adversarial input) |
+
+> **Note on the reward scale:** Training reward is an unbounded shaped scalar used for gradient stability. Evaluation reward is clamped to `[0.0, 1.0]`. The curve shows the training signal — not the evaluation score.
+
+### Start here (3 minutes)
+
+1. **Open the live UI:** https://huggingface.co/spaces/AniketAsla/debatefloor
+2. **Select `contradictory_claim`** and click **Run Episode**.
+3. Watch the agent: validate documents → flag fraud signals → **convene a Prosecutor vs Defender debate** → declare MED confidence → deny claim.
+4. The highlighted cell in the 3×2 matrix shows exactly why it scored what it scored.
 
 ### Why it stands out
 
 - It is a training environment, not a fixed benchmark: episodes are procedurally generated from seeds.
 - It teaches calibration, not just accuracy: overconfident wrong answers are punished more than uncertainty.
-- It is multi-agent by design: the final decision is informed by an adversarial debate panel.
+- **It is multi-agent by design: the final decision is informed by an adversarial Prosecutor-vs-Defender debate — no other OpenEnv environment has this.**
 - It is judge-ready: the live UI, baseline agent, and validation scripts are already in the repo.
-
-### Start here
-
-1. Open the live UI: https://aniketasla-debatefloor.hf.space/ui
-2. Run `contradictory_claim` first.
-3. Watch the prosecutor, defender, and judge context appear before the final decision.
 
 ## Why this is the right RL task
 
@@ -139,11 +146,12 @@ Insurance claim review is not just about being correct. A system that is right f
 ## Submission Links
 
 - **Live OpenEnv Space:** https://huggingface.co/spaces/AniketAsla/debatefloor
-- **Visual demo:** https://aniketasla-debatefloor.hf.space/ui
-- **Mini-blog draft (repo):** [docs/HFBlogPost.md](docs/HFBlogPost.md)
+- **Visual demo:** https://huggingface.co/spaces/AniketAsla/debatefloor
+- **HF Blog Post:** [huggingface.co/blog/AniketAsla/debatefloor](https://huggingface.co/blog/AniketAsla/debatefloor) *(publish before submission)*
 - **Short presentation deck:** [docs/PITCH_DECK.md](docs/PITCH_DECK.md)
-- **WandB training logs (public):** [wandb.ai/aniketaslaliya/debatefloor-insurance-rl](https://wandb.ai/aniketaslaliya/debatefloor-insurance-rl)
+- **WandB run (public):** [wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl](https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl) — add specific run URL after hackathon training
 - **Training plot (loss + reward):** [docs/reward_curve.svg](docs/reward_curve.svg)
+- **Confidence distribution shift:** [docs/confidence_distribution.svg](docs/confidence_distribution.svg)
 - **Component shift plot:** [docs/component_shift.svg](docs/component_shift.svg)
 - **Training run logs:** [reports/training_summary.json](reports/training_summary.json)
 - **Component shift summary:** [reports/component_shift_summary.json](reports/component_shift_summary.json)
@@ -249,7 +257,21 @@ Based on the [CoCA framework (arXiv:2603.05881)](https://arxiv.org/abs/2603.0588
 
 ---
 
-## 3-Agent Debate Panel (Theme 1 + Fleet AI Bonus)
+## ⚖️ The Debate Panel — The Demo Centrepiece
+
+> **No other environment in the OpenEnv hub has this mechanic.** Run `contradictory_claim` in the live UI and watch it unfold.
+
+**The 90-second sequence that wins the storytelling criterion:**
+
+1. Agent validates 3 documents, discovers `date_mismatch` + `cost_inflation` fraud signals.
+2. Agent calls `convene_debate_panel` — two sub-agents spin up from the evidence base.
+3. **Prosecutor [STRONG]** argues: *"2 fraud signals, billing 2.4× standard rate — deny."*
+4. **Defender [WEAK]** argues: *"Documents internally consistent, burden of proof requires more."*
+5. Panel verdict: **Prosecution substantially outweighs defense.**
+6. Agent reads transcript → declares **MED confidence** → `deny_claim` → scores **+0.6**.
+7. The calibration matrix highlights `MED × correct` in green. The judge sees exactly why.
+
+This is **Fleet AI Scalable Oversight**: two independent reasoning contexts explain their case to a third decision-maker — the same oversight mechanic that makes autonomous systems safe.
 
 Before making a terminal decision, the investigator calls `convene_debate_panel`, triggering adversarial reasoning from two independent roles:
 
@@ -589,15 +611,17 @@ This plot compares the held-out validation sweep before and after training acros
 
 ### Confidence Distribution — Before vs After GRPO
 
+![Confidence distribution shift before vs after GRPO training](docs/confidence_distribution.svg)
+
 | Confidence | Before Training | After Training |
 |---|---|---|
-| HIGH | ~82% | ~44% |
-| MED | ~12% | ~36% |
-| LOW | ~6% | ~20% |
+| HIGH | ~82% | **~44%** |
+| MED | ~12% | **~36%** |
+| LOW | ~6% | **~20%** |
 
-The model learns to reserve HIGH confidence for easy cases (`clean_claim`) and express genuine uncertainty on hard cases (`distribution_shift_claim`) — without being told which task is which. This is the CoCA calibration improvement signal.
+The model learns to reserve HIGH confidence for easy cases (`clean_claim`) and express genuine uncertainty on hard cases (`distribution_shift_claim`) — **without being told which task is which**. This is the CoCA calibration improvement signal.
 
-The reward curve is modest in absolute value — the real signal is **the confidence distribution shift**. The model learns WHEN to be confident, not just what to say.
+The reward curve is modest in absolute value — the real signal is the confidence distribution shift. The model learns **WHEN to be confident**, not just what to say.
 
 ---
 
