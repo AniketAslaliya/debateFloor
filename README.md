@@ -8,9 +8,30 @@ app_port: 7860
 pinned: true
 ---
 
-# DebateFloor — Insurance Calibration RL Environment
+# 🏛️ DebateFloor — Insurance Calibration RL Environment
+
+![Tests](https://img.shields.io/badge/Tests-Passing-brightgreen)
+![Live Demo](https://img.shields.io/badge/Live%20Demo-Hugging%20Face-orange)
+![Based on](https://img.shields.io/badge/Based%20on-CoCA%20arXiv%3A2603.05881-red)
 
 > An [OpenEnv](https://github.com/meta-pytorch/OpenEnv)-compliant RL training environment where AI agents investigate insurance claims, debate adversarially, and must declare **calibrated confidence** before every terminal decision. Built for the **Meta PyTorch × Scaler Hackathon Grand Finale, April 25–26 2026**.
+
+---
+
+## 💡 The Big Idea (Pitch)
+
+### 🤖 Explain Like I'm 6
+Imagine a robot that helps you make big decisions. But sometimes, this robot is **too bossy**—it says *"I am 100% sure!"* even when it's actually making a mistake. That’s dangerous! 
+
+**DebateFloor** teaches the robot to be **honest**. We give the robot points for being right, but we take away **lots of points** if it acts too sure of itself and then gets it wrong. It’s like teaching a kid to say *"I think so"* instead of *"I KNOW IT!"* when they aren't really sure.
+
+### 🏆 Why it Wins (The Judge's Pitch)
+*   **The Problem:** LLMs are "overconfident." They give wrong answers with 100% certainty.
+*   **The Solution:** We train models on a **Calibration Matrix**. We reward **Epistemic Humility** (knowing what you don't know).
+*   **The Innovation:** The **Adversarial Debate Panel**. Instead of the AI thinking alone, it uses a multi-agent debate (Prosecutor vs Defender) to weigh evidence.
+*   **The Impact:** In Insurance Fraud (a ₹30K crore problem), this prevents expensive mistakes and builds trust in AI.
+
+---
 
 ## Results — 3 Numbers That Matter
 
@@ -712,11 +733,28 @@ environment internals. No MCP tools are exposed with reserved names such as
 
 ---
 
+## 🏛️ Technical Architecture (Pillar Breakdown)
+
+### 🏗️ Pillar 1: The Environment (`app/` & `server/`)
+*   **Procedural Generator**: `server/claim_generator.py` uses deterministic seeds to create 500+ unique insurance scenarios across 5 fraud types.
+*   **Multi-Agent Engine**: `app/environment.py` manages the session and generates the Adversarial Transcript where a Prosecutor and Defender argue based on evidence.
+*   **OpenEnv Gateway**: `app/main.py` serves the REST API and the React/Vite frontend.
+
+### ⚖️ Pillar 2: The Calibration Grader (`server/calibration_grader.py`)
+*   **3×2 Matrix**: Implements asymmetric scoring where **Wrong + HIGH Confidence** results in a severe **-0.8** penalty.
+*   **Anti-Gaming Logic**: Tracks "hedging" (too much LOW) or "brute-forcing" (too much HIGH) to force genuine calibration.
+
+### 🧠 Pillar 3: The Training Pipeline (GRPO)
+*   **Algorithm**: Group Relative Policy Optimization (DeepSeek-R1 style).
+*   **Stable Gradients**: Uses a simple `training_reward` (scalar) for the RL loop and a detailed `eval_reward` (6-component rubric) for reporting.
+
+---
+
 ## Team
 
-**Aniket Aslaliya** — environment core, claim generator, calibration grader
-**Mitali Mehta** — domain knowledge (fraud types, IRDAI regulations), grader design
-**Aditya Sharma** — training pipeline, GRPO notebook, WandB integration
+- **Aniket Aslaliya** — Environment Core, Claim Generator, Calibration Grader, UI
+- **Mitali Mehta** — Domain Knowledge (Fraud types, IRDAI regulations), Grader Design
+- **Aditya Sharma** — Training Pipeline, GRPO Notebook, WandB Integration
 
 ---
 
