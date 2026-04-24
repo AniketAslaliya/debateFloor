@@ -58,6 +58,8 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+.tmp-ci-venv*/
+.tmp-ci-venv-*/
 
 # mypy
 .mypy_cache/
