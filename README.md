@@ -33,6 +33,13 @@ Imagine a robot that helps you make big decisions. But sometimes, this robot is 
 
 ---
 
+## 🏆 Submission Artifacts
+*   **WandB Training Run:** [vloynjdu (Qwen2.5-0.5B-Instruct)](https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl/runs/vloynjdu)
+*   **Trained Model:** [AniketAsla/debatefloor-grpo-qwen2.5-0.5b-instruct](https://huggingface.co/AniketAsla/debatefloor-grpo-qwen2.5-0.5b-instruct)
+*   **Live Space:** [AniketAsla/debatefloor](https://huggingface.co/spaces/AniketAsla/debatefloor)
+
+---
+
 ## Results — 3 Numbers That Matter
 
 | Metric | Before Training | After Training |
