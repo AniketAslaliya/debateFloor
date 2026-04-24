@@ -4,7 +4,25 @@
 
 ---
 
-## 1. What Is DebateFloor (30-second pitch)
+## 0. The "6-Year-Old" Breakdown (The Pitch)
+
+### 🤖 The Idea (Explain like I'm 6)
+Imagine a robot that helps you make big decisions. But sometimes, this robot is **too bossy**—it says *"I am 100% sure!"* even when it's actually making a mistake. That’s dangerous! 
+
+Our project, **DebateFloor**, teaches the robot to be **honest**. We give the robot points for being right, but we take away **lots of points** if it says *"I am 100% sure!"* and then gets it wrong. It’s like teaching a kid to say *"I think so"* instead of *"I KNOW IT!"* when they aren't really sure.
+
+### ⚖️ The "Debate" Trick
+To help the robot decide, we let two other robots argue like lawyers! One robot (the **Prosecutor**) tries to find reasons why something is bad, and another robot (the **Defender**) tries to find reasons why it’s good. Our main robot listens to both of them before making its final, honest choice.
+
+### 🏆 Why it Wins (The Judge's Pitch)
+*   **The Problem:** AI models are "overconfident." They give wrong answers with 100% certainty.
+*   **The Solution:** We train models on a **Calibration Matrix**. We reward **Epistemic Humility** (knowing what you don't know).
+*   **The Innovation:** The **Adversarial Debate Panel**. Instead of the AI thinking alone, it uses a multi-agent debate to weigh evidence.
+*   **The Impact:** In Insurance Fraud (a ₹30K crore problem), this prevents expensive mistakes and builds trust in AI.
+
+---
+
+## 1. What Is DebateFloor (30-second technical pitch)
 
 DebateFloor trains LLMs to declare **calibrated confidence** before every insurance claim decision. The core innovation: a 3×2 calibration matrix where being *wrong and overconfident* (HIGH + wrong = **−0.8**) is far worse than being *wrong but humble* (LOW + wrong = **0.0**). This teaches the model **when to be confident**, not just what to say — directly fixing the overconfidence problem proven by the CAPO paper (April 2026).
 
