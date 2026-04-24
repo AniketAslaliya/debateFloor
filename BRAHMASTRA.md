@@ -1,4 +1,9 @@
-# DebateFloor — Complete Project Reference (Brahmastra)
+# 🏛️ DebateFloor — Complete Project Reference (Brahmastra)
+
+![Tests](https://img.shields.io/badge/Tests-Passing-brightgreen)
+![Live Demo](https://img.shields.io/badge/Live%20Demo-Hugging%20Face-orange)
+![Based on](https://img.shields.io/badge/Based%20on-CoCA%20arXiv%3A2603.05881-red)
+
 > **Read this file first, every time. It is the single source of truth.**
 > Last updated: April 24, 2026 — Hackathon eve.
 
@@ -313,7 +318,36 @@ python inference_debatefloor.py --task contradictory_claim --base-url https://an
 
 ---
 
-## 14. Team
+## 15. Technical Deep Dive (Pipelines & Flows)
+
+### 🔄 The High-Level Flow
+1.  **Claim Generation:** The system procedurally generates a claim (from 500+ possibilities).
+2.  **Agent Investigation:** The agent (the Judge) uses tools to look at documents and history.
+3.  **Adversarial Debate:** On hard cases, the agent triggers the **Debate Panel**.
+4.  **Calibrated Decision:** The agent makes a choice and declares its confidence (HIGH, MED, or LOW).
+5.  **Calibration Grading:** The reward function checks both the decision AND the confidence against a **3×2 Matrix**.
+
+### 🏗️ Code Workflow: The Three Pillars
+*   **The Environment (`app/` & `server/`)**: 
+    *   `server/claim_generator.py` uses deterministic seeds to create unique scenarios.
+    *   `app/environment.py` manages the session and generates the Prosecutor/Defender arguments.
+    *   `app/main.py` serves the OpenEnv REST API and the React frontend.
+*   **The Grader (`server/calibration_grader.py`)**: 
+    *   Implements the asymmetric scoring (HIGH+wrong = -0.8).
+    *   Includes **Anti-Gaming Logic** to prevent hedging or brute-forcing.
+*   **The Training Pipeline (GRPO)**: 
+    *   Uses **Group Relative Policy Optimization** (DeepSeek-R1 style).
+    *   **training_reward**: Simple scalar for stable gradients.
+    *   **eval_reward**: 6-component rubric for visualization and judge reporting.
+
+### ✅ Validation & Reliability
+*   **Pre-Validation Script**: A "Black Box" tester hitting the live URL to simulate episodes and verify reward math.
+*   **Unit Tests**: 40+ tests ensuring the generator and grader are mathematically sound.
+*   **Concurrency**: Supports 64+ parallel environments as per `openenv.yaml`.
+
+---
+
+## 16. Team
 
 - **Aniket Aslaliya** — environment core, claim generator, calibration grader, UI
 - **Mitali Mehta** — domain knowledge (fraud types, IRDAI regulations), grader design
