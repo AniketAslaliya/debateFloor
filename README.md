@@ -146,16 +146,18 @@ Insurance claim review is not just about being correct. A system that is right f
 ## Submission Links
 
 - **Live OpenEnv Space:** https://huggingface.co/spaces/AniketAsla/debatefloor
-- **Visual demo:** https://huggingface.co/spaces/AniketAsla/debatefloor
-- **HF Blog Post:** [huggingface.co/blog/AniketAsla/debatefloor](https://huggingface.co/blog/AniketAsla/debatefloor) *(publish before submission)*
+- **Visual demo (React UI):** https://huggingface.co/spaces/AniketAsla/debatefloor
+- **Mini-blog (Markdown in repo):** [docs/HFBlogPost.md](docs/HFBlogPost.md) — *per organizer note: HF blog = markdown article in repo*
+- **Training notebook (Colab):** [train/train_debatefloor.ipynb](https://github.com/AniketAslaliya/debateFloor/blob/main/train/train_debatefloor.ipynb) — Qwen2.5-1.5B, Unsloth 4-bit, T4 GPU, ~45 min
+- **Minimal training script (no Unsloth):** [train/train_minimal.py](train/train_minimal.py) — pure TRL, runs in 15 min on T4
 - **Short presentation deck:** [docs/PITCH_DECK.md](docs/PITCH_DECK.md)
-- **WandB run (public):** [wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl](https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl) — add specific run URL after hackathon training
-- **Training plot (loss + reward):** [docs/reward_curve.svg](docs/reward_curve.svg)
+- **WandB project (public):** [wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl](https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl) — add specific run URL after hackathon training
+- **Training reward curve:** [docs/reward_curve.svg](docs/reward_curve.svg)
 - **Confidence distribution shift:** [docs/confidence_distribution.svg](docs/confidence_distribution.svg)
 - **Component shift plot:** [docs/component_shift.svg](docs/component_shift.svg)
-- **Training run logs:** [reports/training_summary.json](reports/training_summary.json)
-- **Component shift summary:** [reports/component_shift_summary.json](reports/component_shift_summary.json)
-- **HTTP rollout report:** [reports/http_rollout_eval.md](reports/http_rollout_eval.md)
+- **Training run logs (JSON):** [reports/training_summary.json](reports/training_summary.json)
+- **Component shift summary (JSON):** [reports/component_shift_summary.json](reports/component_shift_summary.json)
+- **HTTP rollout eval report:** [reports/http_rollout_eval.md](reports/http_rollout_eval.md)
 
 ## Architecture
 
