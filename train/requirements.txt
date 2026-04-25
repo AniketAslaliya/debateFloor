@@ -1,4 +1,7 @@
 trl>=0.12.0
+# TRL 0.2x: grpo_trainer import chain loads mergekit_utils — without mergekit, Colab
+# fails with: ModuleNotFoundError: No module named 'mergekit'
+mergekit
 transformers>=4.46.0
 peft>=0.12.0
 accelerate>=0.34.0

@@ -297,6 +297,10 @@ pip install -r train/requirements.txt    # training deps (trl, unsloth, peft, wa
 
 # Optional (Colab T4): swap the pinned unsloth for the colab-new wheel
 # pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"
+#
+# If you see: ModuleNotFoundError: No module named 'mergekit' when importing
+# GRPOTrainer — you skipped train/requirements.txt. Re-run: pip install -r train/requirements.txt
+# (mergekit is required by recent TRL for the GRPO import path.)
 
 PYTHONPATH=. python train/train_minimal.py
 ```
