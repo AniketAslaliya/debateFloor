@@ -74,9 +74,26 @@ def _hb(label: str) -> None:
     print(f"[heartbeat +{mm:02d}:{ss:02d}] {label}")
 
 
-# ── [1/6] Ensure the repo root is on sys.path and deps are installed ────────
-REPO_ROOT = Path(__file__).resolve().parent.parent
-os.chdir(REPO_ROOT)
+# ── [0/6] Bootstrap the repo (when running as a one-shot script) ────────────
+# When this file is executed via `python -c "exec(...)"` or downloaded as a
+# raw script, it has no surrounding repo. Detect that and `git clone` ourselves
+# so the rest of the script sees the real layout.
+_BOOTSTRAP_MARKER = Path(__file__).resolve().parent.parent / "app" / "main.py"
+if not _BOOTSTRAP_MARKER.exists():
+    print("[0/6] Bootstrap: no repo on disk, cloning from GitHub", flush=True)
+    _clone_dir = Path("/tmp/debatefloor")
+    if not _clone_dir.exists():
+        subprocess.check_call(
+            ["git", "clone", "--depth", "1",
+             "https://github.com/AniketAslaliya/debateFloor.git",
+             str(_clone_dir)]
+        )
+    os.chdir(_clone_dir)
+    REPO_ROOT = _clone_dir
+else:
+    REPO_ROOT = Path(__file__).resolve().parent.parent
+    os.chdir(REPO_ROOT)
+
 sys.path.insert(0, str(REPO_ROOT))
 
 _hb("driver script started")
