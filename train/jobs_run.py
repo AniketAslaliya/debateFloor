@@ -114,6 +114,66 @@ _pip_install("-r", "requirements.txt")
 _hb("installed root requirements.txt")
 _pip_install("-r", "train/requirements.txt")
 _hb("installed train/requirements.txt")
+
+# ── [1.5/6] Sanity-check critical imports BEFORE we boot the env + load model.
+# This catches torch/torchvision ABI mismatches and trl version drift in 5s
+# instead of after a 90s model download. Costs nothing if everything is fine.
+print("\n  Sanity-checking critical imports...")
+_failed = []
+for _mod, _from in [
+    ("torch", None),
+    ("torchvision", None),  # critical: must match torch ABI
+    ("transformers", "PreTrainedModel"),  # forces full transformers init
+    ("trl", "GRPOConfig"),  # forces grpo_trainer import (which pulls torchvision)
+    ("peft", "LoraConfig"),
+    ("accelerate", "Accelerator"),
+    ("datasets", "Dataset"),
+    ("wandb", None),
+]:
+    try:
+        if _from:
+            _m = __import__(_mod, fromlist=[_from])
+            getattr(_m, _from)
+        else:
+            __import__(_mod)
+        try:
+            _v = __import__(_mod).__version__
+        except Exception:
+            _v = "?"
+        print(f"    ok  {_mod:14s} {_v}")
+    except Exception as _e:
+        print(f"    FAIL {_mod:14s} → {type(_e).__name__}: {_e}")
+        _failed.append((_mod, _from, _e))
+
+if _failed:
+    # Last-ditch self-heal: if torchvision is the problem, try reinstalling the
+    # version that matches the torch already on disk. This rescues runs where
+    # the requirements.txt pin somehow didn't take effect.
+    _tv_failed = any("torchvision" in str(e[2]) or e[0] == "torchvision" for e in _failed)
+    if _tv_failed:
+        try:
+            import torch as _torch  # noqa: PLC0415
+            _torch_v = _torch.__version__.split("+")[0]
+            print(
+                f"\n  Detected torchvision ABI mismatch with torch=={_torch_v}; "
+                "attempting self-heal..."
+            )
+            # torch 2.4.x ↔ torchvision 0.19.x; torch 2.5.x ↔ 0.20.x; torch 2.6.x ↔ 0.21.x
+            _tv_pin = {
+                "2.4": "0.19.0",
+                "2.5": "0.20.0",
+                "2.6": "0.21.0",
+            }.get(_torch_v[:3], "0.19.0")
+            _pip_install("--force-reinstall", "--no-deps", f"torchvision=={_tv_pin}")
+            print(f"  Reinstalled torchvision=={_tv_pin}")
+        except Exception as _heal_exc:
+            print(f"  Self-heal failed: {_heal_exc}")
+            raise SystemExit(1)
+    else:
+        raise SystemExit(1)
+
+print("  All critical imports OK.\n")
+_hb("import sanity check passed")
 print("  Deps installed.\n")
 
 

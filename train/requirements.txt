@@ -1,20 +1,31 @@
 # Training deps for DebateFloor GRPO on HF Jobs.
 # Tested image: pytorch/pytorch:2.4.0-cuda12.1-cudnn9-runtime
-# (PyTorch 2.4, CUDA 12.1, Python 3.11)
+# (PyTorch 2.4.0, torchvision 0.19.0, CUDA 12.1, Python 3.11)
 
 # Core RL trainer.
 # - GRPO was added in trl 0.13 (Jan 2025) and the GRPOConfig API used in
 #   train/train_minimal.py (processing_class, reward_funcs, num_generations,
 #   max_completion_length, max_prompt_length) stabilized in 0.15.
-# - Cap below 0.20 to avoid the trl-0.20 mergekit-required behavior.
-trl>=0.15.0,<0.20.0
+# - Cap below 0.20 to keep transformers requirement at 4.48 (avoids needing
+#   torch>=2.5 which the base image doesn't have).
+trl>=0.15.0,<0.18.0
 
-# Model + LoRA. Pin transformers >=4.48 so it satisfies trl 0.15+ peer requirement.
-# (trl 0.15 needs transformers >= 4.48; trl 0.17 needs >= 4.50.)
-transformers>=4.48.0
+# transformers 4.48-4.49 are the sweet spot: trl 0.15 accepts them, and they
+# don't require torch>=2.5 the way 4.50+ does.
+transformers>=4.48.0,<4.50.0
+
+# CRITICAL: torchvision must match the torch ABI in the base image.
+# pytorch 2.4.0 ↔ torchvision 0.19.0. Without this, transformers' lazy import
+# of `image_utils → torchvision::nms` fails with `operator does not exist`.
+torchvision==0.19.0
+
+# Model + LoRA.
 peft>=0.13.0
-accelerate>=1.0.0
+accelerate>=1.0.0,<2.0.0
 datasets>=2.19.0
+
+# bitsandbytes prebuilt wheel for CUDA 12.x.
+bitsandbytes>=0.43.0
 
 # Logging / IO
 wandb>=0.17.0
@@ -28,5 +39,6 @@ uvicorn>=0.30.0
 openenv-core>=0.2.3
 
 # Unsloth 4-bit QLoRA (MR-3 hackathon constraint).
-# On HF Jobs L4 the standard wheel works.
+# unsloth-zoo is the runtime backend; pinning a recent stable version known to
+# work with torch 2.4.
 unsloth>=2024.10
