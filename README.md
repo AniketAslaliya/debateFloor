@@ -14,6 +14,7 @@ pinned: true
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-Hugging%20Face-orange)](https://huggingface.co/spaces/AniketAsla/debatefloor)
 [![Based on CoCA](https://img.shields.io/badge/Based%20on-CoCA%20arXiv%3A2603.05881-red)](https://arxiv.org/abs/2603.05881)
 [![WandB Run](https://img.shields.io/badge/WandB-Training%20Run-yellow)](https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl/runs/vloynjdu)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/AniketAslaliya/debateFloor/blob/main/train/train_debatefloor.ipynb)
 
 > An [OpenEnv](https://github.com/meta-pytorch/OpenEnv)-compliant RL training environment where AI agents investigate insurance claims, debate adversarially, and must declare **calibrated confidence** before every terminal decision.
 > Built for the **Meta PyTorch × Scaler Hackathon Grand Finale, April 25–26 2026**.
@@ -50,7 +51,7 @@ Insurance fraud costs India **₹30,000+ crore annually** (IRDAI 2023). Deployin
 | **HIGH-confidence episodes** | ~82% | **~44%** — model learns to hedge |
 | **Debate panel convened (hard task)** | 41% | **73%** — model seeks adversarial input |
 
-> **Note on reward scale:** Training reward is an unbounded shaped scalar for gradient stability. Evaluation reward is clamped to `[0.0, 1.0]`. The curve shows the training signal, not the evaluation score.
+> **Note on reward scale:** "Mean reward" in the training curve is the **raw GRPO training scalar** (unbounded — used for gradient stability). The before/after table uses the **six-component eval reward** clamped to `[0.0, 1.0]`. These are different numbers measuring different things — intentionally kept separate per `openenv.yaml:never_mix=true`.
 
 ### Training Plots
 

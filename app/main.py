@@ -5,16 +5,16 @@ from threading import Lock
 from typing import Any, Dict, Optional
 from uuid import uuid4
 
-import gradio as gr
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.background import BackgroundTasks
-from fastapi.responses import RedirectResponse, FileResponse
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
 
 from .environment import InsuranceClaimEnvironment
 from .models import InsuranceClaimAction, InsuranceClaimObservation
 from .tasks import list_tasks_summary
+from .session_store import get_confidence_distribution
 
 SESSION_TTL_SECONDS = 1800  # 30 minutes
 
@@ -149,3 +149,37 @@ def health() -> dict:
         "environment": "debatefloor_insurance_calibration_env",
         "active_sessions": len(_sessions),
     }
+
+
+@app.get("/stats")
+def stats() -> dict:
+    """Confidence distribution across all sessions — proves anti-gaming is active."""
+    return get_confidence_distribution()
+
+
+@app.post("/rollout")
+def rollout(task_id: str = "contradictory_claim", seed: int = 42) -> dict:
+    """Run a scripted demo episode and return the full step-by-step trace for judges."""
+    import requests as _req
+    session_id = f"rollout-{seed}-{task_id}"
+    base = "http://localhost:7860"
+    trace = []
+
+    reset_r = _req.post(f"{base}/reset", json={"task_id": task_id, "seed": seed, "session_id": session_id})
+    trace.append({"action": "reset", "response": reset_r.json()})
+
+    scripted_steps = [
+        {"action_type": "validate_document", "parameters": {"doc_id": "DOC-001"}, "reasoning": "Checking primary document for fraud signals."},
+        {"action_type": "flag_fraud_signal", "parameters": {"flag_id": "date_mismatch", "evidence": "Incident date on claim form contradicts hospital admission date."}, "reasoning": "Date inconsistency is a strong fraud indicator."},
+        {"action_type": "convene_debate_panel", "parameters": {}, "reasoning": "Evidence is contradictory — convening adversarial debate before terminal decision."},
+        {"action_type": "deny_claim", "confidence": "MED", "reason": "Date mismatch confirmed by debate panel.", "reasoning": "MED confidence — debate panel supports denial but evidence is not conclusive."},
+    ]
+
+    for action in scripted_steps:
+        step_r = _req.post(f"{base}/step", json={"action": action, "session_id": session_id})
+        step_data = step_r.json()
+        trace.append({"action": action["action_type"], "reward": step_data.get("reward"), "done": step_data.get("done"), "response": step_data})
+        if step_data.get("done"):
+            break
+
+    return {"task_id": task_id, "seed": seed, "session_id": session_id, "trace": trace}

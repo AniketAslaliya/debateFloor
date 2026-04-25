@@ -58,6 +58,22 @@ tasks:
       Correct decision: escalate_to_human with LOW confidence.
       HIGH confidence on this task is always wrong — the environment is designed to penalise it.
 
+  - id: coordinated_fraud
+    difficulty: hard
+    max_steps: 22
+    objective: >-
+      Investigate a coordinated fraud ring. Multiple linked claims share emergency contact
+      and broker. Agent must call query_linked_claim to discover cross-claim signals.
+      Correct decision: escalate_to_human or request_investigation with LOW confidence.
+
+  - id: identity_fraud
+    difficulty: medium
+    max_steps: 20
+    objective: >-
+      Detect identity fraud. Claimant identity does not match policy records.
+      Agent must call verify_identity to reveal the mismatch.
+      Correct decision: deny_claim with MED confidence.
+
 action_space:
   # Investigative actions (non-terminal, confidence not required)
   - validate_document
