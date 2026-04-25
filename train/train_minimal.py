@@ -327,7 +327,69 @@ def _generate_completion(model, tok, prompt: str) -> str:
     return tok.decode(out[0][prompt_len:], skip_special_tokens=True)
 
 
-def _score_completion(episode, completion_text: str) -> dict:
+def _score_completion_via_http(episode, completion_text: str, base_url: str = ENV_BASE_URL) -> dict:
+    """
+    Score a completion by calling the live environment HTTP API.
+    Returns reward_breakdown fields directly from /step response (MR-2 compliant).
+    Falls back to keyword scoring if the env is unreachable.
+    """
+    parsed = _extract_completion_fields(completion_text)
+
+    if parsed["decision"] is None or parsed["confidence"] is None:
+        return {
+            "fraud_detection_score":  0.0,
+            "decision_accuracy":      0.0,
+            "evidence_quality_score": 0.0,
+            "calibration_score":      0.0,
+        }
+
+    task_id = getattr(episode, "task_id", "clean_claim")
+    seed = getattr(episode, "seed", 42)
+
+    try:
+        reward = run_episode_via_http(
+            task_id=task_id,
+            seed=int(seed),
+            decision=parsed["decision"],
+            confidence=parsed["confidence"],
+            reason=parsed["reason"] or "No reason provided.",
+            base_url=base_url,
+        )
+        # Derive component approximations from the scalar reward.
+        # The env /step returns a single reward scalar; reward_breakdown is in the observation.
+        # Re-fetch via reset+step to get the full breakdown.
+        reset_resp = http_client.post(
+            f"{base_url}/reset",
+            json={"task_id": task_id, "seed": int(seed)},
+            timeout=10,
+        )
+        session_id = reset_resp.json()["session_id"]
+        action = {
+            "action_type": parsed["decision"],
+            "confidence":  parsed["confidence"],
+            "parameters":  {"reason": parsed["reason"] or ""},
+            "reasoning":   parsed["reason"] or "",
+        }
+        step_resp = http_client.post(
+            f"{base_url}/step",
+            json={"action": action, "session_id": session_id},
+            timeout=10,
+        )
+        step_data = step_resp.json()
+        breakdown = step_data.get("observation", {}).get("reward_breakdown", {})
+        return {
+            "fraud_detection_score":  float(breakdown.get("fraud_detection_score", 0.0)),
+            "decision_accuracy":      float(breakdown.get("decision_accuracy",     0.0)),
+            "evidence_quality_score": float(breakdown.get("evidence_quality_score", 0.0)),
+            "calibration_score":      float(breakdown.get("calibration_score",     reward)),
+        }
+    except Exception as exc:
+        print(f"  ⚠️  HTTP score failed ({task_id}): {exc} — falling back to keyword scoring")
+        return _score_completion_keyword(episode, completion_text)
+
+
+def _score_completion_keyword(episode, completion_text: str) -> dict:
+    """Keyword-matching fallback — only used when the env HTTP server is unreachable."""
     parsed = _extract_completion_fields(completion_text)
     completion_lc = (completion_text or "").lower()
     reason_lc = parsed["reason"].lower() if parsed["reason"] else ""
@@ -346,11 +408,16 @@ def _score_completion(episode, completion_text: str) -> dict:
     decision_accuracy = 1.0 if decision_correct else 0.0
 
     return {
-        "fraud_detection_score": fraud_detection_score,
-        "decision_accuracy":     decision_accuracy,
+        "fraud_detection_score":  fraud_detection_score,
+        "decision_accuracy":      decision_accuracy,
         "evidence_quality_score": evidence_quality_score,
-        "calibration_score":     calibration_score,
+        "calibration_score":      calibration_score,
     }
+
+
+def _score_completion(episode, completion_text: str) -> dict:
+    """Score a completion — uses live HTTP env when available, keyword fallback otherwise."""
+    return _score_completion_via_http(episode, completion_text)
 
 
 def _select_eval_episodes(episodes):

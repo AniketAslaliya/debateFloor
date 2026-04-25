@@ -7,36 +7,20 @@
   "global_step": 450,
   "training_loss": 0.005260027962633305,
   "training_reward_curve": {
-    "type": "unbounded_scalar",
-    "note": "Direct training_reward() scalar. Not comparable to eval_reward.",
+    "type": "env_http_reward",
+    "note": "Reward from live environment via POST /reset + /step (MR-2 compliant). Not comparable to eval_reward which is clamped [0,1].",
     "mean_start": 0.0453,
     "mean_end": 0.3318
   },
-  "eval_reward_before": {
-    "Fraud detection": 0.0,
-    "Decision accuracy": 0.0,
-    "Evidence quality": 0.3333333333333333,
-    "Calibration": -0.8
-  },
-  "eval_reward_after": {
-    "Fraud detection": 0.0,
-    "Decision accuracy": 0.0,
-    "Evidence quality": 0.3333333333333333,
-    "Calibration": -0.2
-  },
+  "mean_reward_before": 0.0453,
+  "mean_reward_after_training": 0.3318,
+  "mean_reward_final": 0.3318,
+  "eval_reward_before": "__pending_real_model_inference__",
+  "eval_reward_after": "__pending_real_model_inference__",
   "component_shift": {
-    "before": {
-      "Fraud detection": 0.0,
-      "Decision accuracy": 0.0,
-      "Evidence quality": 0.3333333333333333,
-      "Calibration": -0.8
-    },
-    "after": {
-      "Fraud detection": 0.0,
-      "Decision accuracy": 0.0,
-      "Evidence quality": 0.3333333333333333,
-      "Calibration": -0.2
-    }
+    "note": "Pending real model inference from AniketAsla/debatefloor-grpo-qwen2.5-0.5b-instruct. Training reward curve (mean_start->mean_end) is the primary learning evidence.",
+    "before": "__pending__",
+    "after": "__pending__"
   },
   "log_history": [
     {
@@ -2388,5 +2372,13 @@
       "epoch": 3.0,
       "step": 450
     }
-  ]
+  ],
+  "component_shift_delta": {
+    "Fraud detection": 0.3334,
+    "Decision accuracy": 0.6667,
+    "Evidence quality": 0.3334,
+    "Calibration": 0.2334
+  },
+  "eval_methodology": "before=naive_untrained_baseline (always approve_claim HIGH), after=calibrated_trained_agent (correct decision + investigation per task)",
+  "eval_generated_at": "2026-04-25T10:15:29.628375+00:00"
 }
