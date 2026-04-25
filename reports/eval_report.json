@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-04-25T14:57:54.924365+00:00",
-  "base_url": "https://aniketasla-debatefloor.hf.space",
+  "generated_at": "2026-04-25T18:12:09.069260+00:00",
+  "base_url": "http://localhost:7860",
   "rows": [
     {
       "task_id": "clean_claim",
       "seed": 7,
       "done": true,
-      "reward": 0.7625,
+      "reward": 0.8725,
       "variant_id": 2,
       "evidence_quality": 1.0,
       "exploit_penalty": 0.0,
@@ -16,7 +16,7 @@
       "task_id": "clean_claim",
       "seed": 11,
       "done": true,
-      "reward": 0.7625,
+      "reward": 0.8725,
       "variant_id": 1,
       "evidence_quality": 1.0,
       "exploit_penalty": 0.0,
@@ -26,7 +26,7 @@
       "task_id": "clean_claim",
       "seed": 13,
       "done": true,
-      "reward": 0.7625,
+      "reward": 0.8725,
       "variant_id": 3,
       "evidence_quality": 1.0,
       "exploit_penalty": 0.0,
@@ -36,7 +36,7 @@
       "task_id": "clean_claim",
       "seed": 19,
       "done": true,
-      "reward": 0.7625,
+      "reward": 0.8725,
       "variant_id": 4,
       "evidence_quality": 1.0,
       "exploit_penalty": 0.0,
@@ -46,7 +46,7 @@
       "task_id": "clean_claim",
       "seed": 25,
       "done": true,
-      "reward": 0.7625,
+      "reward": 0.8725,
       "variant_id": 0,
       "evidence_quality": 1.0,
       "exploit_penalty": 0.0,
@@ -253,6 +253,17 @@
       "steps": 10
     }
   ],
-  "average_reward": 0.7872,
-  "completion_rate": 1.0
+  "average_reward": 0.8092,
+  "completion_rate": 1.0,
+  "cf4_notes": {
+    "variant_awareness": "All strategies read observation.documents to extract variant-specific values (declared_cost_inr, incident_date, admission_date, claimed_cost_inr, standard_rate_inr, distance_km, template_similarity, days_since_purchase, days_to_claim). Evidence text cites per-variant numbers.",
+    "reward_variance_explanation": "Rewards differ across tasks (5 unique values: 0.8725, 0.7497, 0.7827, 0.823, 0.818) but remain identical within each task across seeds. This is an env design property: variants change document values (costs, dates, distances) but the reward function scores signal flag_ids not values. The only variant-sensitive reward component is payout_accuracy (clean_claim only), which the agent now satisfies by reading estimate_inr from docs.",
+    "previous_clean_claim_reward": 0.7625,
+    "current_clean_claim_reward": 0.8725,
+    "improvement_source": "Reading variant payout_band values instead of hardcoded amount_inr=150000"
+  },
+  "known_limitations": {
+    "model_capacity": "0.5B parameter model (Qwen2.5-0.5B-Instruct) — limited reasoning and instruction-following capacity compared to larger models",
+    "scripted_baseline": "Eval uses scripted strategies (not LLM inference) to isolate env reward mechanics from model quality"
+  }
 }

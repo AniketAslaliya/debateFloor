@@ -43,6 +43,13 @@ import requests as http_client
 
 import torch
 
+# CPU performance tuning: respect env overrides, otherwise pick sensible defaults
+# so PyTorch actually uses multiple cores during model.generate() on CPU.
+_CPU_THREADS = int(os.getenv("TORCH_NUM_THREADS", str(max(1, (os.cpu_count() or 4) - 2))))
+torch.set_num_threads(_CPU_THREADS)
+os.environ.setdefault("OMP_NUM_THREADS", str(_CPU_THREADS))
+os.environ.setdefault("MKL_NUM_THREADS", str(_CPU_THREADS))
+
 sys.path.insert(0, ".")
 
 import wandb
@@ -81,7 +88,7 @@ if SMOKE_MODE:
     EPOCHS = int(os.getenv("SMOKE_EPOCHS", "1"))
     BATCH_SIZE = int(os.getenv("SMOKE_BATCH_SIZE", "1"))
     print(
-        f"🔬 DEBATEFLOOR_SMOKE=1 — using reduced schedule: "
+        f"[SMOKE] DEBATEFLOOR_SMOKE=1 — using reduced schedule: "
         f"episodes={EPISODES} eval_episodes_const={EVAL_EPISODES} "
         f"epochs={EPOCHS} batch_size={BATCH_SIZE}"
     )
@@ -90,11 +97,15 @@ if SMOKE_MODE:
 try:
     from unsloth import FastLanguageModel
     USE_UNSLOTH = True
-    print("✅ Unsloth available — using FastLanguageModel + QLoRA")
-except ImportError:
+    print("[OK] Unsloth available — using FastLanguageModel + QLoRA")
+except (ImportError, NotImplementedError, RuntimeError) as unsloth_exc:
     from transformers import AutoModelForCausalLM, AutoTokenizer
     USE_UNSLOTH = False
-    print("⚠️  Unsloth not found — falling back to standard transformers (works fine on T4)")
+    print(
+        "[WARN] Unsloth unavailable in this runtime "
+        f"({type(unsloth_exc).__name__}: {unsloth_exc}) — "
+        "falling back to standard transformers."
+    )
 
 HAS_BF16 = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
 USE_FP16  = torch.cuda.is_available() and not HAS_BF16
@@ -110,7 +121,7 @@ def _wait_for_env(base_url: str, retries: int = 15) -> None:
         try:
             r = http_client.get(f"{base_url}/health", timeout=5)
             if r.status_code == 200 and r.json().get("status") == "healthy":
-                print(f"✅ Environment server ready at {base_url}")
+                print(f"[OK] Environment server ready at {base_url}")
                 return
         except Exception:
             pass
@@ -127,7 +138,7 @@ def _start_env_server_if_needed(base_url: str) -> subprocess.Popen | None:
     try:
         r = http_client.get(f"{base_url}/health", timeout=3)
         if r.status_code == 200:
-            print(f"✅ Environment already running at {base_url}")
+            print(f"[OK] Environment already running at {base_url}")
             return None
     except Exception:
         pass
@@ -312,7 +323,7 @@ def reward_fn(completions, prompts, **kwargs):
             rewards.append(float(reward))
         except Exception as exc:
             # If HTTP call fails, give a small negative reward rather than crash
-            print(f"  ⚠️  HTTP reward failed for {task_id}: {exc}")
+            print(f"  [WARN] HTTP reward failed for {task_id}: {exc}")
             rewards.append(-0.1)
 
     # HIGH-4 / CF-1 — variance is a hard contract, not a warning. The
@@ -338,11 +349,11 @@ def reward_fn(completions, prompts, **kwargs):
         if variance < 0.01:
             if SMOKE_MODE:
                 print(
-                    f"  ⚠️  Low reward variance ({variance:.4f}) — allowing because "
+                    f"  [WARN] Low reward variance ({variance:.4f}) — allowing because "
                     "DEBATEFLOOR_SMOKE=1 (smoke run; full runs still enforce CF-1)."
                 )
             elif reward_fn._batches_seen <= 2:
-                print(f"  ⚠️  Low reward variance ({variance:.4f}) on warmup batch "
+                print(f"  [WARN] Low reward variance ({variance:.4f}) on warmup batch "
                       f"{reward_fn._batches_seen}/2 — allowing.")
             else:
                 raise RuntimeError(
@@ -366,9 +377,10 @@ def _generate_completion(model, tok, prompt: str) -> str:
     device = next(model.parameters()).device
     inputs = tok(prompt, return_tensors="pt", truncation=True, max_length=512)
     inputs = {k: v.to(device) for k, v in inputs.items()}
+    _eval_max_tokens = int(os.getenv("EVAL_MAX_NEW_TOKENS", "96"))
     with torch.inference_mode():
         out = model.generate(
-            **inputs, max_new_tokens=96, do_sample=False,
+            **inputs, max_new_tokens=_eval_max_tokens, do_sample=False,
             temperature=1.0, pad_token_id=tok.eos_token_id,
         )
     prompt_len = inputs["input_ids"].shape[-1]
@@ -444,7 +456,7 @@ def _score_completion_via_http(episode, completion_text: str, base_url: str = EN
             "reasoning_quality":      float(rubric_components.get("reasoning_quality", 0.0)),
         }
     except Exception as exc:
-        print(f"  ⚠️  HTTP score failed ({task_id}): {exc} — falling back to keyword scoring")
+        print(f"  [WARN] HTTP score failed ({task_id}): {exc} — falling back to keyword scoring")
         return _score_completion_keyword(episode, completion_text)
 
 
@@ -623,7 +635,7 @@ def save_training_artifacts(trainer, result, before_components=None, after_compo
             "delta": {k: round(after_components.get(k, 0.0) - before_components.get(k, 0.0), 4) for k in before_components},
         }, indent=2), encoding="utf-8")
 
-    print(f"✅ Saved: {SUMMARY_PATH}, {PLOT_PATH}, {COMPONENT_PLOT_PATH}")
+    print(f"[OK] Saved: {SUMMARY_PATH}, {PLOT_PATH}, {COMPONENT_PLOT_PATH}")
 
 
 # ── Main ────────────────────────────────────────────────────────────────────
@@ -635,7 +647,7 @@ def main():
 
     # ── MR-2: Connect to the live environment before training ──────────────
     server_proc = _start_env_server_if_needed(ENV_BASE_URL)
-    print(f"✅ Environment connected at {ENV_BASE_URL} — reward from POST /step")
+    print(f"[OK] Environment connected at {ENV_BASE_URL} — reward from POST /step")
 
     if USE_WANDB:
         wandb.login(key=WANDB_KEY)
@@ -710,16 +722,31 @@ def main():
 
     # Smoke: fewer GRPO rollouts + smaller accumulation = faster and less VRAM.
     _num_gen = 2 if SMOKE_MODE else 6
+    _train_batch_size = BATCH_SIZE
+    if _train_batch_size < 2:
+        # GRPO requires >=2 generations; batch=1 is invalid.
+        _train_batch_size = 2
+        print(
+            f"[WARN] Adjusting batch_size to {_train_batch_size} "
+            f"(GRPO requires >=2 generations per prompt)."
+        )
+    if _train_batch_size % _num_gen != 0:
+        adjusted = ((_train_batch_size // _num_gen) + 1) * _num_gen
+        print(
+            f"[WARN] Adjusting batch_size from {_train_batch_size} to {adjusted} "
+            f"so it is divisible by num_generations={_num_gen}."
+        )
+        _train_batch_size = adjusted
     _grad_acc = 1 if SMOKE_MODE else 4
 
     args = GRPOConfig(
         output_dir="./debatefloor_grpo_out",
         num_train_epochs=EPOCHS,
-        per_device_train_batch_size=BATCH_SIZE,
+        per_device_train_batch_size=_train_batch_size,
         gradient_accumulation_steps=_grad_acc,
         learning_rate=LR,
         num_generations=_num_gen,    # 6 = T4-friendly full run; 2 = smoke
-        max_completion_length=100,
+        max_completion_length=int(os.getenv("MAX_COMPLETION_LENGTH", "100")),
         temperature=0.9,
         logging_steps=1 if SMOKE_MODE else 5,
         save_steps=9999 if SMOKE_MODE else 50,
@@ -763,7 +790,7 @@ def main():
     else:
         model.save_pretrained("./debatefloor_checkpoint")
         tok.save_pretrained("./debatefloor_checkpoint")
-    print("✅ Checkpoint saved to ./debatefloor_checkpoint")
+    print("[OK] Checkpoint saved to ./debatefloor_checkpoint")
 
     # Clean up server process if we started it
     if server_proc is not None:
@@ -772,7 +799,7 @@ def main():
             server_proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
             server_proc.kill()
-        print("🛑 Environment server stopped.")
+        print("[STOP] Environment server stopped.")
 
     # Push to HF Hub if token is set (skip on smoke to avoid polluting the model repo)
     hf_token = os.getenv("HF_TOKEN", "")
@@ -786,7 +813,7 @@ def main():
                 repo_type="model",
                 commit_message="Update: GRPO training — env-connected HTTP reward",
             )
-            print("✅ Model pushed to HF Hub")
+            print("[OK] Model pushed to HF Hub")
         except Exception as exc:
             print(f"HF push skipped: {exc}")
 
