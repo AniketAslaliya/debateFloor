@@ -1,17 +1,18 @@
 """
-train_minimal.py — DebateFloor GRPO training (Unsloth + live environment)
+train_minimal.py — DebateFloor GRPO training (standard TRL, no server required)
 
-Key changes from original:
-  - Uses Unsloth FastLanguageModel (CRITICAL-1)
-  - reward_fn calls live /reset + /step HTTP endpoints (FATAL-1)
-  - Environment server started in background before training (FATAL-1)
-  - num_generations=8 for better reward variance (HIGH-4)
-  - Separate wandb logging for train vs eval reward (CRITICAL-2)
+Fix summary (v2):
+  - Removed HTTP server dependency (FATAL: openenv not installed in Colab)
+  - Reward computed directly via training_reward() — no /reset + /step calls needed
+  - Removed Unsloth hard requirement — falls back to standard transformers (works on free T4)
+  - Unsloth still used automatically if available (install separately for speed boost)
+  - num_generations=6 for stable GRPO gradient on T4 VRAM budget
+  - All JSON outputs and plots unchanged
 
 Usage (Colab):
   !git clone https://github.com/AniketAslaliya/debateFloor && cd debateFloor
-  !pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"
-  !pip install trl>=0.12.0 transformers peft accelerate datasets wandb requests matplotlib
+  !pip install trl>=0.9.0 transformers>=4.40.0 peft accelerate datasets wandb requests matplotlib
+  # Optional (faster): !pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"
   !python train/train_minimal.py
 """
 
@@ -19,13 +20,11 @@ import json
 import os
 import random
 import re
-import subprocess
 import sys
 import time
 from pathlib import Path
 from statistics import mean
 
-import requests
 import torch
 
 sys.path.insert(0, ".")
@@ -38,7 +37,7 @@ from trl import GRPOConfig, GRPOTrainer
 
 # ── Config ─────────────────────────────────────────────────────────────────
 MODEL_NAME   = "Qwen/Qwen2.5-0.5B-Instruct"
-EPISODES     = 300   # was 100 — increased for meaningful GRPO learning (HIGH-4)
+EPISODES     = 100   # 100 = ~15 min on free T4; increase to 300 for better learning
 EVAL_EPISODES = 9
 EPOCHS       = 2
 BATCH_SIZE   = 2
@@ -47,13 +46,12 @@ SEED         = 42
 USE_WANDB    = bool(os.getenv("WANDB_API_KEY", ""))
 WANDB_KEY    = os.getenv("WANDB_API_KEY", "")
 WANDB_ENTITY = os.getenv("WANDB_ENTITY", "aniketaslaliya-lnmiit")
-ENV_BASE_URL = os.getenv("ENV_BASE_URL", "http://localhost:7860")
 PLOT_PATH    = Path("docs/reward_curve.svg")
 COMPONENT_PLOT_PATH = Path("docs/component_shift.svg")
 SUMMARY_PATH = Path("reports/training_summary.json")
 COMPONENT_SUMMARY_PATH = Path("reports/component_shift_summary.json")
 
-# Try Unsloth first; fall back gracefully if not installed (CRITICAL-1)
+# ── Try Unsloth; fall back gracefully to standard transformers ──────────────
 try:
     from unsloth import FastLanguageModel
     USE_UNSLOTH = True
@@ -61,7 +59,7 @@ try:
 except ImportError:
     from transformers import AutoModelForCausalLM, AutoTokenizer
     USE_UNSLOTH = False
-    print("⚠️  Unsloth not found — falling back to standard transformers")
+    print("⚠️  Unsloth not found — falling back to standard transformers (works fine on T4)")
 
 HAS_BF16 = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
 USE_FP16  = torch.cuda.is_available() and not HAS_BF16
@@ -90,41 +88,8 @@ _COMPONENT_LABELS = [
     ("calibration_score",     "Calibration"),
 ]
 
-# Module-level refs so reward_fn can access model/tok (set in main())
-_model_ref = None
-_tok_ref   = None
-
-
-# ── Environment startup ─────────────────────────────────────────────────────
-
-def _start_env_server() -> subprocess.Popen | None:
-    """Start the environment server as a background process. Returns Popen or None."""
-    try:
-        proc = subprocess.Popen(
-            [sys.executable, "-m", "uvicorn", "app.main:app",
-             "--host", "0.0.0.0", "--port", "7860", "--log-level", "error"],
-            cwd=os.getcwd(),
-        )
-        print(f"Started environment server (PID={proc.pid}). Waiting for startup...")
-        return proc
-    except Exception as e:
-        print(f"Could not start server automatically: {e}")
-        return None
-
-
-def _wait_for_env(base_url: str = ENV_BASE_URL, retries: int = 15) -> None:
-    """Block until the environment /health responds 200."""
-    for i in range(retries):
-        try:
-            r = requests.get(f"{base_url}/health", timeout=5)
-            if r.status_code == 200:
-                print(f"✅ Environment ready at {base_url}")
-                return
-        except Exception:
-            pass
-        print(f"  Waiting for environment... ({i+1}/{retries})")
-        time.sleep(4)
-    raise RuntimeError(f"Environment not reachable at {base_url} after {retries} retries")
+# Module-level refs so reward_fn can access tok (set in main())
+_tok_ref = None
 
 
 # ── Prompt building ─────────────────────────────────────────────────────────
@@ -151,92 +116,86 @@ def make_row(ep, tok) -> dict:
         "ground_truth":     ep.ground_truth,
         "fraud_type":       ep.fraud_type,
         "expected_signals": json.dumps(ep.expected_fraud_signals),
-        "task_id":          ep.task_id,   # FATAL-1: needed for /reset call
+        # Store episode metadata for direct reward computation
+        "difficulty":       ep.difficulty,
+        "ambiguity_score":  str(ep.ambiguity_score),
     }
 
 
-# ── Live environment reward (FATAL-1 fix) ──────────────────────────────────
+# ── Direct reward (no HTTP server required) ─────────────────────────────────
 
-def _generate_completion_text(tok, prompt: str) -> str:
-    """Generate text from the current _model_ref."""
-    global _model_ref, _tok_ref
-    device = next(_model_ref.parameters()).device
-    inputs = tok(prompt, return_tensors="pt", truncation=True, max_length=512)
-    inputs = {k: v.to(device) for k, v in inputs.items()}
-    with torch.inference_mode():
-        out = _model_ref.generate(
-            **inputs,
-            max_new_tokens=96,
-            do_sample=True,
-            temperature=0.9,
-            pad_token_id=tok.eos_token_id,
-        )
-    prompt_len = inputs["input_ids"].shape[-1]
-    return tok.decode(out[0][prompt_len:], skip_special_tokens=True)
+def _parse_completion(text: str) -> tuple[str | None, str | None, str]:
+    """Parse DECISION / CONFIDENCE / REASON from model output."""
+    dm = DECISION_RE.search(text or "")
+    cm = CONFIDENCE_RE.search(text or "")
+    rm = REASON_RE.search(text or "")
+    decision   = dm.group(1).lower() if dm else None
+    confidence = cm.group(1).upper() if cm else None
+    reason     = rm.group(1).strip() if rm else ""
+    return decision, confidence, reason
 
 
-def run_episode_via_http(prompt: str, task_id: str) -> float:
-    """Run one episode against the live /reset + /step HTTP API. Returns reward."""
-    try:
-        # 1. Reset
-        reset_r = requests.post(
-            f"{ENV_BASE_URL}/reset",
-            json={"task_id": task_id, "seed": random.randint(0, 9999)},
-            timeout=15,
-        )
-        reset_r.raise_for_status()
-        session_id = reset_r.json()["session_id"]
-
-        # 2. Generate
-        text = _generate_completion_text(_tok_ref, prompt)
-
-        # 3. Parse
-        dm = DECISION_RE.search(text)
-        cm = CONFIDENCE_RE.search(text)
-        rm = REASON_RE.search(text)
-        if not dm or not cm:
-            return -0.2  # format penalty
-
-        action = {
-            "action_type": dm.group(1).lower(),
-            "confidence":  cm.group(1).upper(),
-            "reason":      (rm.group(1).strip() if rm else ""),
-            "reasoning":   (rm.group(1).strip() if rm else ""),
-        }
-
-        # 4. Step
-        step_r = requests.post(
-            f"{ENV_BASE_URL}/step",
-            json={"action": action, "session_id": session_id},
-            timeout=15,
-        )
-        step_r.raise_for_status()
-        return float(step_r.json().get("reward", -0.1))
-
-    except Exception as exc:
-        print(f"HTTP rollout error: {exc}")
-        return -0.1
-
-
-def reward_fn(completions, prompts, task_ids, **kwargs):
+def reward_fn(completions, prompts, ground_truths, expected_signals_list, **kwargs):
     """
-    GRPO reward function — calls the live environment for each completion. (FATAL-1)
-    Each completion is one rollout; reward comes from /step response.
+    GRPO reward function — calls training_reward() directly.
+    No HTTP server, no network, no timeouts.
+
+    training_reward() signature:
+        (decision, confidence, ground_truth, legitimate_flags, step_num, done) -> float
     """
     rewards = []
-    for completion_list, prompt, task_id in zip(completions, prompts, task_ids):
-        text = completion_list[0].get("content", "") if isinstance(completion_list, list) else str(completion_list)
-        reward = run_episode_via_http(prompt, task_id)
-        rewards.append(reward)
 
-    # Log reward variance (HIGH-4 — detect zero-gradient situations)
+    for completion_list, prompt, ground_truth, expected_signals_json in zip(
+        completions, prompts, ground_truths, expected_signals_list
+    ):
+        # Extract text from GRPO completion format
+        if isinstance(completion_list, list):
+            text = completion_list[0].get("content", "") if completion_list else ""
+        else:
+            text = str(completion_list)
+
+        decision, confidence, reason = _parse_completion(text)
+
+        # Format penalty — model must follow the output format
+        if decision is None or confidence is None:
+            rewards.append(-0.2)
+            continue
+
+        # Count how many expected fraud signals appear in the model's output
+        try:
+            expected = json.loads(expected_signals_json)
+        except Exception:
+            expected = []
+
+        text_lc   = text.lower()
+        reason_lc = reason.lower()
+        legitimate_flags = sum(
+            1 for s in expected
+            if s.replace("_", " ") in text_lc or s.replace("_", " ") in reason_lc
+        )
+
+        # Direct reward computation — identical logic to what the HTTP /step API returned
+        reward = training_reward(
+            decision=decision,
+            confidence=confidence,
+            ground_truth=ground_truth,
+            legitimate_flags=legitimate_flags,
+            step_num=1,   # single-step episode in training
+            done=True,
+        )
+        rewards.append(float(reward))
+
+    # Log reward variance (detect zero-gradient situations)
     if len(rewards) > 1:
         import statistics
         variance = statistics.variance(rewards)
         if variance < 0.01:
             print(f"  ⚠️  Low reward variance ({variance:.4f}) — GRPO gradient may be near zero")
         if USE_WANDB:
-            wandb.log({"train/reward_variance": variance})
+            try:
+                wandb.log({"train/reward_variance": variance})
+            except Exception:
+                pass
 
     return rewards
 
@@ -244,14 +203,8 @@ def reward_fn(completions, prompts, task_ids, **kwargs):
 # ── Eval helpers ────────────────────────────────────────────────────────────
 
 def _extract_completion_fields(text: str) -> dict:
-    dm = DECISION_RE.search(text or "")
-    cm = CONFIDENCE_RE.search(text or "")
-    rm = REASON_RE.search(text or "")
-    return {
-        "decision":   dm.group(1).lower() if dm else None,
-        "confidence": cm.group(1).upper() if cm else None,
-        "reason":     (rm.group(1).strip() if rm else ""),
-    }
+    decision, confidence, reason = _parse_completion(text)
+    return {"decision": decision, "confidence": confidence, "reason": reason}
 
 
 def _generate_completion(model, tok, prompt: str) -> str:
@@ -261,7 +214,7 @@ def _generate_completion(model, tok, prompt: str) -> str:
     with torch.inference_mode():
         out = model.generate(
             **inputs, max_new_tokens=96, do_sample=False,
-            temperature=0.0, pad_token_id=tok.eos_token_id,
+            temperature=1.0, pad_token_id=tok.eos_token_id,
         )
     prompt_len = inputs["input_ids"].shape[-1]
     return tok.decode(out[0][prompt_len:], skip_special_tokens=True)
@@ -270,7 +223,7 @@ def _generate_completion(model, tok, prompt: str) -> str:
 def _score_completion(episode, completion_text: str) -> dict:
     parsed = _extract_completion_fields(completion_text)
     completion_lc = (completion_text or "").lower()
-    reason_lc = parsed["reason"].lower()
+    reason_lc = parsed["reason"].lower() if parsed["reason"] else ""
     expected = list(getattr(episode, "expected_fraud_signals", []) or [])
 
     if expected:
@@ -282,7 +235,7 @@ def _score_completion(episode, completion_text: str) -> dict:
         evidence_quality_score = 1.0 if parsed["reason"] else 0.0
 
     decision_correct = parsed["decision"] == getattr(episode, "ground_truth", None)
-    calibration_score = CALIBRATION_MATRIX.get((parsed["confidence"], decision_correct), 0.0)
+    calibration_score = CALIBRATION_MATRIX.get((parsed["confidence"], decision_correct), 0.0) if parsed["confidence"] else 0.0
     decision_accuracy = 1.0 if decision_correct else 0.0
 
     return {
@@ -329,7 +282,6 @@ def save_training_artifacts(trainer, result, before_components=None, after_compo
 
     log_history = list(getattr(trainer.state, "log_history", []) or [])
 
-    # Extract reward values from log history
     train_rewards = [r.get("reward") or r.get("rewards/mean") for r in log_history
                      if r.get("reward") is not None or r.get("rewards/mean") is not None]
 
@@ -339,10 +291,9 @@ def save_training_artifacts(trainer, result, before_components=None, after_compo
         "learning_rate": LR,
         "global_step": int(getattr(result, "global_step", 0) or 0),
         "training_loss": float(getattr(result, "training_loss", 0.0) or 0.0),
-        # CRITICAL-2: explicitly separate train scalar from eval [0,1] score
         "training_reward_curve": {
             "type": "unbounded_scalar",
-            "note": "Used for GRPO gradient stability only. Not comparable to eval_reward.",
+            "note": "Direct training_reward() scalar. Not comparable to eval_reward.",
             "mean_start": round(float(train_rewards[0]), 4) if train_rewards else None,
             "mean_end":   round(float(train_rewards[-1]), 4) if train_rewards else None,
         },
@@ -362,7 +313,7 @@ def save_training_artifacts(trainer, result, before_components=None, after_compo
         print(f"Skipping plots: {exc}")
         return
 
-    # Reward curve (MEDIUM-2: proper axis labels + annotation)
+    # Reward curve
     reward_steps, rewards, loss_steps, losses = [], [], [], []
     for row in log_history:
         step = row.get("step")
@@ -428,36 +379,35 @@ def save_training_artifacts(trainer, result, before_components=None, after_compo
 # ── Main ────────────────────────────────────────────────────────────────────
 
 def main():
-    global _model_ref, _tok_ref
+    global _tok_ref
 
-    print(f"GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}")
+    print(f"GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU (no GPU found!)'}")
+    print("✅ No environment server needed — reward computed directly via training_reward()")
 
     if USE_WANDB:
         wandb.login(key=WANDB_KEY)
         wandb.init(
             project="debatefloor-insurance-rl",
             entity=WANDB_ENTITY,
-            name="grpo-qwen0.5b-live-env",
-            tags=["grpo", "calibration", "insurance", "openenv", "unsloth"],
+            name="grpo-qwen0.5b-direct-reward",
+            tags=["grpo", "calibration", "insurance", "direct-reward", "no-server"],
             config={
-                "reward_type": "live_environment_http",          # CRITICAL-2
-                "training_reward_note": "unbounded scalar from /step API",
-                "eval_reward_note": "six_component clamped [0,1]",
-                "never_mix": True,
+                "reward_type":   "direct_training_reward",
+                "training_note": "training_reward() called inline — no HTTP server",
+                "eval_note":     "six_component clamped [0,1]",
+                "model":         MODEL_NAME,
+                "episodes":      EPISODES,
+                "epochs":        EPOCHS,
             },
         )
 
-    # Start environment server (FATAL-1)
-    server_proc = _start_env_server()
-    _wait_for_env(ENV_BASE_URL)
-
-    # Load model with Unsloth if available (CRITICAL-1)
+    # Load model
     if USE_UNSLOTH:
         print(f"Loading {MODEL_NAME} via Unsloth (4-bit QLoRA)...")
         model, tok = FastLanguageModel.from_pretrained(
             model_name=MODEL_NAME,
             max_seq_length=512,
-            dtype=None,        # auto-detect
+            dtype=None,
             load_in_4bit=True,
         )
         model = FastLanguageModel.get_peft_model(
@@ -470,18 +420,20 @@ def main():
             use_gradient_checkpointing="unsloth",
         )
     else:
-        print(f"Loading {MODEL_NAME} via transformers...")
+        print(f"Loading {MODEL_NAME} via standard transformers...")
         tok = AutoTokenizer.from_pretrained(MODEL_NAME)
         if tok.pad_token is None:
             tok.pad_token = tok.eos_token
-        model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, torch_dtype=DTYPE, device_map="auto")
+        model = AutoModelForCausalLM.from_pretrained(
+            MODEL_NAME,
+            torch_dtype=DTYPE,
+            device_map="auto",
+        )
 
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
 
-    # Set module-level refs for reward_fn (FATAL-1)
-    _model_ref = model
-    _tok_ref   = tok
+    _tok_ref = tok
 
     print(f"Generating {EPISODES} training + eval episodes...")
     episode_pool   = generate_episode_pool(count=EPISODES + (EVAL_EPISODES * 4))
@@ -491,14 +443,16 @@ def main():
     dataset = Dataset.from_list(rows)
     print(f"Dataset: {len(dataset)} training episodes, {len(eval_episodes)} eval episodes")
 
-    print("Baseline eval...")
+    print("Baseline eval (before training)...")
     before_eval = evaluate_component_shift(model, tok, eval_episodes)
     before_components = before_eval["means"]
     print(f"  Before: {before_components}")
 
-    # Log baseline to WandB (CRITICAL-2: separate eval metrics)
     if USE_WANDB:
-        wandb.log({f"eval/before/{k.replace(' ', '_').lower()}": v for k, v in before_components.items()})
+        try:
+            wandb.log({f"eval/before/{k.replace(' ', '_').lower()}": v for k, v in before_components.items()})
+        except Exception:
+            pass
 
     args = GRPOConfig(
         output_dir="./debatefloor_grpo_out",
@@ -506,13 +460,13 @@ def main():
         per_device_train_batch_size=BATCH_SIZE,
         gradient_accumulation_steps=4,
         learning_rate=LR,
-        num_generations=8,          # HIGH-4: was 4, more variance = stronger GRPO gradient
+        num_generations=6,           # reduced from 8 — fits T4 VRAM without Unsloth
         max_completion_length=100,
         temperature=0.9,
         logging_steps=5,
         save_steps=50,
         report_to="wandb" if USE_WANDB else "none",
-        run_name="debatefloor-grpo-live-env",
+        run_name="debatefloor-grpo-direct-reward",
         max_grad_norm=0.3,
         seed=SEED,
         bf16=HAS_BF16,
@@ -527,7 +481,7 @@ def main():
         train_dataset=dataset,
     )
 
-    print("Starting GRPO training against live environment...")
+    print("Starting GRPO training (direct reward — no server)...")
     result = trainer.train()
     print(f"Done. Steps: {result.global_step} | Loss: {result.training_loss:.4f}")
 
@@ -537,12 +491,15 @@ def main():
     print(f"  After: {after_components}")
 
     if USE_WANDB:
-        wandb.log({f"eval/after/{k.replace(' ', '_').lower()}": v for k, v in after_components.items()})
-        wandb.finish()
+        try:
+            wandb.log({f"eval/after/{k.replace(' ', '_').lower()}": v for k, v in after_components.items()})
+            wandb.finish()
+        except Exception:
+            pass
 
     save_training_artifacts(trainer, result, before_components, after_components)
 
-    # Save model (CRITICAL-1: use Unsloth safe merge if available)
+    # Save model
     if USE_UNSLOTH:
         model.save_pretrained_merged("./debatefloor_checkpoint", tok, save_method="merged_16bit")
     else:
@@ -560,16 +517,11 @@ def main():
                 folder_path="./debatefloor_checkpoint",
                 repo_id="AniketAsla/debatefloor-grpo-qwen2.5-0.5b-instruct",
                 repo_type="model",
-                commit_message="Update: GRPO training with live environment connection",
+                commit_message="Update: GRPO training — direct reward, no server",
             )
             print("✅ Model pushed to HF Hub")
         except Exception as exc:
             print(f"HF push skipped: {exc}")
-
-    # Stop environment server
-    if server_proc:
-        server_proc.terminate()
-        print("Environment server stopped.")
 
 
 if __name__ == "__main__":
