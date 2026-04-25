@@ -131,6 +131,16 @@ log_outputs/*
 # .sesskey
 *.sesskey
 
+# One-off / duplicate HF upload scripts at repo root (canonical uploader: train/push_to_hf_space.py)
+/push_to_hf.py
+/push_high2_fix_to_hf.py
+/push_new1_fix_to_hf.py
+/push_new3_fix_to_hf.py
+/push_new4_high4_to_hf.py
+
+# Large local eval dumps (regenerate with train/run_component_eval.py if needed)
+reports/component_eval_detailed.json
+
 # FinQA data (downloaded via download_data.sh)
 envs/finqa_env/data/
 
