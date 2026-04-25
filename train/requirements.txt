@@ -14,10 +14,12 @@ trl>=0.15.0,<0.18.0
 # don't require torch>=2.5 the way 4.50+ does.
 transformers>=4.48.0,<4.50.0
 
-# CRITICAL: torchvision must match the torch ABI in the base image.
-# pytorch 2.4.0 ↔ torchvision 0.19.0. Without this, transformers' lazy import
-# of `image_utils → torchvision::nms` fails with `operator does not exist`.
-torchvision==0.19.0
+# Note: torchvision is INTENTIONALLY not pinned. The HF Jobs base image ships
+# torch 2.11.0+cu130 (not 2.4.0 as the tag suggests), and ABI-matching
+# torchvision wheels for cu130 are not always available. Since DebateFloor is
+# text-only and never uses image transforms, jobs_run.py uninstalls torchvision
+# entirely after pip install — transformers will then skip the broken
+# `image_utils → torchvision::nms` import path.
 
 # Model + LoRA.
 peft>=0.13.0

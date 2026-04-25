@@ -115,16 +115,31 @@ _hb("installed root requirements.txt")
 _pip_install("-r", "train/requirements.txt")
 _hb("installed train/requirements.txt")
 
+# ── [1.4/6] Purge torchvision (text-only training; transformers will skip
+# the image_utils import path when torchvision is absent). The HF Jobs base
+# image ships an unstable torch+torchvision combo (claims 2.4.0 but ships
+# torch 2.11.0+cu130) that breaks all our import attempts. Removing
+# torchvision entirely is the simplest, most robust fix.
+print("\n  Purging torchvision (text-only training, not needed)...")
+try:
+    subprocess.check_call(
+        [sys.executable, "-m", "pip", "uninstall", "-y", "-q", "torchvision"]
+    )
+    print("    Removed torchvision from environment")
+except subprocess.CalledProcessError:
+    print("    torchvision not installed — nothing to remove")
+
+# Tell transformers to be tolerant of missing optional vision deps (defense in
+# depth; the uninstall above is what actually fixes the issue).
+os.environ.setdefault("TRANSFORMERS_NO_ADVISORY_WARNINGS", "1")
+
 # ── [1.5/6] Sanity-check critical imports BEFORE we boot the env + load model.
-# This catches torch/torchvision ABI mismatches and trl version drift in 5s
-# instead of after a 90s model download. Costs nothing if everything is fine.
 print("\n  Sanity-checking critical imports...")
 _failed = []
 for _mod, _from in [
     ("torch", None),
-    ("torchvision", None),  # critical: must match torch ABI
     ("transformers", "PreTrainedModel"),  # forces full transformers init
-    ("trl", "GRPOConfig"),  # forces grpo_trainer import (which pulls torchvision)
+    ("trl", "GRPOConfig"),  # forces grpo_trainer import
     ("peft", "LoraConfig"),
     ("accelerate", "Accelerator"),
     ("datasets", "Dataset"),
@@ -146,31 +161,8 @@ for _mod, _from in [
         _failed.append((_mod, _from, _e))
 
 if _failed:
-    # Last-ditch self-heal: if torchvision is the problem, try reinstalling the
-    # version that matches the torch already on disk. This rescues runs where
-    # the requirements.txt pin somehow didn't take effect.
-    _tv_failed = any("torchvision" in str(e[2]) or e[0] == "torchvision" for e in _failed)
-    if _tv_failed:
-        try:
-            import torch as _torch  # noqa: PLC0415
-            _torch_v = _torch.__version__.split("+")[0]
-            print(
-                f"\n  Detected torchvision ABI mismatch with torch=={_torch_v}; "
-                "attempting self-heal..."
-            )
-            # torch 2.4.x ↔ torchvision 0.19.x; torch 2.5.x ↔ 0.20.x; torch 2.6.x ↔ 0.21.x
-            _tv_pin = {
-                "2.4": "0.19.0",
-                "2.5": "0.20.0",
-                "2.6": "0.21.0",
-            }.get(_torch_v[:3], "0.19.0")
-            _pip_install("--force-reinstall", "--no-deps", f"torchvision=={_tv_pin}")
-            print(f"  Reinstalled torchvision=={_tv_pin}")
-        except Exception as _heal_exc:
-            print(f"  Self-heal failed: {_heal_exc}")
-            raise SystemExit(1)
-    else:
-        raise SystemExit(1)
+    print("\n  Sanity check failed — aborting before model download.")
+    raise SystemExit(1)
 
 print("  All critical imports OK.\n")
 _hb("import sanity check passed")
