@@ -1,26 +1,33 @@
 # DebateFloor — Pre-Evaluation Fix Plan (Live Status)
 
-**Status:** Pre-submission hardening — sixth pass after NEW-1 / FATAL-4 eval regen  
+**Status:** Pre-submission hardening — seventh pass after README rewrite  
 **Deadline:** April 25–26 2026 Grand Finale  
-**Last validated:** April 25 2026, 19:10 IST (against current repo state + live HF Space)  
+**Last validated:** April 25 2026, 19:25 IST (against current repo state + live HF Space)  
 **Priority order:** FATAL → CRITICAL → HIGH → MEDIUM
 
 > **What changed in this revision:**
-> - **NEW-1 → PASS** and **FATAL-4 → PASS.** Built
->   `train/generate_eval_report.py` — a focused regenerator that uses
->   `inference_debatefloor.py:STRATEGIES` × seeds `[7, 11, 13, 19, 25]`
->   (covering all 5 variant_ids) × 3 tasks → 15 rows. Numbers from the
->   live HF Space (no fabrication):
->   - **Distinct variant_ids: `[0, 1, 2, 3, 4]`** (was `{0}` only).
->   - **Distinct rewards: 3** unique values `{0.3966, 0.7497, 0.7625}` (was 2).
->   - **10 / 15 rows have `evidence_quality > 0`** (was 0 / 6).
->   - **15 / 15 rows complete** (`completion_rate = 100%`).
->   - **`average_reward = 0.6363`** (was `0.8658` from a 6-row stale set).
->   - `generated_at: 2026-04-25T13:37:28+00:00` (was `2026-04-03T16:40:41` —
->     22-day staleness gone).
->   - `base_url: https://aniketasla-debatefloor.hf.space` (matches the
->     production Space).
->   - PLAN.md's prescribed invariant assertion script runs clean.
+> - **NEW-3 → PASS**, **CRITICAL-2 → PASS**, **FATAL-2 → PASS** (storytelling
+>   half), and **NEW-6 → PASS.** Rewrote the README `Results` block, the two
+>   plot captions, and the Training Pipeline install command so every number
+>   shown is read directly from `reports/training_summary.json` and
+>   `reports/eval_report.json` (no hand edits, no rounded estimates).
+>   Sanity script verifies all 11 cited numbers match JSON; all 10 forbidden
+>   hand-edited tokens (`-0.34`, `+0.83`, `~82%`, `~44%`, `41%`, `73%`,
+>   `trl>=0.9.0`, plus unicode-minus variants) are gone; install command now
+>   sources `requirements.txt` and `train/requirements.txt`.
+>   - Training delta now shown: `0.0453 → 0.3318` (training scalar) and
+>     `Decision accuracy 0.3333 → 0.6667` with honest "1 of 4 components
+>     improved; `Calibration` regressed `0.3333 → 0.2`" caveat.
+>   - Scripted-baseline eval table cites the per-task numbers from the
+>     15-row regen: `clean_claim 0.7625 / ev_q 1.0`,
+>     `contradictory_claim 0.7497 / ev_q 1.0`,
+>     `distribution_shift_claim 0.3966 / ev_q 0.0` (with NEW-7 footnote),
+>     `average_reward 0.6363`, `completion 100%`.
+>   - The remaining open work for FATAL-2 is the **re-training half**
+>     (Step 1 + Step 3) which requires HF credits; the storytelling-side
+>     contradiction is fully resolved this revision.
+> - **NEW-1 → PASS** and **FATAL-4 → PASS** (rev 6): eval_report regenerated,
+>   5 distinct variant_ids, 10/15 evidence_quality > 0, average reward `0.6363`.
 > - **NEW-2 → PASS** and **FATAL-5 → PASS** (rev 5): rubric test rewrite,
 >   49/49 tests pass.
 > - **FATAL-3 → PASS** (rev 4): `inference_debatefloor.py` flag_id fix,
@@ -44,12 +51,12 @@
 | # | Issue | Status | Blocker for Submission? |
 |---|---|---|---|
 | FATAL-1 | Training loop never connects to environment | **PASS** | Resolved |
-| FATAL-2 | Training evidence shows zero improvement | **PARTIAL** | Yes — README + summary contradict |
+| FATAL-2 | Training evidence shows zero improvement | **PARTIAL** ⚠ | Storytelling half PASS (rev 7); re-training half pending HF credits |
 | FATAL-3 | Evidence quality is 0.0 in all eval rows | **PASS** ✅ | **Resolved 25 Apr 17:50 IST** (contradictory_claim 0.0 → 1.0) |
 | FATAL-4 | `variant_id` always 0 | **PASS** ✅ | **Resolved 25 Apr 19:05 IST** (5 distinct variant_ids in regenerated report) |
 | FATAL-5 | Rubric is decorative; echoes env reward | **PASS** ✅ | **Resolved 25 Apr 18:20 IST** (rubric `0.29` vs env `0.428` for same step → divergence proven) |
 | CRITICAL-1 | No Unsloth usage | **PASS** | Resolved |
-| CRITICAL-2 | Training and eval reward use different math | **PARTIAL** | No, but visible in README |
+| CRITICAL-2 | Training and eval reward use different math | **PASS** ✅ | **Resolved 25 Apr 19:25 IST** (README rewrite cites both scales by name + JSON source) |
 | HIGH-1 | `coordinated_fraud` missing from `openenv.yaml` | **PASS** | Resolved |
 | HIGH-2 | Anti-gaming detector disabled across sessions | **PASS** ✅ | **Resolved 25 Apr 17:25 IST** |
 | HIGH-3 | `server/app.py` violates client/server separation | **PASS** | Resolved |
@@ -58,16 +65,17 @@
 | MEDIUM-2 | WandB curve caption ambiguous | **PASS** | Resolved |
 | **NEW-1** | Stale `reports/eval_report.json` (3 weeks old) | **PASS** ✅ | **Resolved 25 Apr 19:05 IST** (regenerated against live HF, 15 rows) |
 | **NEW-2** | `tests/envs/test_debatefloor_rubric.py` is broken | **PASS** ✅ | **Resolved 25 Apr 18:20 IST** (49/49 tests pass) |
-| **NEW-3** | README results table contradicts JSON | **FAIL** | Yes — storytelling 30% |
+| **NEW-3** | README results table contradicts JSON | **PASS** ✅ | **Resolved 25 Apr 19:25 IST** (every cited number now read directly from JSON) |
 | **NEW-4** | `inference_debatefloor.py` missing strategies for 2 of 5 tasks | **FAIL** | Medium |
 | **NEW-5** | Rubric component-name vocabulary drift | **FAIL** | Medium |
-| **NEW-6** | README install command is missing deps + wrong TRL pin | **FAIL** | Yes — reviewer reproduction |
+| **NEW-6** | README install command is missing deps + wrong TRL pin | **PASS** ✅ | **Resolved 25 Apr 19:25 IST** (now sources `requirements.txt` + `train/requirements.txt`) |
 | **NEW-7** | `distribution_shift_claim` has no discovery path for its `expected_signals` | **FAIL** | Medium — caps that task's evidence_quality at 0.0 |
 
-**Bottom line:** 3 of the 13 originally listed items are *not* fully resolved
-(FATAL-4 is now PASS), and 4 newly discovered issues remain (NEW-1 is also
-now PASS). Total estimated remaining work:
-**~1 hr 10 min of code/text fixes + one re-training run.**
+**Bottom line:** 1 of the 13 originally listed items is not fully resolved
+(FATAL-2 — re-training half only; storytelling half is PASS this revision).
+3 newly discovered issues remain (NEW-3 / NEW-6 are PASS; NEW-4 / NEW-5 /
+NEW-7 still pending). Total estimated remaining work:
+**~55 min of code fixes + one re-training run.**
 
 ---
 
@@ -75,12 +83,12 @@ now PASS). Total estimated remaining work:
 
 ### Originally Tracked Issues
 1. [FATAL-1](#fatal-1--training-loop-never-connects-to-the-environment-pass) — Training loop never connects to env — **PASS**
-2. [FATAL-2](#fatal-2--training-evidence-shows-zero-improvement-partial) — Training evidence shows zero improvement — **PARTIAL**
+2. [FATAL-2](#fatal-2--training-evidence-shows-zero-improvement-partial) — Training evidence shows zero improvement — **PARTIAL** (storytelling half PASS rev 7)
 3. [FATAL-3](#fatal-3--evidence-quality-is-00-in-all-eval-rows-pass) — Evidence quality 0.0 in all eval rows — **PASS** ✅
 4. [FATAL-4](#fatal-4--variant_id-is-always-0-pass) — variant_id always 0 — **PASS** ✅
 5. [FATAL-5](#fatal-5--rubric-is-decorative-it-echoes-the-environments-own-reward-pass) — Rubric is decorative — **PASS** ✅
 6. [CRITICAL-1](#critical-1--no-unsloth-usage-pass) — No Unsloth — **PASS**
-7. [CRITICAL-2](#critical-2--training-reward-and-eval-reward-use-completely-different-math-partial) — Training vs eval reward labelling — **PARTIAL**
+7. [CRITICAL-2](#critical-2--training-reward-and-eval-reward-use-completely-different-math-pass) — Training vs eval reward labelling — **PASS** ✅
 8. [HIGH-1](#high-1--coordinated_fraud-task-missing-from-openenvyaml-pass) — `coordinated_fraud` missing from YAML — **PASS**
 9. [HIGH-2](#high-2--anti-gaming-detector-is-effectively-disabled-during-training-pass) — Anti-gaming disabled across sessions — **PASS** ✅
 10. [HIGH-3](#high-3--serverapppy-violates-clientserver-separation-principle-pass) — `server/app.py` separation — **PASS**
@@ -91,10 +99,10 @@ now PASS). Total estimated remaining work:
 ### Newly Discovered Issues (not in original plan)
 14. [NEW-1](#new-1--stale-reportseval_reportjson--md-pass) — Stale `eval_report.json` / `.md` — **PASS** ✅
 15. [NEW-2](#new-2--testsenvstest_debatefloor_rubricpy-is-broken-by-the-fatal-5-fix-pass) — Broken rubric test — **PASS** ✅
-16. [NEW-3](#new-3--readme-results-table-contradicts-the-actual-json-fail) — README contradicts artifacts
+16. [NEW-3](#new-3--readme-results-table-contradicts-the-actual-json-pass) — README contradicts artifacts — **PASS** ✅
 17. [NEW-4](#new-4--inference_debatefloorpy-has-no-strategies-for-2-of-5-tasks-fail) — Missing inference strategies
 18. [NEW-5](#new-5--rubric-component-name-vocabulary-drift-fail) — Component-name drift
-19. [NEW-6](#new-6--readme-install-command-misses-deps-and-pins-too-old-trl-fail) — README install command broken
+19. [NEW-6](#new-6--readme-install-command-misses-deps-and-pins-too-old-trl-pass) — README install command broken — **PASS** ✅
 20. [NEW-7](#new-7--distribution_shift_claim-has-no-discovery-path-for-its-expected_signals-fail) — `distribution_shift_claim` evidence_quality structurally capped at 0.0 (env code)
 
 ### Verification & Sequencing
@@ -497,24 +505,45 @@ Run: `pytest tests/envs/test_debatefloor_rubric.py -v` — must be green.
 
 ---
 
-## CRITICAL-2 — Training reward and eval reward use completely different math (**PARTIAL**)
+## CRITICAL-2 — Training reward and eval reward use completely different math (**PASS** ✅)
 
-### What was fixed
-- `wandb.init()` config (lines 564–580) tags the run with `reward_type: env_http_reward` and notes the eval scale separately.
-- `training_summary.json` saves both `training_reward_curve` (unbounded) and `eval_reward_before/after` (clamped) under separate keys.
-- `save_training_artifacts()` plot annotation: "training scalar is unbounded. See eval table for [0,1] clamped scores."
+### What was fixed (earlier passes)
+- `wandb.init()` config tags the run with `reward_type: env_http_reward`.
+- `training_summary.json` saves both `training_reward_curve` (unbounded
+  scalar) and `eval_reward_before/after` (clamped components) under
+  separate keys.
+- `save_training_artifacts()` plot annotation already noted the scale
+  difference.
 
-### What is still broken
-README presents one "Mean reward" row mixing both:
-```
-| **Mean reward** | −0.34 | **+0.83** |
-```
-- −0.34 looks like an unbounded training scalar.
-- +0.83 looks like an eval-clamped score.
-- Neither value is reproducible from any committed JSON.
+### What was still broken (until this revision)
+README presented one "Mean reward" row mixing both scales (`−0.34 →
++0.83`), with neither value reproducible from any committed JSON.
 
-### Remaining solution
-Already covered in [FATAL-2 Step 2](#fatal-2--training-evidence-shows-zero-improvement-partial). Replace the row with two clearly-labelled rows: one for training scalar, one for eval-clamped score, both citing their JSON source.
+### Resolution (shipped this revision — same edit as NEW-3)
+The README `Results` block now has two **explicitly labelled** sections:
+
+1. **GRPO training delta** — first row labelled
+   `Training reward (live env scalar, unbounded — used for GRPO gradients)`
+   citing `mean_reward_before / mean_reward_after_training`. All
+   subsequent rows in this section labelled
+   `(eval, clamped [0,1])` and citing `eval_reward_before/after.*`.
+2. **Scripted-baseline eval** — header labelled
+   `Mean reward [0,1]` and `Mean evidence_quality`, citing
+   `reports/eval_report.json`. The aggregate is the clamped
+   `eval_report.average_reward = 0.6363`.
+
+A note block right under the table makes the scale separation explicit:
+
+> Training-time reward (`0.0453 → 0.3318`) is the **raw GRPO training
+> scalar** (unbounded — used for gradient stability). The four eval
+> components above are the **clamped `[0,1]` per-component scores** from
+> the live environment. Different numbers, different scales —
+> intentionally kept separate per `openenv.yaml:never_mix=true`.
+
+The reward-curve caption explicitly warns: "Y-axis is the unbounded
+training scalar; do not compare to the clamped `[0,1]` eval components".
+
+No further action required for CRITICAL-2.
 
 ---
 
@@ -748,45 +777,87 @@ Replaced the test body with the 6-test suite documented in
 
 ---
 
-## NEW-3 — README results table contradicts the actual JSON (**FAIL**)
+## NEW-3 — README results table contradicts the actual JSON (**PASS** ✅)
 
 ### Discovery
-README lines 48–54:
+The previous README results block carried 6 fabricated headline numbers
+(`−0.34 / +0.83`, `~82% / ~44%`, `41% / 73%`) and 1 fabricated plot
+caption (`Calibration shifts from −0.8 to 0.0`). None of these numbers
+were produced by any current code path:
+- `−0.34 / +0.83` did not match any field in `training_summary.json`.
+- `82% / 44%` HIGH-confidence rate was not tracked in any committed eval
+  artifact (it is now technically measurable via `/stats` after the
+  HIGH-2 fix, but no eval script captures before/after rates yet).
+- `41% / 73%` debate-panel-convened rate was not tracked at all.
+- `−0.8 → 0.0` Calibration delta came from the stale
+  `component_shift_summary.json`, which itself contradicts
+  `training_summary.json` (`0.3333 → 0.2`).
+
+### Resolution (shipped this revision)
+
+Rewrote the README `Results` block + both plot captions so every figure
+shown is read directly from a committed JSON artifact, with the source
+key cited inline in a new "Source key" column.
+
+**Section 1 — GRPO training delta** (cites
+`reports/training_summary.json`):
+- `Training reward (live env scalar)` `0.0453 → 0.3318` —
+  `mean_reward_before` / `mean_reward_after_training`.
+- `Decision accuracy (eval, [0,1])` `0.3333 → 0.6667` (+100%) —
+  `eval_reward_after.Decision accuracy`.
+- `Calibration score (eval, [0,1])` `0.3333 → 0.2000` (regressed,
+  flagged with ⚠) — `eval_reward_after.Calibration`.
+- `Fraud detection (eval)` and `Evidence quality (eval)` shown as
+  flat at `0.3333` (honest reporting).
+- One-line caveat documents that 1 of 4 components moved with the
+  current single-action prompt format.
+
+**Section 2 — Scripted-baseline eval** (cites
+`reports/eval_report.json`):
+- 15 episodes (3 tasks × 5 seeds, all 5 variant_ids), generated
+  `2026-04-25T13:37:28+00:00` against the live HF Space.
+- Per-task means: `clean_claim 0.7625 / ev_q 1.0`,
+  `contradictory_claim 0.7497 / ev_q 1.0`,
+  `distribution_shift_claim 0.3966 / ev_q 0.0` (with NEW-7 footnote
+  explaining the structural cap).
+- Aggregate: `0.6363` mean reward, 100% completion.
+- Inline regeneration command: `python train/generate_eval_report.py
+  --base-url …`.
+
+**Reward-curve caption rewritten** to cite `training_summary.json`'s
+actual `0.0453 → 0.3318` and warn against comparing to the clamped
+`[0,1]` eval scale.
+
+**Component-shift caption rewritten** to show the real
+`Decision 0.3333 → 0.6667` lift, the `Calibration 0.3333 → 0.2`
+regression, and the two flat components, while explicitly disowning
+the legacy `component_shift_summary.json` which still shows the stale
+`-0.8 → -0.2` numbers (regen tracked under FATAL-2 Step 3).
+
+### Verification — automated sanity script (no fabrication)
+
 ```
-| **Mean reward** | −0.34 | **+0.83** |
-| **HIGH-confidence episodes** | ~82% | **~44%** |
-| **Debate panel convened (hard task)** | 41% | **73%** |
+Numbers cited in README:
+  [PASS] cited=0.0453 json=0.0453 in_readme=True
+  [PASS] cited=0.3318 json=0.3318 in_readme=True
+  [PASS] cited=0.3333 json=0.3333 in_readme=True
+  [PASS] cited=0.6667 json=0.6667 in_readme=True
+  [PASS] cited=0.2000 json=0.2000 in_readme=True
+  [PASS] cited=0.7625 json=0.7625 in_readme=True
+  [PASS] cited=0.7497 json=0.7497 in_readme=True
+  [PASS] cited=0.3966 json=0.3966 in_readme=True
+  [PASS] cited=1.0000 json=1.0000 in_readme=True
+  [PASS] cited=0.0000 json=0.0000 in_readme=True
+  [PASS] cited=0.6363 json=0.6363 in_readme=True
+
+Forbidden ASCII tokens (must be absent):
+  [PASS] '-0.34' / '+0.83' / '~82%' / '~44%' / '41%' / '73%' / 'trl>=0.9.0'
+
+Forbidden Unicode-minus tokens (must be absent):
+  [PASS] '\u22120.34' / '\u22120.8 (overconfident' / '\u22120.83'
+
+Overall: PASS
 ```
-
-None of those numbers are computed by any current code path:
-- `−0.34 / +0.83` does not match any field in `training_summary.json`.
-- `82% / 44%` HIGH-confidence rate is **now actually measurable** via
-  `/stats` (HIGH-2 fix unlocked this) but no current eval script computes
-  before/after rates.
-- `41% / 73%` debate-panel-convened rate is not tracked.
-
-### Solution
-Already covered in [FATAL-2 Step 2](#fatal-2--training-evidence-shows-zero-improvement-partial).
-Replace the table with values that exist in committed JSON. If you want to
-keep the HIGH-confidence and debate-panel rows, add the metrics to the eval
-script:
-
-```python
-# In pre_validation_script.py or run_component_eval.py
-from collections import Counter
-confidence_dist = Counter(row["agent_confidence"] for row in rows)
-high_rate = confidence_dist["HIGH"] / sum(confidence_dist.values())
-
-debate_episodes = sum(1 for row in rows if row.get("debate_convened"))
-debate_rate = debate_episodes / len(rows)
-
-summary["high_confidence_rate"] = high_rate
-summary["debate_panel_convene_rate"] = debate_rate
-```
-
-Then cite those JSON keys in the README. With HIGH-2 now live, an even
-simpler option is to query `/stats` after the eval batch and use the
-real `distribution["HIGH"]` value directly.
 
 ---
 
@@ -957,36 +1028,52 @@ component is invisible to judges).
 
 ---
 
-## NEW-6 — README install command misses deps and pins too-old TRL (**FAIL**)
+## NEW-6 — README install command misses deps and pins too-old TRL (**PASS** ✅)
 
 ### Discovery
-README line 238:
+The previous README install line:
 ```bash
 pip install trl>=0.9.0 transformers peft accelerate datasets wandb matplotlib
 ```
-
-Issues:
-1. **TRL >=0.9.0** is too old. `train/train_minimal.py` line 52 imports `GRPOConfig, GRPOTrainer` which were added in TRL 0.10. `train/requirements.txt` correctly pins `trl>=0.12.0`.
-2. **Missing `unsloth`** — but `train_minimal.py` requires it (CRITICAL-1) and degrades to vanilla transformers only as a fallback.
+Issues confirmed:
+1. **TRL >=0.9.0** is too old. `train/train_minimal.py` imports
+   `GRPOConfig, GRPOTrainer` which were added in TRL 0.10.
+   `train/requirements.txt` correctly pins `trl>=0.12.0`.
+2. **Missing `unsloth`** — but `train_minimal.py` requires it (CRITICAL-1).
 3. **Missing `requests`** — used by `run_episode_via_http`.
-4. **Missing `openenv-core`** — needed because `train_minimal.py` imports `from server.calibration_grader import …` and the env server in turn imports `openenv.core.env_server.interfaces`.
+4. **Missing `openenv-core`** — needed because `train_minimal.py` imports
+   `from server.calibration_grader import …` and the env server in turn
+   imports `openenv.core.env_server.interfaces`.
 
-A reviewer copy-pasting this line gets `ImportError: cannot import name 'GRPOConfig'` and stops.
+A reviewer copy-pasting that line would get
+`ImportError: cannot import name 'GRPOConfig'` and stop.
 
-### Solution
-Replace README lines 235–240 with:
+### Resolution (shipped this revision)
+Replaced the install block with:
+
 ```bash
 git clone https://github.com/AniketAslaliya/debateFloor.git && cd debateFloor
 
-# Use the canonical pinned requirements
-pip install -r requirements.txt          # env server deps
-pip install -r train/requirements.txt    # training deps incl. Unsloth, TRL>=0.12
+# Use the canonical pinned requirements files (every dep verified to
+# import inside train_minimal.py and the env server).
+pip install -r requirements.txt          # env server deps (FastAPI, openenv-core, ...)
+pip install -r train/requirements.txt    # training deps (trl, unsloth, peft, wandb, ...)
 
-# Optional (Colab T4): use the Unsloth nightly for best 4-bit speed
+# Optional (Colab T4): swap the pinned unsloth for the colab-new wheel
 # pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"
 
 PYTHONPATH=. python train/train_minimal.py
 ```
+
+### Verification
+- `Test-Path requirements.txt` → True (116 bytes, server deps).
+- `Test-Path train/requirements.txt` → True (463 bytes, training deps;
+  pins `trl>=0.12.0`, `unsloth`, `requests`, `openenv-core>=0.2.3`).
+- README sanity script `[PASS] 'trl>=0.9.0' present=False`.
+- README sanity script `[PASS] 'pip install -r requirements.txt'` and
+  `'pip install -r train/requirements.txt'` both present.
+
+No further action required for NEW-6.
 
 ---
 
@@ -1132,24 +1219,22 @@ This box is now ticked.
 
 ## Fix Priority Order (Day-of-Evaluation, **Remaining Work Only**)
 
-> ✅ **HIGH-2 (rev 3), FATAL-3 (rev 4), FATAL-5 / NEW-2 (rev 5),** and now
-> **NEW-1 / FATAL-4 (this rev) are DONE.**
-> NEW-1 / FATAL-4: 15-row eval_report.json regenerated against the live HF
-> Space; 5 distinct variant_ids; 10/15 rows with non-zero evidence_quality.
-> List renumbered.
+> ✅ **HIGH-2 (rev 3), FATAL-3 (rev 4), FATAL-5 / NEW-2 (rev 5),
+> NEW-1 / FATAL-4 (rev 6),** and now
+> **NEW-3 / CRITICAL-2 / NEW-6 (this rev) are DONE.**
+> README sanity script confirms all 11 cited numbers match JSON and all 10
+> forbidden hand-edited tokens are gone. List renumbered.
 
 | # | Issue | Fix Type | Est. Time | Blocking? |
 |---|-------|----------|-----------|-----------|
-| 1 | **NEW-3 / FATAL-2 / CRITICAL-2**: Rewrite README results table | docs, 1 file | 15 min | Yes — storytelling 30% |
-| 2 | **NEW-6**: Fix README install command | docs, 1 file | 2 min | Yes — reviewer reproduction |
-| 3 | **NEW-4**: Add `_strategy_coordinated_fraud` + `_strategy_identity_fraud` | code, 1 file | 30 min | Medium — `--all-tasks` errors |
-| 4 | **HIGH-4 / CF-1**: Convert variance warning → `raise RuntimeError` | code, 1 file | 5 min | No — but Part 4 contract |
-| 5 | **NEW-5**: Reconcile component-name vocabulary | code, 2 files | 20 min | No — but visible in artifacts |
-| 6 | **NEW-7**: Add discovery hooks for `distribution_shift_claim` | code, 2 files | 30 min | Medium — caps that task's evidence at 0.0 |
-| 7 | **FATAL-2 Step 1**: Re-run training with bigger settings (use HF credits) | training | 30 min on A10G | Yes — lift flat components |
-| 8 | **FATAL-2 Step 3**: Regenerate `component_shift_summary.json` | output of #7 | auto | Yes — drops contradiction |
+| 1 | **NEW-4**: Add `_strategy_coordinated_fraud` + `_strategy_identity_fraud` | code, 1 file | 30 min | Medium — `--all-tasks` errors |
+| 2 | **HIGH-4 / CF-1**: Convert variance warning → `raise RuntimeError` | code, 1 file | 5 min | No — but Part 4 contract |
+| 3 | **NEW-5**: Reconcile component-name vocabulary | code, 2 files | 20 min | No — but visible in artifacts |
+| 4 | **NEW-7**: Add discovery hooks for `distribution_shift_claim` | code, 2 files | 30 min | Medium — caps that task's evidence at 0.0 |
+| 5 | **FATAL-2 Step 1**: Re-run training with bigger settings (use HF credits) | training | 30 min on A10G | Yes — lift flat components |
+| 6 | **FATAL-2 Step 3**: Regenerate `component_shift_summary.json` | output of #5 | auto | Yes — drops contradiction with `training_summary.json` |
 
-**Total remaining time: ~1 hr 40 min of work + 1 training run.** (was 1 hr 50 min before NEW-1 / FATAL-4 closed)
+**Total remaining time: ~1 hr 25 min of work + 1 training run.** (was 1 hr 40 min before NEW-3 / CRITICAL-2 / NEW-6 closed)
 
 > **Recommendation:** Do items 1–8 *before* spending any HF credits.
 > All 8 are zero-compute logic/text fixes. Once the pipeline is provably
@@ -1204,25 +1289,27 @@ earlier failure invalidates later items.
 - [x] README HF Space URL is live and serving (`https://aniketasla-debatefloor.hf.space`, SHA `402ef31bbbe0`, stage `RUNNING`)
 - [ ] README WandB run URL resolves to the correct run (matches the JSON we ship)
 - [ ] README Colab badge opens the correct notebook
-- [ ] README "Mean reward" row matches numbers in `training_summary.json`
-- [ ] README install command uses `pip install -r ...` not the broken inline list
-- [ ] README links the writeup (`docs/HFBlogPost.md` — already linked)
+- [x] README "Training reward" row matches numbers in `training_summary.json` ← **NEW-3 / CRITICAL-2 fix this revision** (`0.0453 → 0.3318`, all 11 cited numbers match JSON)
+- [x] README install command uses `pip install -r ...` not the broken inline list ← **NEW-6 fix this revision** (sources `requirements.txt` + `train/requirements.txt`)
+- [x] README links the writeup (`docs/HFBlogPost.md` — already linked)
 - [x] Trained model is pushed to HF Hub and linked from README
 
 ---
 
 ## When to Use the HF Credits
 
-**Not yet.** Items 1–6 above are zero-compute. They are also the items most
-likely to make a judge mark you down on day-of-evaluation: a failing test, a
-contradictory README, broken install command.
+**Not yet.** Items 1–4 above are zero-compute. They are now lower-impact
+than the items already closed: the visible-to-judges risks (failing test,
+contradictory README, broken install, stale eval_report) are all gone.
 
-The `/stats`-empty risk (HIGH-2) and the stale eval_report risk (NEW-1 /
-FATAL-4) have been removed. The remaining visible-to-judges risks are now
-README copy and the empty-strategy `coordinated_fraud` / `identity_fraud`
-rows.
+The `/stats`-empty risk (HIGH-2), the stale eval_report risk
+(NEW-1 / FATAL-4), and the README contradiction risk
+(NEW-3 / CRITICAL-2 / NEW-6) have all been removed. The remaining
+visible-to-judges risk is the empty-strategy `coordinated_fraud` /
+`identity_fraud` rows that error if a reviewer runs
+`python inference_debatefloor.py --all-tasks`.
 
-Burn the credits exactly once, on items 7–8, **after** items 1–6 are done
+Burn the credits exactly once, on items 5–6, **after** items 1–4 are done
 and a local 50-episode smoke training (T4) confirms all 4 component scores move.
 
 The model choice (Qwen2.5-0.5B-Instruct) is correct for this submission and
@@ -1239,4 +1326,5 @@ that the judging rubric explicitly looks for.
 | 25 Apr 17:30 | third pass | **HIGH-2 → PASS** (code `9f2d218`, HF `402ef31bbbe0`); priority list renumbered; live `/stats` proof captured |
 | 25 Apr 17:55 | fourth pass | **FATAL-3 → PASS**: contradictory_claim evidence_quality `0.0 → 1.0` and reward `0.518 → 0.7497` (live env, seed=42). NEW-7 added: distribution_shift_claim has no env-side discovery path for its expected_signals. Priority list renumbered (10 → 10 with FATAL-3 removed and NEW-7 added). |
 | 25 Apr 18:25 | fifth pass | **NEW-2 → PASS** and **FATAL-5 → PASS**: replaced `tests/envs/test_debatefloor_rubric.py` with a 6-test suite that asserts the FATAL-5 contract (`obs.rubric_reward != obs.reward`). Live divergence proof: 0.428 vs 0.29 (Δ 0.138) for the original failing call. Full DebateFloor regression: **49/49 pass**. Priority list shrinks to 9 items. |
-| 25 Apr 19:10 | **sixth pass (this revision)** | **NEW-1 → PASS** and **FATAL-4 → PASS**: built `train/generate_eval_report.py` (the previously-referenced `pre_validation_script.py --output/--seeds/--tasks` flags never existed). Regenerated `reports/eval_report.json` + `.md` against the live HF Space using `inference_debatefloor.py:STRATEGIES` × seeds `[7, 11, 13, 19, 25]` (all 5 variant_ids) × 3 tasks → 15 rows. Numbers: 5 distinct variant_ids, 3 distinct rewards (`{0.3966, 0.7497, 0.7625}`), 10/15 rows with `evidence_quality > 0`, 100% completion, average reward `0.6363`. PLAN-prescribed invariant assertion runs clean. Priority list shrinks to 8 items. |
+| 25 Apr 19:10 | sixth pass | **NEW-1 → PASS** and **FATAL-4 → PASS**: built `train/generate_eval_report.py` (the previously-referenced `pre_validation_script.py --output/--seeds/--tasks` flags never existed). Regenerated `reports/eval_report.json` + `.md` against the live HF Space using `inference_debatefloor.py:STRATEGIES` × seeds `[7, 11, 13, 19, 25]` (all 5 variant_ids) × 3 tasks → 15 rows. Numbers: 5 distinct variant_ids, 3 distinct rewards (`{0.3966, 0.7497, 0.7625}`), 10/15 rows with `evidence_quality > 0`, 100% completion, average reward `0.6363`. PLAN-prescribed invariant assertion runs clean. Priority list shrinks to 8 items. |
+| 25 Apr 19:25 | **seventh pass (this revision)** | **NEW-3 → PASS**, **CRITICAL-2 → PASS**, **FATAL-2 storytelling-half → PASS**, and **NEW-6 → PASS**: rewrote README `Results` block, both plot captions, and Training Pipeline install command so every cited number is read directly from `training_summary.json` / `eval_report.json` and the install command sources `requirements.txt` + `train/requirements.txt`. Sanity script verifies 11/11 cited numbers match JSON, 10/10 forbidden hand-edited tokens (`-0.34`/`+0.83`/`~82%`/`~44%`/`41%`/`73%`/`trl>=0.9.0` plus unicode-minus variants) absent, 4/4 install-command checks pass. FATAL-2 re-training half (Step 1 + Step 3) still pending HF credits. Priority list shrinks to 6 items. |
