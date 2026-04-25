@@ -77,9 +77,7 @@ def load_model(model_id, label):
             tok.pad_token = tok.eos_token
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
-            torch_dtype=torch.float32,   # CPU-safe
-            device_map="cpu",
-            low_cpu_mem_usage=True,
+            torch_dtype=torch.float32,   # CPU-safe, no accelerate needed
         )
         model.eval()
         print(f"  Loaded via transformers (fp32 CPU) in {time.time()-t0:.1f}s")

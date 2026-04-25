@@ -15,12 +15,32 @@
   "mean_reward_before": 0.0453,
   "mean_reward_after_training": 0.3318,
   "mean_reward_final": 0.3318,
-  "eval_reward_before": "__pending_real_model_inference__",
-  "eval_reward_after": "__pending_real_model_inference__",
+  "eval_reward_before": {
+    "Fraud detection": 0.3333,
+    "Decision accuracy": 0.3333,
+    "Evidence quality": 0.3333,
+    "Calibration": 0.3333
+  },
+  "eval_reward_after": {
+    "Fraud detection": 0.3333,
+    "Decision accuracy": 0.6667,
+    "Evidence quality": 0.3333,
+    "Calibration": 0.2
+  },
   "component_shift": {
-    "note": "Pending real model inference from AniketAsla/debatefloor-grpo-qwen2.5-0.5b-instruct. Training reward curve (mean_start->mean_end) is the primary learning evidence.",
-    "before": "__pending__",
-    "after": "__pending__"
+    "note": "before=naive always-approve-HIGH baseline (simulates untrained agent), after=AniketAsla/debatefloor-grpo-qwen2.5-0.5b-instruct (GRPO fine-tuned). Rewards from live env HTTP API (MR-2 compliant).",
+    "before": {
+      "Fraud detection": 0.3333,
+      "Decision accuracy": 0.3333,
+      "Evidence quality": 0.3333,
+      "Calibration": 0.3333
+    },
+    "after": {
+      "Fraud detection": 0.3333,
+      "Decision accuracy": 0.6667,
+      "Evidence quality": 0.3333,
+      "Calibration": 0.2
+    }
   },
   "log_history": [
     {
@@ -2374,11 +2394,161 @@
     }
   ],
   "component_shift_delta": {
-    "Fraud detection": 0.3334,
-    "Decision accuracy": 0.6667,
-    "Evidence quality": 0.3334,
-    "Calibration": 0.2334
+    "Fraud detection": 0.0,
+    "Decision accuracy": 0.3334,
+    "Evidence quality": 0.0,
+    "Calibration": -0.1333
   },
-  "eval_methodology": "before=naive_untrained_baseline (always approve_claim HIGH), after=calibrated_trained_agent (correct decision + investigation per task)",
-  "eval_generated_at": "2026-04-25T10:15:29.628375+00:00"
+  "eval_methodology": "before=naive always-approve-HIGH agent (zero training), after=AniketAsla/debatefloor-grpo-qwen2.5-0.5b-instruct (300-episode GRPO training, 450 steps). Tasks: ['clean_claim', 'contradictory_claim', 'distribution_shift_claim']. Seeds per task: [7, 42]. All rewards from live env POST /step (not keyword matching). MR-2 compliant.",
+  "eval_generated_at": "2026-04-25T11:05:12.231268+00:00",
+  "eval_rows": {
+    "before": [
+      {
+        "task_id": "clean_claim",
+        "seed": 7,
+        "decision": "approve_claim",
+        "confidence": "HIGH",
+        "reward": 0.8,
+        "fraud_detection_score": 1.0,
+        "decision_accuracy": 1.0,
+        "evidence_quality_score": 1.0,
+        "calibration_score": 1.0
+      },
+      {
+        "task_id": "clean_claim",
+        "seed": 42,
+        "decision": "approve_claim",
+        "confidence": "HIGH",
+        "reward": 0.8,
+        "fraud_detection_score": 1.0,
+        "decision_accuracy": 1.0,
+        "evidence_quality_score": 1.0,
+        "calibration_score": 1.0
+      },
+      {
+        "task_id": "contradictory_claim",
+        "seed": 7,
+        "decision": "approve_claim",
+        "confidence": "HIGH",
+        "reward": 0.0,
+        "fraud_detection_score": 0.0,
+        "decision_accuracy": 0.0,
+        "evidence_quality_score": 0.0,
+        "calibration_score": 0.0
+      },
+      {
+        "task_id": "contradictory_claim",
+        "seed": 42,
+        "decision": "approve_claim",
+        "confidence": "HIGH",
+        "reward": 0.0,
+        "fraud_detection_score": 0.0,
+        "decision_accuracy": 0.0,
+        "evidence_quality_score": 0.0,
+        "calibration_score": 0.0
+      },
+      {
+        "task_id": "distribution_shift_claim",
+        "seed": 7,
+        "decision": "approve_claim",
+        "confidence": "HIGH",
+        "reward": 0.0,
+        "fraud_detection_score": 0.0,
+        "decision_accuracy": 0.0,
+        "evidence_quality_score": 0.0,
+        "calibration_score": 0.0
+      },
+      {
+        "task_id": "distribution_shift_claim",
+        "seed": 42,
+        "decision": "approve_claim",
+        "confidence": "HIGH",
+        "reward": 0.0,
+        "fraud_detection_score": 0.0,
+        "decision_accuracy": 0.0,
+        "evidence_quality_score": 0.0,
+        "calibration_score": 0.0
+      }
+    ],
+    "after": [
+      {
+        "task_id": "clean_claim",
+        "seed": 7,
+        "decision": "escalate_to_human",
+        "confidence": "MED",
+        "completion": "DECISION: escalate_to_human\nCONFIDENCE: MED\nREASON: The claim involves a rear-end collision that occurred at a traffic signal, which could be considered a minor incident requiring attention due to its",
+        "gen_time_s": 9.4,
+        "reward": 0.154,
+        "fraud_detection_score": 1.0,
+        "decision_accuracy": 0.0,
+        "evidence_quality_score": 1.0,
+        "calibration_score": 0.0
+      },
+      {
+        "task_id": "clean_claim",
+        "seed": 42,
+        "decision": "escalate_to_human",
+        "confidence": "MED",
+        "completion": "DECISION: escalate_to_human\nCONFIDENCE: MED\nREASON: The claim involves a rear-end collision that occurred at a traffic signal, which could be considered a minor incident requiring attention due to its",
+        "gen_time_s": 10.5,
+        "reward": 0.154,
+        "fraud_detection_score": 1.0,
+        "decision_accuracy": 0.0,
+        "evidence_quality_score": 1.0,
+        "calibration_score": 0.0
+      },
+      {
+        "task_id": "contradictory_claim",
+        "seed": 7,
+        "decision": "escalate_to_human",
+        "confidence": "MED",
+        "completion": "DECISION: escalate_to_human\nCONFIDENCE: MED\nREASON: The claim details provided do not match the medical procedure described (Emergency Appendectomy) or the post-operative hospitalization noted (post-o",
+        "gen_time_s": 12.8,
+        "reward": 0.394,
+        "fraud_detection_score": 0.0,
+        "decision_accuracy": 1.0,
+        "evidence_quality_score": 0.0,
+        "calibration_score": 0.0
+      },
+      {
+        "task_id": "contradictory_claim",
+        "seed": 42,
+        "decision": "escalate_to_human",
+        "confidence": "MED",
+        "completion": "DECISION: escalate_to_human\nCONFIDENCE: MED\nREASON: The claim details provided do not match the medical procedure described (Emergency Appendectomy) or the post-operative hospitalization noted (post-o",
+        "gen_time_s": 14.0,
+        "reward": 0.394,
+        "fraud_detection_score": 0.0,
+        "decision_accuracy": 1.0,
+        "evidence_quality_score": 0.0,
+        "calibration_score": 0.0
+      },
+      {
+        "task_id": "distribution_shift_claim",
+        "seed": 7,
+        "decision": "escalate_to_human",
+        "confidence": "MED",
+        "completion": "DECISION: escalate_to_human\nCONFIDENCE: MED\nREASON: The claim involves a minor collision at a junction, which may not necessarily indicate a coordinated ring or significant damage. However, given that",
+        "gen_time_s": 9.9,
+        "reward": 0.458,
+        "fraud_detection_score": 0.0,
+        "decision_accuracy": 1.0,
+        "evidence_quality_score": 0.0,
+        "calibration_score": 0.6
+      },
+      {
+        "task_id": "distribution_shift_claim",
+        "seed": 42,
+        "decision": "escalate_to_human",
+        "confidence": "MED",
+        "completion": "DECISION: escalate_to_human\nCONFIDENCE: MED\nREASON: The claim involves a minor collision at a junction, which may not necessarily indicate a coordinated ring or significant damage. However, given that",
+        "gen_time_s": 10.2,
+        "reward": 0.458,
+        "fraud_detection_score": 0.0,
+        "decision_accuracy": 1.0,
+        "evidence_quality_score": 0.0,
+        "calibration_score": 0.6
+      }
+    ]
+  }
 }
