@@ -832,6 +832,24 @@ def main():
     after_components = after_eval["means"]
     print(f"  After: {after_components}")
 
+    # Human-readable training summary so you don't have to mentally diff two dicts.
+    print("\n" + "=" * 70)
+    print("TRAINING ACCURACY SUMMARY")
+    print("=" * 70)
+    print(f"{'Component':<25s}{'Before':>12s}{'After':>12s}{'Delta':>12s}")
+    print("-" * 70)
+    for _comp in sorted(set(before_components) | set(after_components)):
+        _b = float(before_components.get(_comp, 0.0))
+        _a = float(after_components.get(_comp, 0.0))
+        _d = _a - _b
+        _arrow = "UP" if _d > 0.005 else ("DOWN" if _d < -0.005 else "FLAT")
+        print(f"  {_comp:<23s}{_b:>11.3f} {_a:>11.3f} {_d:>+10.3f} {_arrow}")
+    _b_mean = sum(before_components.values()) / max(len(before_components), 1)
+    _a_mean = sum(after_components.values()) / max(len(after_components), 1)
+    print("-" * 70)
+    print(f"  {'OVERALL MEAN':<23s}{_b_mean:>11.3f} {_a_mean:>11.3f} {(_a_mean-_b_mean):>+10.3f}")
+    print("=" * 70 + "\n")
+
     if USE_WANDB:
         try:
             wandb.log({f"eval/after/{k.replace(' ', '_').lower()}": v for k, v in after_components.items()})
