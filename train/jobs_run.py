@@ -44,6 +44,7 @@ Environment variables consumed:
 """
 from __future__ import annotations
 
+import functools
 import os
 import signal
 import subprocess
@@ -51,11 +52,34 @@ import sys
 import time
 from pathlib import Path
 
+# Force unbuffered stdout/stderr so HF Jobs log viewer shows every line in
+# real time. Without this, prints sit in a 4KB buffer and the user only sees
+# "Job started" for several minutes — making working jobs look broken.
+os.environ["PYTHONUNBUFFERED"] = "1"
+try:
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
+except AttributeError:
+    pass
+print = functools.partial(print, flush=True)  # noqa: A001 — intentional shadow
+
+# Heartbeat: a single line every minute so the user knows the job is alive
+# even during slow phases (pip install, model download, dataset prep).
+_HEARTBEAT_START = time.time()
+
+
+def _hb(label: str) -> None:
+    elapsed = int(time.time() - _HEARTBEAT_START)
+    mm, ss = divmod(elapsed, 60)
+    print(f"[heartbeat +{mm:02d}:{ss:02d}] {label}")
+
+
 # ── [1/6] Ensure the repo root is on sys.path and deps are installed ────────
 REPO_ROOT = Path(__file__).resolve().parent.parent
 os.chdir(REPO_ROOT)
 sys.path.insert(0, str(REPO_ROOT))
 
+_hb("driver script started")
 print("=" * 70)
 print("[1/6] Installing pinned deps from requirements files")
 print("=" * 70)
@@ -68,8 +92,11 @@ def _pip_install(*args: str) -> None:
 
 
 _pip_install("--upgrade", "pip")
+_hb("upgraded pip")
 _pip_install("-r", "requirements.txt")
+_hb("installed root requirements.txt")
 _pip_install("-r", "train/requirements.txt")
+_hb("installed train/requirements.txt")
 print("  Deps installed.\n")
 
 
@@ -128,12 +155,14 @@ def _wait_for_env(max_tries: int = 60) -> None:
 
 
 _wait_for_env()
+_hb("env server is healthy and accepting requests")
 
 
 # ── [4/6] Run training ──────────────────────────────────────────────────────
 print("\n" + "=" * 70)
 print("[4/6] Running train.train_minimal.main()")
 print("=" * 70)
+_hb("starting training phase — model download may take 1–2 min on first run")
 
 # Surface key config so the log shows what we ran with
 EPISODES = int(os.environ.get("EPISODES", "10000"))
