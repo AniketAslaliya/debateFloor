@@ -1,18 +1,31 @@
 """
-train_minimal.py — DebateFloor GRPO training (standard TRL, no server required)
+train_minimal.py — DebateFloor GRPO training (TRL + Unsloth + live environment)
 
-Fix summary (v2):
-  - Removed HTTP server dependency (FATAL: openenv not installed in Colab)
-  - Reward computed directly via training_reward() — no /reset + /step calls needed
-  - Removed Unsloth hard requirement — falls back to standard transformers (works on free T4)
-  - Unsloth still used automatically if available (install separately for speed boost)
-  - num_generations=6 for stable GRPO gradient on T4 VRAM budget
-  - All JSON outputs and plots unchanged
+CRITICAL: This script connects to the live DebateFloor environment via HTTP.
+The environment server MUST be running before training starts.
+Reward comes from POST /step — NOT from local Python functions.
+
+This satisfies MR-2 from HACKATHON_CONSTRAINTS.md:
+  "The training loop MUST call /reset on the running environment server,
+   submit actions via /step, read reward from the /step HTTP response."
 
 Usage (Colab):
+  # Cell 1: Install deps + clone
   !git clone https://github.com/AniketAslaliya/debateFloor && cd debateFloor
-  !pip install trl>=0.9.0 transformers>=4.40.0 peft accelerate datasets wandb requests matplotlib
-  # Optional (faster): !pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"
+  !pip install trl>=0.12.0 transformers>=4.46.0 peft accelerate datasets wandb requests matplotlib
+  !pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"
+
+  # Cell 2: Start environment server in background
+  import subprocess, time, requests
+  server_proc = subprocess.Popen(
+      ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7860"],
+      cwd="/content/debateFloor"
+  )
+  time.sleep(8)
+  assert requests.get("http://localhost:7860/health").json()["status"] == "healthy"
+  print("Environment server running.")
+
+  # Cell 3: Run training
   !python train/train_minimal.py
 """
 
@@ -20,10 +33,13 @@ import json
 import os
 import random
 import re
+import subprocess
 import sys
 import time
 from pathlib import Path
 from statistics import mean
+
+import requests as http_client
 
 import torch
 
@@ -31,7 +47,7 @@ sys.path.insert(0, ".")
 
 import wandb
 from datasets import Dataset
-from server.calibration_grader import CALIBRATION_MATRIX, training_reward
+from server.calibration_grader import CALIBRATION_MATRIX
 from server.claim_generator import generate_episode_pool
 from trl import GRPOConfig, GRPOTrainer
 
@@ -50,6 +66,7 @@ PLOT_PATH    = Path("docs/reward_curve.svg")
 COMPONENT_PLOT_PATH = Path("docs/component_shift.svg")
 SUMMARY_PATH = Path("reports/training_summary.json")
 COMPONENT_SUMMARY_PATH = Path("reports/component_shift_summary.json")
+ENV_BASE_URL = os.getenv("ENV_BASE_URL", "http://localhost:7860")
 
 # ── Try Unsloth; fall back gracefully to standard transformers ──────────────
 try:
@@ -65,6 +82,88 @@ HAS_BF16 = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
 USE_FP16  = torch.cuda.is_available() and not HAS_BF16
 DTYPE     = torch.bfloat16 if HAS_BF16 else torch.float16
 # ───────────────────────────────────────────────────────────────────────────
+
+
+# ── Environment HTTP helpers ────────────────────────────────────────────────
+
+def _wait_for_env(base_url: str, retries: int = 15) -> None:
+    """Block until the environment server is reachable."""
+    for i in range(retries):
+        try:
+            r = http_client.get(f"{base_url}/health", timeout=5)
+            if r.status_code == 200 and r.json().get("status") == "healthy":
+                print(f"✅ Environment server ready at {base_url}")
+                return
+        except Exception:
+            pass
+        print(f"  Waiting for environment server... ({i+1}/{retries})")
+        time.sleep(3)
+    raise RuntimeError(
+        f"Environment not reachable at {base_url} after {retries} retries. "
+        "Start it with: PYTHONPATH=. uvicorn app.main:app --port 7860"
+    )
+
+
+def _start_env_server_if_needed(base_url: str) -> subprocess.Popen | None:
+    """Try to reach the env server. If not running, start it as a subprocess."""
+    try:
+        r = http_client.get(f"{base_url}/health", timeout=3)
+        if r.status_code == 200:
+            print(f"✅ Environment already running at {base_url}")
+            return None
+    except Exception:
+        pass
+
+    print(f"Starting environment server at {base_url}...")
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7860"],
+        cwd=str(Path(".").resolve()),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    _wait_for_env(base_url)
+    return proc
+
+
+def run_episode_via_http(
+    task_id: str,
+    seed: int,
+    decision: str,
+    confidence: str,
+    reason: str,
+    base_url: str = ENV_BASE_URL,
+) -> float:
+    """
+    Run a single-step episode against the live environment.
+    Returns the reward from POST /step.
+
+    Flow:
+      1. POST /reset with task_id + seed → get session_id
+      2. POST /step with terminal action (decision + confidence) → get reward
+    """
+    # 1. Reset — start a fresh episode for this task + seed
+    reset_resp = http_client.post(
+        f"{base_url}/reset",
+        json={"task_id": task_id, "seed": seed},
+        timeout=10,
+    )
+    reset_resp.raise_for_status()
+    session_id = reset_resp.json()["session_id"]
+
+    # 2. Step — submit the terminal decision with confidence
+    action = {
+        "action_type": decision,
+        "confidence": confidence,
+        "parameters": {"reason": reason},
+        "reasoning": reason,
+    }
+    step_resp = http_client.post(
+        f"{base_url}/step",
+        json={"action": action, "session_id": session_id},
+        timeout=10,
+    )
+    step_resp.raise_for_status()
+    return float(step_resp.json()["reward"])
 
 SYSTEM = (
     "You are an expert insurance fraud investigator.\n"
@@ -116,13 +215,14 @@ def make_row(ep, tok) -> dict:
         "ground_truth":     ep.ground_truth,
         "fraud_type":       ep.fraud_type,
         "expected_signals": json.dumps(ep.expected_fraud_signals),
-        # Store episode metadata for direct reward computation
+        "task_id":          ep.task_id,                      # for POST /reset
+        "seed":             str(ep.seed),                    # for POST /reset (str for HF Dataset)
         "difficulty":       ep.difficulty,
         "ambiguity_score":  str(ep.ambiguity_score),
     }
 
 
-# ── Direct reward (no HTTP server required) ─────────────────────────────────
+# ── Live environment reward (MR-2 compliant) ────────────────────────────────
 
 def _parse_completion(text: str) -> tuple[str | None, str | None, str]:
     """Parse DECISION / CONFIDENCE / REASON from model output."""
@@ -135,19 +235,27 @@ def _parse_completion(text: str) -> tuple[str | None, str | None, str]:
     return decision, confidence, reason
 
 
-def reward_fn(completions, prompts, ground_truths, expected_signals_list, **kwargs):
+def reward_fn(completions, prompts, **kwargs):
     """
-    GRPO reward function — calls training_reward() directly.
-    No HTTP server, no network, no timeouts.
+    GRPO reward function — calls the LIVE environment via HTTP.
 
-    training_reward() signature:
-        (decision, confidence, ground_truth, legitimate_flags, step_num, done) -> float
+    For each completion:
+      1. Parse DECISION / CONFIDENCE / REASON from model output
+      2. POST /reset with task_id + seed → get session_id
+      3. POST /step with terminal action → get reward from environment
+      4. Return that reward to GRPOTrainer
+
+    Extra dataset columns (task_id, seed, ground_truth) are auto-injected
+    by GRPOTrainer from the dataset via **kwargs.
     """
+    # TRL passes extra dataset columns — handle both singular and plural naming
+    task_ids = kwargs.get("task_id", kwargs.get("task_ids", []))
+    seeds = kwargs.get("seed", kwargs.get("seeds", []))
+    ground_truths = kwargs.get("ground_truth", kwargs.get("ground_truths", []))
+
     rewards = []
 
-    for completion_list, prompt, ground_truth, expected_signals_json in zip(
-        completions, prompts, ground_truths, expected_signals_list
-    ):
+    for idx, completion_list in enumerate(completions):
         # Extract text from GRPO completion format
         if isinstance(completion_list, list):
             text = completion_list[0].get("content", "") if completion_list else ""
@@ -161,29 +269,25 @@ def reward_fn(completions, prompts, ground_truths, expected_signals_list, **kwar
             rewards.append(-0.2)
             continue
 
-        # Count how many expected fraud signals appear in the model's output
+        # Get task_id and seed for this row
+        task_id = task_ids[idx] if idx < len(task_ids) else "clean_claim"
+        seed_str = seeds[idx] if idx < len(seeds) else "42"
+
+        # Call the live environment via HTTP — this is the MR-2 requirement
         try:
-            expected = json.loads(expected_signals_json)
-        except Exception:
-            expected = []
-
-        text_lc   = text.lower()
-        reason_lc = reason.lower()
-        legitimate_flags = sum(
-            1 for s in expected
-            if s.replace("_", " ") in text_lc or s.replace("_", " ") in reason_lc
-        )
-
-        # Direct reward computation — identical logic to what the HTTP /step API returned
-        reward = training_reward(
-            decision=decision,
-            confidence=confidence,
-            ground_truth=ground_truth,
-            legitimate_flags=legitimate_flags,
-            step_num=1,   # single-step episode in training
-            done=True,
-        )
-        rewards.append(float(reward))
+            seed_int = int(seed_str)
+            reward = run_episode_via_http(
+                task_id=task_id,
+                seed=seed_int,
+                decision=decision,
+                confidence=confidence,
+                reason=reason or "No reason provided.",
+            )
+            rewards.append(float(reward))
+        except Exception as exc:
+            # If HTTP call fails, give a small negative reward rather than crash
+            print(f"  ⚠️  HTTP reward failed for {task_id}: {exc}")
+            rewards.append(-0.1)
 
     # Log reward variance (detect zero-gradient situations)
     if len(rewards) > 1:
@@ -193,7 +297,10 @@ def reward_fn(completions, prompts, ground_truths, expected_signals_list, **kwar
             print(f"  ⚠️  Low reward variance ({variance:.4f}) — GRPO gradient may be near zero")
         if USE_WANDB:
             try:
-                wandb.log({"train/reward_variance": variance})
+                wandb.log({
+                    "train/reward_variance": variance,
+                    "train/reward_mean": statistics.mean(rewards),
+                })
             except Exception:
                 pass
 
@@ -382,18 +489,22 @@ def main():
     global _tok_ref
 
     print(f"GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU (no GPU found!)'}")
-    print("✅ No environment server needed — reward computed directly via training_reward()")
+
+    # ── MR-2: Connect to the live environment before training ──────────────
+    server_proc = _start_env_server_if_needed(ENV_BASE_URL)
+    print(f"✅ Environment connected at {ENV_BASE_URL} — reward from POST /step")
 
     if USE_WANDB:
         wandb.login(key=WANDB_KEY)
         wandb.init(
             project="debatefloor-insurance-rl",
             entity=WANDB_ENTITY,
-            name="grpo-qwen0.5b-direct-reward",
-            tags=["grpo", "calibration", "insurance", "direct-reward", "no-server"],
+            name="grpo-qwen0.5b-env-connected",
+            tags=["grpo", "calibration", "insurance", "env-connected", "http-reward"],
             config={
-                "reward_type":   "direct_training_reward",
-                "training_note": "training_reward() called inline — no HTTP server",
+                "reward_type":   "env_http_reward",
+                "training_note": "Reward from live env via POST /reset + /step",
+                "env_base_url":  ENV_BASE_URL,
                 "eval_note":     "six_component clamped [0,1]",
                 "model":         MODEL_NAME,
                 "episodes":      EPISODES,
@@ -466,7 +577,7 @@ def main():
         logging_steps=5,
         save_steps=50,
         report_to="wandb" if USE_WANDB else "none",
-        run_name="debatefloor-grpo-direct-reward",
+        run_name="debatefloor-grpo-env-connected",
         max_grad_norm=0.3,
         seed=SEED,
         bf16=HAS_BF16,
@@ -481,7 +592,7 @@ def main():
         train_dataset=dataset,
     )
 
-    print("Starting GRPO training (direct reward — no server)...")
+    print(f"Starting GRPO training (reward from {ENV_BASE_URL}/step)...")
     result = trainer.train()
     print(f"Done. Steps: {result.global_step} | Loss: {result.training_loss:.4f}")
 
@@ -506,6 +617,15 @@ def main():
         model.save_pretrained("./debatefloor_checkpoint")
         tok.save_pretrained("./debatefloor_checkpoint")
     print("✅ Checkpoint saved to ./debatefloor_checkpoint")
+
+    # Clean up server process if we started it
+    if server_proc is not None:
+        server_proc.terminate()
+        try:
+            server_proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            server_proc.kill()
+        print("🛑 Environment server stopped.")
 
     # Push to HF Hub if token is set
     hf_token = os.getenv("HF_TOKEN", "")
