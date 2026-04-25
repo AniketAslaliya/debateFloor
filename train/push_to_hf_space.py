@@ -35,8 +35,11 @@ UPLOAD_PATTERNS = [
     "reports",
     "train/train_minimal.py",
     "train/real_model_eval.py",
+    "train/requirements.txt",
+    "train/jobs_run.py",
     "openenv.yaml",
     "requirements.txt",
+    "pyproject.toml",
     "README.md",
 ]
 
