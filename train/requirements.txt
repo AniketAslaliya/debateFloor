@@ -3,17 +3,17 @@
 # (PyTorch 2.4, CUDA 12.1, Python 3.11)
 
 # Core RL trainer.
-# We use 0.12.2 because newer trl (0.13+) hard-imports mergekit at module load
-# in a way that's hard to satisfy on Python 3.11. 0.12.2 only imports mergekit
-# lazily inside model-merging callbacks (which we never trigger), so it's fine
-# to either install a recent mergekit or skip it entirely.
-trl==0.12.2
+# - GRPO was added in trl 0.13 (Jan 2025) and the GRPOConfig API used in
+#   train/train_minimal.py (processing_class, reward_funcs, num_generations,
+#   max_completion_length, max_prompt_length) stabilized in 0.15.
+# - Cap below 0.20 to avoid the trl-0.20 mergekit-required behavior.
+trl>=0.15.0,<0.20.0
 
-# Model + LoRA. accelerate 1.0.x is the latest version that doesn't require
-# mergekit>=0.1, which avoids the original colab dep-hell entirely.
-transformers>=4.46.0,<4.47.0
-peft==0.13.2
-accelerate==1.0.1
+# Model + LoRA. Pin transformers >=4.48 so it satisfies trl 0.15+ peer requirement.
+# (trl 0.15 needs transformers >= 4.48; trl 0.17 needs >= 4.50.)
+transformers>=4.48.0
+peft>=0.13.0
+accelerate>=1.0.0
 datasets>=2.19.0
 
 # Logging / IO
