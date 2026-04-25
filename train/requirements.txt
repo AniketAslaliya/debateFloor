@@ -10,9 +10,12 @@
 #   torch>=2.5 which the base image doesn't have).
 trl>=0.15.0,<0.18.0
 
-# transformers 4.48-4.49 are the sweet spot: trl 0.15 accepts them, and they
-# don't require torch>=2.5 the way 4.50+ does.
-transformers>=4.48.0,<4.50.0
+# transformers must be < 4.48 — that's the version where loss_deformable_detr.py
+# was added, which unconditionally imports image_transforms -> torchvision at
+# module load time. Even purging torchvision can't avoid this if transformers
+# tries to import it during _LazyModule resolution.
+# trl 0.15.2 accepts transformers >= 4.46, so 4.46 / 4.47 are both valid.
+transformers>=4.46.0,<4.48.0
 
 # Note: torchvision is INTENTIONALLY not pinned. The HF Jobs base image ships
 # torch 2.11.0+cu130 (not 2.4.0 as the tag suggests), and ABI-matching

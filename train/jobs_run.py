@@ -115,22 +115,45 @@ _hb("installed root requirements.txt")
 _pip_install("-r", "train/requirements.txt")
 _hb("installed train/requirements.txt")
 
-# ── [1.4/6] Purge torchvision (text-only training; transformers will skip
-# the image_utils import path when torchvision is absent). The HF Jobs base
-# image ships an unstable torch+torchvision combo (claims 2.4.0 but ships
-# torch 2.11.0+cu130) that breaks all our import attempts. Removing
-# torchvision entirely is the simplest, most robust fix.
+# ── [1.4/6] Purge torchvision AND evict it from sys.modules.
+#
+# Two-part problem:
+#   (1) The HF Jobs base image claims 'pytorch:2.4.0-cuda12.1' but actually
+#       ships torch 2.11.0+cu130, so any torchvision pin we make is wrong.
+#   (2) Even after `pip uninstall torchvision`, Python keeps the partially-
+#       loaded torchvision modules in sys.modules from earlier `pip install`
+#       work, so `import transformers` still hits the broken cached state and
+#       fails with "partially initialized module 'torchvision' has no
+#       attribute 'extension'".
+#
+# Fix: uninstall the package AND surgically evict every torchvision.* entry
+# from sys.modules so the next import attempt sees a clean slate.
 print("\n  Purging torchvision (text-only training, not needed)...")
 try:
     subprocess.check_call(
         [sys.executable, "-m", "pip", "uninstall", "-y", "-q", "torchvision"]
     )
-    print("    Removed torchvision from environment")
+    print("    Removed torchvision package from environment")
 except subprocess.CalledProcessError:
     print("    torchvision not installed — nothing to remove")
 
+_evicted = [k for k in list(sys.modules) if k == "torchvision" or k.startswith("torchvision.")]
+for _k in _evicted:
+    del sys.modules[_k]
+if _evicted:
+    print(f"    Evicted {len(_evicted)} torchvision modules from sys.modules cache")
+
+# Also evict any partially-loaded transformers modules that might have already
+# tried to import torchvision and cached a broken state (e.g. from this script
+# importing `requests` earlier, which doesn't touch transformers, but be safe).
+_tf_evicted = [k for k in list(sys.modules) if k == "transformers" or k.startswith("transformers.")]
+for _k in _tf_evicted:
+    del sys.modules[_k]
+if _tf_evicted:
+    print(f"    Evicted {len(_tf_evicted)} transformers modules from sys.modules cache")
+
 # Tell transformers to be tolerant of missing optional vision deps (defense in
-# depth; the uninstall above is what actually fixes the issue).
+# depth; the uninstall + sys.modules eviction is what actually fixes it).
 os.environ.setdefault("TRANSFORMERS_NO_ADVISORY_WARNINGS", "1")
 
 # ── [1.5/6] Sanity-check critical imports BEFORE we boot the env + load model.
