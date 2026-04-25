@@ -180,11 +180,19 @@ CONFIDENCE_RE = re.compile(r"CONFIDENCE:\s*(HIGH|MED|LOW)", re.I)
 REASON_RE     = re.compile(r"REASON:\s*(.*)", re.I | re.S)
 
 _EVAL_TASKS = ("clean_claim", "contradictory_claim", "distribution_shift_claim")
+# NEW-5 fix: keep this list in lockstep with the canonical key set produced by
+# app.rubrics.DebateFloorRubric.component_scores(). Programmatic keys are
+# snake_case and match the env's reward_breakdown / rubric_components fields;
+# display labels are what appear in JSON, README, and the component-shift plot.
+# `reasoning_quality` was previously missing here, which made the rubric's
+# independent process signal invisible in the before/after table even though
+# it is a first-class rubric component (test_debatefloor_rubric.py asserts it).
 _COMPONENT_LABELS = [
-    ("fraud_detection_score", "Fraud detection"),
-    ("decision_accuracy",     "Decision accuracy"),
-    ("evidence_quality_score","Evidence quality"),
-    ("calibration_score",     "Calibration"),
+    ("fraud_detection_score",  "Fraud detection"),
+    ("decision_accuracy",      "Decision accuracy"),
+    ("evidence_quality_score", "Evidence quality"),
+    ("calibration_score",      "Calibration"),
+    ("reasoning_quality",      "Reasoning quality"),  # NEW-5: surfaces the rubric's independent process signal
 ]
 
 # Module-level refs so reward_fn can access tok (set in main())
@@ -358,6 +366,7 @@ def _score_completion_via_http(episode, completion_text: str, base_url: str = EN
             "decision_accuracy":      0.0,
             "evidence_quality_score": 0.0,
             "calibration_score":      0.0,
+            "reasoning_quality":      0.0,  # NEW-5: surface rubric process signal
         }
 
     task_id = getattr(episode, "task_id", "clean_claim")
@@ -393,12 +402,23 @@ def _score_completion_via_http(episode, completion_text: str, base_url: str = EN
             timeout=10,
         )
         step_data = step_resp.json()
-        breakdown = step_data.get("observation", {}).get("reward_breakdown", {})
+        observation = step_data.get("observation", {})
+        breakdown = observation.get("reward_breakdown", {})
+        # NEW-5: reasoning_quality is a rubric-only component (not in the
+        # env reward_breakdown); read it from the rubric_components dict
+        # the env exposes alongside breakdown. Fall back to 0.0 if missing
+        # (older env versions) — keeps the schema stable for downstream JSON.
+        rubric_components = (
+            observation.get("rubric_components")
+            or observation.get("metadata", {}).get("rubric_components", {})
+            or {}
+        )
         return {
             "fraud_detection_score":  float(breakdown.get("fraud_detection_score", 0.0)),
             "decision_accuracy":      float(breakdown.get("decision_accuracy",     0.0)),
             "evidence_quality_score": float(breakdown.get("evidence_quality_score", 0.0)),
             "calibration_score":      float(breakdown.get("calibration_score",     reward)),
+            "reasoning_quality":      float(rubric_components.get("reasoning_quality", 0.0)),
         }
     except Exception as exc:
         print(f"  ⚠️  HTTP score failed ({task_id}): {exc} — falling back to keyword scoring")
@@ -424,11 +444,27 @@ def _score_completion_keyword(episode, completion_text: str) -> dict:
     calibration_score = CALIBRATION_MATRIX.get((parsed["confidence"], decision_correct), 0.0) if parsed["confidence"] else 0.0
     decision_accuracy = 1.0 if decision_correct else 0.0
 
+    # NEW-5: mirror the rubric's _ReasoningQualityRubric scoring (>=20 chars,
+    # 4 evidence keywords = full score) so the fallback returns the same key
+    # set as _score_completion_via_http.
+    reasoning_text = parsed["reason"] or ""
+    if len(reasoning_text) >= 20:
+        evidence_kws = [
+            "date", "mismatch", "document", "inconsistency", "signal", "evidence",
+            "policy", "hospital", "bill", "procedure", "claim", "fraud", "verified",
+            "tampered", "inflated", "discrepancy", "suspicious", "record",
+        ]
+        kw_hits = sum(1 for kw in evidence_kws if kw in reasoning_text.lower())
+        reasoning_quality = min(1.0, kw_hits / 4.0)
+    else:
+        reasoning_quality = 0.0
+
     return {
         "fraud_detection_score":  fraud_detection_score,
         "decision_accuracy":      decision_accuracy,
         "evidence_quality_score": evidence_quality_score,
         "calibration_score":      calibration_score,
+        "reasoning_quality":      reasoning_quality,
     }
 
 

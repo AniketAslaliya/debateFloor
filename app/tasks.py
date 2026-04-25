@@ -661,6 +661,23 @@ def get_evidence_keyword_hints(task_id: str, flag_id: str) -> List[str]:
             "recent_policy_purchase": ["policy", "days", "exclusion", "window", "inception", "5", "30"],
             "dob_inconsistency": ["dob", "date of birth", "1988", "1986", "inconsistency", "mismatch"],
         },
+        # NEW-7 fix: distribution_shift_claim previously had no entry, so the
+        # keyword check in flag_fraud_signal returned [] and any evidence
+        # passed (since "not hints or any(h in evidence_lc for h in hints)"
+        # short-circuits to True when hints is empty). Adding explicit
+        # keyword anchors enforces evidence grounding for this task too,
+        # symmetric to the other 4 tasks. Keywords are taken verbatim from
+        # the task data: FastRepair Hub Whitefield (DOC-42), shared
+        # +91-9000005555 contact, BRK-882 broker, identical "Minor collision
+        # at junction. No injuries." narrative across CLM-DIST-602/603/604,
+        # and policies purchased ~30 days before the incident date.
+        "distribution_shift_claim": {
+            "shared_repair_shop_far":     ["repair", "shop", "fastrepair", "whitefield", "garage"],
+            "shared_emergency_contact":   ["contact", "phone", "emergency", "9000005555", "shared"],
+            "recent_policy_cluster":      ["policy", "purchase", "days", "cluster", "24", "30"],
+            "clustered_policy_broker":    ["broker", "brk-882", "same broker", "policy broker"],
+            "near_identical_descriptions": ["identical", "description", "narrative", "template", "minor collision"],
+        },
     }
     return hints.get(task_id, {}).get(flag_id, [])
 

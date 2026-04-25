@@ -407,12 +407,40 @@ class InsuranceClaimEnvironment(
                 contacts = [c.get("emergency_contact") for c in queried_data if c.get("emergency_contact")]
                 unique_contacts = set(contacts)
                 if len(contacts) > 1 and len(unique_contacts) == 1:
-                    hint = f" Cross-claim pattern detected: all queried claims share emergency_contact={contacts[0]}."
+                    # NEW-7 fix: previously this only emitted a hint string but
+                    # never recorded shared_emergency_contact in the discovered
+                    # set, so distribution_shift_claim agents could not safely
+                    # flag the signal (it'd trigger the "raised before
+                    # discovered" penalty). Now we auto-record so cross-claim
+                    # contact-match becomes a first-class discovery — symmetric
+                    # to the broker discovery below.
+                    self._record_discovered_signals(["shared_emergency_contact"])
+                    hint = (
+                        f" Cross-claim pattern detected: all queried claims share "
+                        f"emergency_contact={contacts[0]} (shared_emergency_contact signal recorded)."
+                    )
 
             # Querying CLM-GROUP-304 reveals clustered_policy_broker signal
             if match.get("broker_id") and claim_id == "CLM-GROUP-304":
                 self._record_discovered_signals(["clustered_policy_broker"])
                 hint += " All queried claims share broker_id=BRK-441 (clustered_policy_broker signal)."
+
+            # NEW-7 fix: broaden broker discovery to distribution_shift_claim
+            # (CLM-DIST-* linked claims). Once 2+ CLM-DIST-* claims have been
+            # queried and the current match has a broker_id, the broker cluster
+            # is observable — symmetric to coordinated_fraud's CLM-GROUP-304
+            # special case. Without this, distribution_shift_claim's
+            # clustered_policy_broker signal was never discoverable.
+            if (
+                match.get("broker_id")
+                and claim_id.startswith("CLM-DIST-")
+                and len(self._queried_claims) >= 2
+            ):
+                self._record_discovered_signals(["clustered_policy_broker"])
+                hint += (
+                    f" All queried CLM-DIST-* claims share broker_id={match['broker_id']} "
+                    "(clustered_policy_broker signal recorded)."
+                )
 
             return f"Linked claim detail retrieved for {claim_id}: {match}{hint}{expansion_hint}"
 
@@ -616,6 +644,25 @@ class InsuranceClaimEnvironment(
                 # DOC-33 (policy_inception) does NOT reveal recent_policy_purchase here;
                 # that signal is only discoverable via lookup_policy_history.
                 "DOC-34": ["dob_inconsistency"],
+            },
+            # NEW-7 fix: distribution_shift_claim previously had NO doc-level
+            # discovery path for any expected_signal. validate_document(...) for
+            # DOC-41/42/43 returned [], so the only way an honest agent could
+            # avoid the "raised before discovered" penalty was to skip flagging
+            # entirely (capping evidence_quality at 0.0 for the task). The
+            # mapping below mirrors coordinated_fraud:
+            #   DOC-41 (claim_form, declared_cost + claim_date metadata) →
+            #     surfaces recent_policy_cluster (the form's metadata is what
+            #     lets a reviewer notice the recent-policy-window indicator).
+            #   DOC-42 (garage_estimate, "FastRepair Hub Whitefield") →
+            #     surfaces shared_repair_shop_far (the shop name is the
+            #     evidence anchor for the geographic ring indicator).
+            # DOC-43 (police_report) reveals nothing direct; cross-claim only.
+            # shared_emergency_contact + clustered_policy_broker are still
+            # discovered via query_linked_claim (see _apply_action below).
+            "distribution_shift_claim": {
+                "DOC-41": ["recent_policy_cluster"],
+                "DOC-42": ["shared_repair_shop_far"],
             },
         }
         signal_map = mapping.get(task_id, {})
