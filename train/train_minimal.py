@@ -68,6 +68,24 @@ SUMMARY_PATH = Path("reports/training_summary.json")
 COMPONENT_SUMMARY_PATH = Path("reports/component_shift_summary.json")
 ENV_BASE_URL = os.getenv("ENV_BASE_URL", "http://localhost:7860")
 
+# Optional fast smoke run (import + short GRPO) before a full A10G job.
+#   set DEBATEFLOOR_SMOKE=1
+#   optional overrides: SMOKE_EPISODES, SMOKE_EVAL_EPISODES, SMOKE_EPOCHS, SMOKE_BATCH_SIZE
+def _env_truthy(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in ("1", "true", "yes", "on")
+
+SMOKE_MODE = _env_truthy("DEBATEFLOOR_SMOKE")
+if SMOKE_MODE:
+    EPISODES = int(os.getenv("SMOKE_EPISODES", "4"))
+    EVAL_EPISODES = int(os.getenv("SMOKE_EVAL_EPISODES", "3"))
+    EPOCHS = int(os.getenv("SMOKE_EPOCHS", "1"))
+    BATCH_SIZE = int(os.getenv("SMOKE_BATCH_SIZE", "1"))
+    print(
+        f"🔬 DEBATEFLOOR_SMOKE=1 — using reduced schedule: "
+        f"episodes={EPISODES} eval_episodes_const={EVAL_EPISODES} "
+        f"epochs={EPOCHS} batch_size={BATCH_SIZE}"
+    )
+
 # ── Try Unsloth; fall back gracefully to standard transformers ──────────────
 try:
     from unsloth import FastLanguageModel
@@ -318,7 +336,12 @@ def reward_fn(completions, prompts, **kwargs):
         # survives across GRPO's repeated invocations within an epoch.
         reward_fn._batches_seen = getattr(reward_fn, "_batches_seen", 0) + 1
         if variance < 0.01:
-            if reward_fn._batches_seen <= 2:
+            if SMOKE_MODE:
+                print(
+                    f"  ⚠️  Low reward variance ({variance:.4f}) — allowing because "
+                    "DEBATEFLOOR_SMOKE=1 (smoke run; full runs still enforce CF-1)."
+                )
+            elif reward_fn._batches_seen <= 2:
                 print(f"  ⚠️  Low reward variance ({variance:.4f}) on warmup batch "
                       f"{reward_fn._batches_seen}/2 — allowing.")
             else:
@@ -685,17 +708,21 @@ def main():
         except Exception:
             pass
 
+    # Smoke: fewer GRPO rollouts + smaller accumulation = faster and less VRAM.
+    _num_gen = 2 if SMOKE_MODE else 6
+    _grad_acc = 1 if SMOKE_MODE else 4
+
     args = GRPOConfig(
         output_dir="./debatefloor_grpo_out",
         num_train_epochs=EPOCHS,
         per_device_train_batch_size=BATCH_SIZE,
-        gradient_accumulation_steps=4,
+        gradient_accumulation_steps=_grad_acc,
         learning_rate=LR,
-        num_generations=6,           # reduced from 8 — fits T4 VRAM without Unsloth
+        num_generations=_num_gen,    # 6 = T4-friendly full run; 2 = smoke
         max_completion_length=100,
         temperature=0.9,
-        logging_steps=5,
-        save_steps=50,
+        logging_steps=1 if SMOKE_MODE else 5,
+        save_steps=9999 if SMOKE_MODE else 50,
         report_to="wandb" if USE_WANDB else "none",
         run_name="debatefloor-grpo-env-connected",
         max_grad_norm=0.3,
@@ -747,9 +774,9 @@ def main():
             server_proc.kill()
         print("🛑 Environment server stopped.")
 
-    # Push to HF Hub if token is set
+    # Push to HF Hub if token is set (skip on smoke to avoid polluting the model repo)
     hf_token = os.getenv("HF_TOKEN", "")
-    if hf_token:
+    if hf_token and not SMOKE_MODE:
         try:
             from huggingface_hub import HfApi
             api = HfApi(token=hf_token)
