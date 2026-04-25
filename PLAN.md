@@ -1,27 +1,32 @@
 # DebateFloor — Pre-Evaluation Fix Plan (Live Status)
 
-**Status:** Pre-submission hardening — fifth pass after NEW-2 / FATAL-5 test fix  
+**Status:** Pre-submission hardening — sixth pass after NEW-1 / FATAL-4 eval regen  
 **Deadline:** April 25–26 2026 Grand Finale  
-**Last validated:** April 25 2026, 18:25 IST (against current repo state + live HF Space)  
+**Last validated:** April 25 2026, 19:10 IST (against current repo state + live HF Space)  
 **Priority order:** FATAL → CRITICAL → HIGH → MEDIUM
 
 > **What changed in this revision:**
-> - **NEW-2 → PASS** and **FATAL-5 → PASS.** Replaced
->   `tests/envs/test_debatefloor_rubric.py` with a 6-test suite that
->   defends the FATAL-5 contract instead of breaking it. Live numbers
->   from the env (no fabrication):
->   - `obs.reward = 0.428`, `obs.rubric_reward = 0.29` for the original
->     failing call → divergence `0.138` proves the rubric is independent.
->   - For evidence-rich reasoning: `reasoning_quality = 1.0` (rubric `0.52`
->     diverges from env `0.458`).
->   - For empty reasoning: `reasoning_quality = 0.0` as required.
->   - All 8 canonical component keys are exposed on every step.
->   - **49 / 49** DebateFloor tests pass (43 pre-existing + 6 new).
-> - **FATAL-3 → PASS** (previous revision): `inference_debatefloor.py`
->   evidence_quality `0.0 → 1.0` for `contradictory_claim`.
-> - **HIGH-2 → PASS** (revision 3): `record_episode_confidence` wired into
->   `app/environment.py`, live HF `/stats` confirms `episodes_recorded: 11`
->   across distinct sessions.
+> - **NEW-1 → PASS** and **FATAL-4 → PASS.** Built
+>   `train/generate_eval_report.py` — a focused regenerator that uses
+>   `inference_debatefloor.py:STRATEGIES` × seeds `[7, 11, 13, 19, 25]`
+>   (covering all 5 variant_ids) × 3 tasks → 15 rows. Numbers from the
+>   live HF Space (no fabrication):
+>   - **Distinct variant_ids: `[0, 1, 2, 3, 4]`** (was `{0}` only).
+>   - **Distinct rewards: 3** unique values `{0.3966, 0.7497, 0.7625}` (was 2).
+>   - **10 / 15 rows have `evidence_quality > 0`** (was 0 / 6).
+>   - **15 / 15 rows complete** (`completion_rate = 100%`).
+>   - **`average_reward = 0.6363`** (was `0.8658` from a 6-row stale set).
+>   - `generated_at: 2026-04-25T13:37:28+00:00` (was `2026-04-03T16:40:41` —
+>     22-day staleness gone).
+>   - `base_url: https://aniketasla-debatefloor.hf.space` (matches the
+>     production Space).
+>   - PLAN.md's prescribed invariant assertion script runs clean.
+> - **NEW-2 → PASS** and **FATAL-5 → PASS** (rev 5): rubric test rewrite,
+>   49/49 tests pass.
+> - **FATAL-3 → PASS** (rev 4): `inference_debatefloor.py` flag_id fix,
+>   contradictory_claim evidence_quality `0.0 → 1.0`.
+> - **HIGH-2 → PASS** (rev 3): `record_episode_confidence` wired,
+>   live `/stats` proof captured.
 
 ---
 
@@ -41,7 +46,7 @@
 | FATAL-1 | Training loop never connects to environment | **PASS** | Resolved |
 | FATAL-2 | Training evidence shows zero improvement | **PARTIAL** | Yes — README + summary contradict |
 | FATAL-3 | Evidence quality is 0.0 in all eval rows | **PASS** ✅ | **Resolved 25 Apr 17:50 IST** (contradictory_claim 0.0 → 1.0) |
-| FATAL-4 | `variant_id` always 0 | **STALE** | Yes — eval_report.json never regenerated |
+| FATAL-4 | `variant_id` always 0 | **PASS** ✅ | **Resolved 25 Apr 19:05 IST** (5 distinct variant_ids in regenerated report) |
 | FATAL-5 | Rubric is decorative; echoes env reward | **PASS** ✅ | **Resolved 25 Apr 18:20 IST** (rubric `0.29` vs env `0.428` for same step → divergence proven) |
 | CRITICAL-1 | No Unsloth usage | **PASS** | Resolved |
 | CRITICAL-2 | Training and eval reward use different math | **PARTIAL** | No, but visible in README |
@@ -51,7 +56,7 @@
 | HIGH-4 | Training loss 0.005 = model collapse | **PARTIAL** | No, but loss still 0.005 |
 | MEDIUM-1 | reward_fn used keyword matching | **PASS** | Resolved (subsumed by FATAL-1 fix) |
 | MEDIUM-2 | WandB curve caption ambiguous | **PASS** | Resolved |
-| **NEW-1** | Stale `reports/eval_report.json` (3 weeks old) | **FAIL** | Yes |
+| **NEW-1** | Stale `reports/eval_report.json` (3 weeks old) | **PASS** ✅ | **Resolved 25 Apr 19:05 IST** (regenerated against live HF, 15 rows) |
 | **NEW-2** | `tests/envs/test_debatefloor_rubric.py` is broken | **PASS** ✅ | **Resolved 25 Apr 18:20 IST** (49/49 tests pass) |
 | **NEW-3** | README results table contradicts JSON | **FAIL** | Yes — storytelling 30% |
 | **NEW-4** | `inference_debatefloor.py` missing strategies for 2 of 5 tasks | **FAIL** | Medium |
@@ -59,10 +64,10 @@
 | **NEW-6** | README install command is missing deps + wrong TRL pin | **FAIL** | Yes — reviewer reproduction |
 | **NEW-7** | `distribution_shift_claim` has no discovery path for its `expected_signals` | **FAIL** | Medium — caps that task's evidence_quality at 0.0 |
 
-**Bottom line:** 4 of the 13 originally listed items are *not* fully resolved
-(down from 5 in the previous revision; FATAL-5 is now PASS), and 5 newly
-discovered issues remain (NEW-2 is also now PASS). Total estimated remaining
-work: **~1 hr 20 min of code/text fixes + one re-training run.**
+**Bottom line:** 3 of the 13 originally listed items are *not* fully resolved
+(FATAL-4 is now PASS), and 4 newly discovered issues remain (NEW-1 is also
+now PASS). Total estimated remaining work:
+**~1 hr 10 min of code/text fixes + one re-training run.**
 
 ---
 
@@ -72,7 +77,7 @@ work: **~1 hr 20 min of code/text fixes + one re-training run.**
 1. [FATAL-1](#fatal-1--training-loop-never-connects-to-the-environment-pass) — Training loop never connects to env — **PASS**
 2. [FATAL-2](#fatal-2--training-evidence-shows-zero-improvement-partial) — Training evidence shows zero improvement — **PARTIAL**
 3. [FATAL-3](#fatal-3--evidence-quality-is-00-in-all-eval-rows-pass) — Evidence quality 0.0 in all eval rows — **PASS** ✅
-4. [FATAL-4](#fatal-4--variant_id-is-always-0-stale) — variant_id always 0 — **STALE**
+4. [FATAL-4](#fatal-4--variant_id-is-always-0-pass) — variant_id always 0 — **PASS** ✅
 5. [FATAL-5](#fatal-5--rubric-is-decorative-it-echoes-the-environments-own-reward-pass) — Rubric is decorative — **PASS** ✅
 6. [CRITICAL-1](#critical-1--no-unsloth-usage-pass) — No Unsloth — **PASS**
 7. [CRITICAL-2](#critical-2--training-reward-and-eval-reward-use-completely-different-math-partial) — Training vs eval reward labelling — **PARTIAL**
@@ -84,7 +89,7 @@ work: **~1 hr 20 min of code/text fixes + one re-training run.**
 13. [MEDIUM-2](#medium-2--wandb-curve-caption-ambiguous-pass) — WandB caption — **PASS**
 
 ### Newly Discovered Issues (not in original plan)
-14. [NEW-1](#new-1--stale-reportseval_reportjson--md-fail) — Stale `eval_report.json` / `.md`
+14. [NEW-1](#new-1--stale-reportseval_reportjson--md-pass) — Stale `eval_report.json` / `.md` — **PASS** ✅
 15. [NEW-2](#new-2--testsenvstest_debatefloor_rubricpy-is-broken-by-the-fatal-5-fix-pass) — Broken rubric test — **PASS** ✅
 16. [NEW-3](#new-3--readme-results-table-contradicts-the-actual-json-fail) — README contradicts artifacts
 17. [NEW-4](#new-4--inference_debatefloorpy-has-no-strategies-for-2-of-5-tasks-fail) — Missing inference strategies
@@ -257,48 +262,69 @@ credit on this task. Estimated effort: ~30 minutes; tracked in
 
 ---
 
-## FATAL-4 — variant_id is always 0 (**STALE**)
+## FATAL-4 — variant_id is always 0 (**PASS** ✅)
 
 ### Original problem
 Eval script did not pass `seed` in the POST body, so `build_runtime_task` always got seed=None → `variant_id = abs(seed) % 5 = 0`.
 
-### Current state
-- **Server-side code is correct:** `app/main.py` line 91 forwards `body.seed` to `env.reset(...)`. `app/environment.py` reset path passes `seed` to `build_runtime_task`. `inference_debatefloor.py` line 72 sends `seed` in the JSON body of `/reset`.
-- **Stale artifact:** `reports/eval_report.json` is dated **2026-04-03** (3 weeks old) and still contains:
-  ```json
-  { "task_id": "clean_claim",         "seed": 7,  "variant_id": 0 },
-  { "task_id": "clean_claim",         "seed": 17, "variant_id": 0 },
-  { "task_id": "contradictory_claim", "seed": 7,  "variant_id": 0 },
-  …
-  ```
-  All 6 rows have `variant_id: 0` and identical reward `0.825`. The fix exists in
-  code but the JSON judges will read was never regenerated.
+### Server-side code (already correct, no change in this revision)
+- `app/main.py` forwards `body.seed` to `env.reset(...)`.
+- `app/environment.py` reset path passes `seed` to `build_runtime_task`.
+- `inference_debatefloor.py` sends `seed` in the JSON body of `/reset`.
+- `app/tasks.py:548` `variant_id = abs(seed) % 5`.
 
-### Remaining solution
+### What was shipped this revision
+Built `train/generate_eval_report.py` — a focused regenerator. (The
+`pre_validation_script.py --output / --seeds / --tasks` flags suggested in
+earlier revisions of this plan were never implemented in that script.) The
+new tool:
 
-**After fixing FATAL-3** (so the same regen pass also produces non-zero
-`evidence_quality`), run:
+- Imports `STRATEGIES` from `inference_debatefloor.py` (the canonical baseline).
+- Sweeps **5 seeds** chosen to hit every variant exactly once:
+  `[7, 11, 13, 19, 25]` → `variant_id ∈ {2, 1, 3, 4, 0}` = all 5 variants.
+- Sweeps **3 tasks** (`clean_claim`, `contradictory_claim`,
+  `distribution_shift_claim`) — the ones with shipped strategies. Adding
+  the remaining 2 (`coordinated_fraud`, `identity_fraud`) is tracked under
+  NEW-4.
+- Produces 15 rows in both `reports/eval_report.json` and `reports/eval_report.md`.
+- Runs the PLAN-prescribed invariant assertion at the end and exits non-zero
+  if either FATAL-3 or FATAL-4 invariant breaks.
+
+### Verification — live HF Space numbers (no fabrication)
+
+PLAN's prescribed assertion script:
+```
+PASS: 5 distinct variant_ids: [0, 1, 2, 3, 4]
+PASS: 10/15 rows with evidence_quality > 0
+PASS: average_reward=0.6363
+PASS: completion_rate=100.0%
+PASS: generated_at=2026-04-25T13:37:28.409790+00:00
+PASS: base_url=https://aniketasla-debatefloor.hf.space
+PASS: total rows=15
+eval_report.json passes both FATAL-3 and FATAL-4 invariants
+```
+
+| Metric | Before (stale 2026-04-03) | After (regen 2026-04-25) |
+|---|---|---|
+| Total rows | 6 | **15** |
+| Distinct `variant_id` | `{0}` | **`{0, 1, 2, 3, 4}`** |
+| Distinct rewards | 2 (`0.825`, `0.9475`) | **3 (`0.3966`, `0.7497`, `0.7625`)** |
+| Rows with `evidence_quality > 0` | 0 / 6 | **10 / 15** |
+| Average reward | 0.8658 | 0.6363 |
+| `generated_at` | 2026-04-03T16:40:41 | **2026-04-25T13:37:28** |
+| `base_url` | live HF (old project name) | live HF (current Space) |
+
+Note on the average dropping: the new report includes
+`distribution_shift_claim` (which the old report omitted) and uses the
+**actual** `inference_debatefloor.py` strategies rather than fabricated
+constant rewards. The `0.6363` number is what the canonical scripted
+baseline genuinely scores against the live env.
+
+How to regenerate later:
 ```bash
-PYTHONPATH=. uvicorn app.main:app --port 7860 &
-sleep 5
-python pre_validation_script.py --base-url http://localhost:7860 \
-    --output reports/eval_report.json \
-    --output-md reports/eval_report.md \
-    --seeds 7,17,42 --tasks clean_claim,contradictory_claim,distribution_shift_claim,coordinated_fraud,identity_fraud
+python train/generate_eval_report.py \
+  --base-url https://aniketasla-debatefloor.hf.space
 ```
-
-**Sanity check before commit:**
-```python
-import json
-data = json.load(open("reports/eval_report.json"))
-variants = {row["variant_id"] for row in data["rows"]}
-assert len(variants) > 1, f"variant_id still constant: {variants}"
-evidence = [row["evidence_quality"] for row in data["rows"]]
-assert any(e > 0 for e in evidence), "evidence_quality still zero everywhere"
-print("✅ eval_report.json passes both invariants")
-```
-
-Then `git add reports/eval_report.json reports/eval_report.md && git commit`.
 
 ---
 
@@ -672,28 +698,33 @@ the eval harness when the env is unreachable.
 
 ---
 
-## NEW-1 — Stale `reports/eval_report.json` + `.md` (**FAIL**)
+## NEW-1 — Stale `reports/eval_report.json` + `.md` (**PASS** ✅)
 
 ### Discovery
-Both files are dated **2026-04-03** (3 weeks before today). They contain the
-exact `variant_id: 0` / `evidence_quality: 0.0` / constant `0.825 reward`
-rows that FATAL-3 and FATAL-4 were supposed to fix.
+Both files were dated **2026-04-03** (22 days before today). They contained
+the exact `variant_id: 0` / `evidence_quality: 0.0` / constant `0.825 reward`
+rows that FATAL-3 and FATAL-4 were supposed to fix. A judge searching the
+canonical filename `eval_report.json` would have seen the broken 22-day-old
+data and ignored the newer `component_eval_detailed.json`.
 
-A judge searching the canonical filename `eval_report.json` will see the broken
-3-week-old data and ignore the newer `component_eval_detailed.json`.
+### Resolution (shipped this revision)
+Built `train/generate_eval_report.py` (see
+[FATAL-4 → What was shipped](#fatal-4--variant_id-is-always-0-pass) for full
+detail) and ran it twice:
 
-### Solution
-**Option A (preferred):** Regenerate after FATAL-3 fix:
-```bash
-python pre_validation_script.py --base-url http://localhost:7860 \
-    --output reports/eval_report.json \
-    --output-md reports/eval_report.md
-```
-Verify with the assertion script in [FATAL-4 Remaining solution](#fatal-4--variant_id-is-always-0-stale).
+1. Against the local uvicorn dev server (smoke test) — invariants PASS.
+2. Against the **live HF Space** — invariants PASS, files committed.
 
-**Option B (acceptable):** Delete both files and rename
-`component_eval_detailed.json` → `eval_report.json` if the new file's schema
-matches what `pre_validation_script.py` expects.
+Both files now show:
+- `generated_at: 2026-04-25T13:37:28+00:00` — fresh.
+- `base_url: https://aniketasla-debatefloor.hf.space` — production.
+- 15 rows × 3 tasks × 5 seeds covering all 5 variant_ids.
+- Distinct variant_ids `{0, 1, 2, 3, 4}` (FATAL-4 invariant).
+- 10/15 rows with `evidence_quality > 0` (FATAL-3 invariant).
+- Markdown table sorted by `(task, seed)` and includes a `Variant` column
+  and a `Steps` column for readability.
+
+The PLAN-prescribed assertion script runs clean.
 
 ---
 
@@ -1101,24 +1132,24 @@ This box is now ticked.
 
 ## Fix Priority Order (Day-of-Evaluation, **Remaining Work Only**)
 
-> ✅ **HIGH-2 (rev 3), FATAL-3 (rev 4), and FATAL-5 / NEW-2 (this rev) are DONE.**
-> FATAL-5 / NEW-2: 49/49 tests pass (43 pre-existing + 6 new). The new
-> rubric test suite locks in the FATAL-5 contract by asserting strict
-> divergence between `obs.rubric_reward` and `obs.reward`. List renumbered.
+> ✅ **HIGH-2 (rev 3), FATAL-3 (rev 4), FATAL-5 / NEW-2 (rev 5),** and now
+> **NEW-1 / FATAL-4 (this rev) are DONE.**
+> NEW-1 / FATAL-4: 15-row eval_report.json regenerated against the live HF
+> Space; 5 distinct variant_ids; 10/15 rows with non-zero evidence_quality.
+> List renumbered.
 
 | # | Issue | Fix Type | Est. Time | Blocking? |
 |---|-------|----------|-----------|-----------|
-| 1 | **NEW-1 / FATAL-4**: Regenerate `reports/eval_report.json` + `.md` | run + commit | 10 min | Yes — stale variant_id=0 |
-| 2 | **NEW-3 / FATAL-2 / CRITICAL-2**: Rewrite README results table | docs, 1 file | 15 min | Yes — storytelling 30% |
-| 3 | **NEW-6**: Fix README install command | docs, 1 file | 2 min | Yes — reviewer reproduction |
-| 4 | **NEW-4**: Add `_strategy_coordinated_fraud` + `_strategy_identity_fraud` | code, 1 file | 30 min | Medium — `--all-tasks` errors |
-| 5 | **HIGH-4 / CF-1**: Convert variance warning → `raise RuntimeError` | code, 1 file | 5 min | No — but Part 4 contract |
-| 6 | **NEW-5**: Reconcile component-name vocabulary | code, 2 files | 20 min | No — but visible in artifacts |
-| 7 | **NEW-7**: Add discovery hooks for `distribution_shift_claim` | code, 2 files | 30 min | Medium — caps that task's evidence at 0.0 |
-| 8 | **FATAL-2 Step 1**: Re-run training with bigger settings (use HF credits) | training | 30 min on A10G | Yes — lift flat components |
-| 9 | **FATAL-2 Step 3**: Regenerate `component_shift_summary.json` | output of #8 | auto | Yes — drops contradiction |
+| 1 | **NEW-3 / FATAL-2 / CRITICAL-2**: Rewrite README results table | docs, 1 file | 15 min | Yes — storytelling 30% |
+| 2 | **NEW-6**: Fix README install command | docs, 1 file | 2 min | Yes — reviewer reproduction |
+| 3 | **NEW-4**: Add `_strategy_coordinated_fraud` + `_strategy_identity_fraud` | code, 1 file | 30 min | Medium — `--all-tasks` errors |
+| 4 | **HIGH-4 / CF-1**: Convert variance warning → `raise RuntimeError` | code, 1 file | 5 min | No — but Part 4 contract |
+| 5 | **NEW-5**: Reconcile component-name vocabulary | code, 2 files | 20 min | No — but visible in artifacts |
+| 6 | **NEW-7**: Add discovery hooks for `distribution_shift_claim` | code, 2 files | 30 min | Medium — caps that task's evidence at 0.0 |
+| 7 | **FATAL-2 Step 1**: Re-run training with bigger settings (use HF credits) | training | 30 min on A10G | Yes — lift flat components |
+| 8 | **FATAL-2 Step 3**: Regenerate `component_shift_summary.json` | output of #7 | auto | Yes — drops contradiction |
 
-**Total remaining time: ~1 hr 50 min of work + 1 training run.** (was 2 hrs before NEW-2 / FATAL-5 closed)
+**Total remaining time: ~1 hr 40 min of work + 1 training run.** (was 1 hr 50 min before NEW-1 / FATAL-4 closed)
 
 > **Recommendation:** Do items 1–8 *before* spending any HF credits.
 > All 8 are zero-compute logic/text fixes. Once the pipeline is provably
@@ -1141,10 +1172,10 @@ earlier failure invalidates later items.
 - [ ] `/rollout?task_id=contradictory_claim&seed=42` returns a non-empty trace ending in `done: true`
 
 ### Eval Artifacts
-- [ ] `reports/eval_report.json` is dated today, not 2026-04-03
-- [x] **Live env confirms `evidence_quality = 1.0` for `contradictory_claim`** (FATAL-3 fix verified seed=42; 2026-04-25 17:50 IST). Awaiting regen of `eval_report.json` to commit.
-- [ ] `reports/eval_report.json` has at least 2 distinct `variant_id` values across seeds
-- [ ] `reports/eval_report.json` has different rewards for different tasks (not all 0.825)
+- [x] `reports/eval_report.json` is dated today, not 2026-04-03 ← **NEW-1 fix this revision** (`generated_at: 2026-04-25T13:37:28+00:00`)
+- [x] **Live env confirms `evidence_quality = 1.0` for `contradictory_claim`** (FATAL-3 fix verified seed=42; 2026-04-25 17:50 IST). Now committed in `reports/eval_report.json` (`evidence_quality = 1.0` on all 5 contradictory_claim rows).
+- [x] `reports/eval_report.json` has at least 2 distinct `variant_id` values across seeds ← **FATAL-4 fix this revision** (5 distinct: `{0, 1, 2, 3, 4}`)
+- [x] `reports/eval_report.json` has different rewards for different tasks (not all 0.825) ← 3 distinct rewards: `{0.3966, 0.7497, 0.7625}`
 - [ ] `reports/component_shift_summary.json` agrees with `reports/training_summary.json` on every common metric
 
 ### Training Artifacts
@@ -1182,15 +1213,17 @@ earlier failure invalidates later items.
 
 ## When to Use the HF Credits
 
-**Not yet.** All items 1–8 above are zero-compute. They are also the items most
+**Not yet.** Items 1–6 above are zero-compute. They are also the items most
 likely to make a judge mark you down on day-of-evaluation: a failing test, a
-contradictory README, a stale `eval_report.json`.
+contradictory README, broken install command.
 
-The main `/stats`-empty risk has been removed (HIGH-2). The remaining
-visible-to-judges risks are all in eval artifacts and README copy.
+The `/stats`-empty risk (HIGH-2) and the stale eval_report risk (NEW-1 /
+FATAL-4) have been removed. The remaining visible-to-judges risks are now
+README copy and the empty-strategy `coordinated_fraud` / `identity_fraud`
+rows.
 
-Burn the credits exactly once, on item 9, **after** items 1–8 are done and a
-local 50-episode smoke training (T4) confirms all 4 component scores move.
+Burn the credits exactly once, on items 7–8, **after** items 1–6 are done
+and a local 50-episode smoke training (T4) confirms all 4 component scores move.
 
 The model choice (Qwen2.5-0.5B-Instruct) is correct for this submission and
 should not be changed. A bigger model would invalidate the before/after delta
@@ -1205,4 +1238,5 @@ that the judging rubric explicitly looks for.
 | 25 Apr 17:00 | second pass | First-round fixes audited; 6 NEW issues uncovered; HIGH-2 still FAIL |
 | 25 Apr 17:30 | third pass | **HIGH-2 → PASS** (code `9f2d218`, HF `402ef31bbbe0`); priority list renumbered; live `/stats` proof captured |
 | 25 Apr 17:55 | fourth pass | **FATAL-3 → PASS**: contradictory_claim evidence_quality `0.0 → 1.0` and reward `0.518 → 0.7497` (live env, seed=42). NEW-7 added: distribution_shift_claim has no env-side discovery path for its expected_signals. Priority list renumbered (10 → 10 with FATAL-3 removed and NEW-7 added). |
-| 25 Apr 18:25 | **fifth pass (this revision)** | **NEW-2 → PASS** and **FATAL-5 → PASS**: replaced `tests/envs/test_debatefloor_rubric.py` with a 6-test suite that asserts the FATAL-5 contract (`obs.rubric_reward != obs.reward`). Live divergence proof: 0.428 vs 0.29 (Δ 0.138) for the original failing call. Full DebateFloor regression: **49/49 pass**. Priority list shrinks to 9 items. |
+| 25 Apr 18:25 | fifth pass | **NEW-2 → PASS** and **FATAL-5 → PASS**: replaced `tests/envs/test_debatefloor_rubric.py` with a 6-test suite that asserts the FATAL-5 contract (`obs.rubric_reward != obs.reward`). Live divergence proof: 0.428 vs 0.29 (Δ 0.138) for the original failing call. Full DebateFloor regression: **49/49 pass**. Priority list shrinks to 9 items. |
+| 25 Apr 19:10 | **sixth pass (this revision)** | **NEW-1 → PASS** and **FATAL-4 → PASS**: built `train/generate_eval_report.py` (the previously-referenced `pre_validation_script.py --output/--seeds/--tasks` flags never existed). Regenerated `reports/eval_report.json` + `.md` against the live HF Space using `inference_debatefloor.py:STRATEGIES` × seeds `[7, 11, 13, 19, 25]` (all 5 variant_ids) × 3 tasks → 15 rows. Numbers: 5 distinct variant_ids, 3 distinct rewards (`{0.3966, 0.7497, 0.7625}`), 10/15 rows with `evidence_quality > 0`, 100% completion, average reward `0.6363`. PLAN-prescribed invariant assertion runs clean. Priority list shrinks to 8 items. |
