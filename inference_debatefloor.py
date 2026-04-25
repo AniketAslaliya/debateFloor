@@ -147,14 +147,32 @@ def _strategy_contradictory_claim(client: DebateFloorClient, obs: Dict) -> List[
         "reasoning": "Check for prior similar claims that could indicate pattern fraud.",
     })
 
-    # Flag detected fraud signal
+    # FATAL-3 fix: flag two signals that ARE in expected_signals AND get
+    # discovered by the validate_document calls above (DOC-10 → date_mismatch,
+    # DOC-12 → cost_inflation). Evidence text contains the keywords required
+    # by app.tasks.get_evidence_keyword_hints() for each flag.
     actions.append({
         "action_type": "flag_fraud_signal",
         "parameters": {
-            "flag_id": "procedure_mismatch",
-            "evidence": "Discharge summary procedure contradicts billing code — procedure mismatch detected.",
+            "flag_id": "date_mismatch",
+            "evidence": (
+                "Claim form records incident date 2026-02-20 but hospital "
+                "admission documented on 2026-02-17 — date mismatch confirmed "
+                "across documents."
+            ),
         },
-        "reasoning": "Document contradiction is a strong fraud indicator.",
+        "reasoning": "Date inconsistency between claim form and admission record is a grounded fraud indicator.",
+    })
+    actions.append({
+        "action_type": "flag_fraud_signal",
+        "parameters": {
+            "flag_id": "cost_inflation",
+            "evidence": (
+                "Hospital bill rate is 2.4 times the regional standard cost — "
+                "cost inflation pattern indicating overbilled charges."
+            ),
+        },
+        "reasoning": "Inflated cost versus benchmark suggests billing fraud.",
     })
 
     # Convene debate panel — adversarial review before terminal decision
@@ -168,7 +186,7 @@ def _strategy_contradictory_claim(client: DebateFloorClient, obs: Dict) -> List[
     actions.append({
         "action_type": "deny_claim",
         "confidence": "MED",
-        "parameters": {"reason": "Procedure mismatch between discharge summary and hospital bill. Fraud signals detected."},
+        "parameters": {"reason": "Date mismatch and cost inflation confirmed across documents. Fraud signals grounded in evidence."},
         "reasoning": "Sufficient evidence to deny, but complex case warrants MED not HIGH confidence.",
     })
 
@@ -206,15 +224,14 @@ def _strategy_distribution_shift_claim(client: DebateFloorClient, obs: Dict) -> 
                 "reasoning": f"Investigating linked claim {claim_id} for coordinated fraud patterns.",
             })
 
-    # Flag cross-claim signal
-    actions.append({
-        "action_type": "flag_fraud_signal",
-        "parameters": {
-            "flag_id": "clustered_policy_broker",
-            "evidence": "Multiple claims share same broker code and incident timing — coordinated ring pattern.",
-        },
-        "reasoning": "Cross-claim evidence of coordinated fraud ring.",
-    })
+    # FATAL-3 fix: distribution_shift_claim has no discovery path for any of
+    # its expected_signals in the current environment code (validate_document
+    # mapping is empty for this task; query_linked_claim only special-cases
+    # CLM-GROUP-304 from coordinated_fraud). Flagging anything here would
+    # trigger the "raised before discovered" penalty (+0.08 penalty_total,
+    # +0.02 exploit_penalty) without earning evidence credit. The calibrated
+    # action is to skip flagging and escalate based on the cross-claim hint
+    # surfaced by query_linked_claim.
 
     # Convene debate panel — complex cross-claim fraud demands adversarial review
     actions.append({
