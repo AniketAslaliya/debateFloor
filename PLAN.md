@@ -1,11 +1,47 @@
 # DebateFloor — Pre-Evaluation Fix Plan (Live Status)
 
-**Status:** Pre-submission hardening — eighth pass after NEW-4 + HIGH-4/CF-1  
+**Status:** Pre-submission hardening — ninth pass after NEW-5 + NEW-7  
 **Deadline:** April 25–26 2026 Grand Finale  
-**Last validated:** April 25 2026, 19:55 IST (against current repo state + live HF Space)  
+**Last validated:** April 25 2026, 20:35 IST (against current repo state + live HF Space)  
 **Priority order:** FATAL → CRITICAL → HIGH → MEDIUM
 
-> **What changed in this revision (rev 8):**
+> **What changed in this revision (rev 9):**
+> - **NEW-7 → PASS** ✅ Added discovery hooks for
+>   `distribution_shift_claim` in `app/environment.py` and `app/tasks.py`,
+>   then rewrote `_strategy_distribution_shift_claim` to walk them. The
+>   task previously had **no doc-level discovery for any expected_signal**,
+>   so the only safe scripted move was to skip flagging entirely (capping
+>   `evidence_quality` at 0.0 for the task in every eval row).
+>   Live HF Space measurements (5 seeds × 5 tasks = 25 episodes,
+>   regenerated `reports/eval_report.json`):
+>   - `distribution_shift_claim`: reward `0.7827` (constant across seeds 7/11/13/19/25),
+>     `evidence 4/4 = 1.000` (was `0.0`), `calibration_score 0.6`,
+>     `exploit_penalty 0.0`, terminal `escalate_to_human` MED → normalised
+>     to `request_investigation`.
+>   - **Side-benefit**: the new `shared_emergency_contact` auto-record
+>     (after 2+ linked queries) also lifts `coordinated_fraud` from
+>     `0.7670` → `0.8230` because all 5 expected_signals are now
+>     discoverable for that task too.
+>   - `eval_report.json` regenerated again: now **25 rows, average reward
+>     0.7872** (was 0.6988), **25/25 rows with `evidence_quality > 0`**
+>     (was 20/25), 5 distinct variant_ids `[0, 1, 2, 3, 4]`, 5 distinct
+>     rewards `{0.7497, 0.7625, 0.7827, 0.8180, 0.8230}`.
+> - **NEW-5 → PASS** ✅ Added `reasoning_quality` to
+>   `_COMPONENT_LABELS` in `train/train_minimal.py` (was 4 entries, now 5)
+>   and surfaced it in both scorers:
+>   - `_score_completion_via_http` reads it from
+>     `observation.rubric_components["reasoning_quality"]` on the live
+>     `/step` response.
+>   - `_score_completion_keyword` mirrors `_ReasoningQualityRubric`'s
+>     scoring (≥20-char reason, 4 evidence keywords = full score).
+>   Validator (`.validate_new5.py`) confirms all four code paths emit the
+>   canonical 5-key set `{fraud_detection_score, decision_accuracy,
+>   evidence_quality_score, calibration_score, reasoning_quality}`. Live
+>   `_score_completion_via_http` returns `reasoning_quality = 1.0000`
+>   from the live env's `rubric_components`; the keyword fallback returns
+>   `1.0000` for evidence-rich text and `0.0000` for short text.
+> - 49/49 DebateFloor regression tests still pass.
+> - **Previous revision (rev 8):** NEW-4 + HIGH-4/CF-1 → PASS.
 > - **NEW-4 → PASS** ✅ Added `_strategy_coordinated_fraud` and
 >   `_strategy_identity_fraud` to `inference_debatefloor.py` plus matching
 >   `TASK_CONFIG` entries. Both strategies trigger the env's full discovery
@@ -72,15 +108,16 @@
 | **NEW-2** | `tests/envs/test_debatefloor_rubric.py` is broken | **PASS** ✅ | **Resolved 25 Apr 18:20 IST** (49/49 tests pass) |
 | **NEW-3** | README results table contradicts JSON | **PASS** ✅ | **Resolved 25 Apr 19:25 IST** (every cited number now read directly from JSON) |
 | **NEW-4** | `inference_debatefloor.py` missing strategies for 2 of 5 tasks | **PASS** ✅ | **Resolved 25 Apr 19:55 IST** (both new strategies hit ev_q 4/4 on every seed) |
-| **NEW-5** | Rubric component-name vocabulary drift | **FAIL** | Medium |
+| **NEW-5** | Rubric component-name vocabulary drift | **PASS** ✅ | **Resolved 25 Apr 20:30 IST** (`reasoning_quality` now first-class in `_COMPONENT_LABELS` + both scorers) |
 | **NEW-6** | README install command is missing deps + wrong TRL pin | **PASS** ✅ | **Resolved 25 Apr 19:25 IST** (now sources `requirements.txt` + `train/requirements.txt`) |
-| **NEW-7** | `distribution_shift_claim` has no discovery path for its `expected_signals` | **FAIL** | Medium — caps that task's evidence_quality at 0.0 |
+| **NEW-7** | `distribution_shift_claim` has no discovery path for its `expected_signals` | **PASS** ✅ | **Resolved 25 Apr 20:35 IST** (4/4 evidence on every seed; reward 0.7827; side-benefit lifts coordinated_fraud to 0.8230) |
 
 **Bottom line:** 1 of the 13 originally listed items is not fully resolved
 (FATAL-2 — re-training half only; storytelling half is PASS rev 7).
-2 newly discovered issues remain (NEW-3 / NEW-4 / NEW-6 are PASS;
-NEW-5 / NEW-7 still pending). Total estimated remaining work:
-**~50 min of code fixes + one re-training run.**
+**All 7 newly discovered issues are now PASS** (NEW-1 through NEW-7).
+Total estimated remaining work: **one re-training run on HF credits**
+(produces a non-flat `component_shift.json` to drop the last contradiction
+between `eval_report.json` and `training_summary.json`).
 
 ---
 
@@ -106,9 +143,9 @@ NEW-5 / NEW-7 still pending). Total estimated remaining work:
 15. [NEW-2](#new-2--testsenvstest_debatefloor_rubricpy-is-broken-by-the-fatal-5-fix-pass) — Broken rubric test — **PASS** ✅
 16. [NEW-3](#new-3--readme-results-table-contradicts-the-actual-json-pass) — README contradicts artifacts — **PASS** ✅
 17. [NEW-4](#new-4--inference_debatefloorpy-has-no-strategies-for-2-of-5-tasks-pass) — Missing inference strategies — **PASS** ✅
-18. [NEW-5](#new-5--rubric-component-name-vocabulary-drift-fail) — Component-name drift
+18. [NEW-5](#new-5--rubric-component-name-vocabulary-drift-pass) — Component-name drift — **PASS** ✅
 19. [NEW-6](#new-6--readme-install-command-misses-deps-and-pins-too-old-trl-pass) — README install command broken — **PASS** ✅
-20. [NEW-7](#new-7--distribution_shift_claim-has-no-discovery-path-for-its-expected_signals-fail) — `distribution_shift_claim` evidence_quality structurally capped at 0.0 (env code)
+20. [NEW-7](#new-7--distribution_shift_claim-has-no-discovery-path-for-its-expected_signals-pass) — `distribution_shift_claim` discovery hooks — **PASS** ✅
 
 ### Verification & Sequencing
 20. [Quick wins](#quick-wins--do-these-last-they-take--30-minutes-total)
@@ -1074,7 +1111,7 @@ Also update the top-level `TASK_CONFIG` (lines 39–52) to include the two new t
 
 ---
 
-## NEW-5 — Rubric component-name vocabulary drift (**FAIL**)
+## NEW-5 — Rubric component-name vocabulary drift (**PASS** ✅)
 
 ### Discovery
 Three places use three different vocabularies for the same components:
@@ -1107,6 +1144,46 @@ Pick **one canonical key set** and propagate. Recommended:
 After updating, `_score_completion_via_http` should also surface `reasoning_quality`
 from the rubric so the before/after table covers it (otherwise the new rubric
 component is invisible to judges).
+
+### Resolution (shipped this revision — rev 9)
+Three changes in `train/train_minimal.py`:
+
+1. `_COMPONENT_LABELS` extended from 4 → 5 entries, adding
+   `("reasoning_quality", "Reasoning quality")`. Now matches the canonical
+   key set in `app.rubrics.DebateFloorRubric.component_scores()` and the
+   `EXPECTED_COMPONENT_KEYS` set in `tests/envs/test_debatefloor_rubric.py`
+   (sans the env-only `efficiency_score`, `penalty`, `total` keys, which
+   are not part of the agent-facing before/after table).
+
+2. `_score_completion_via_http` now reads
+   `observation.rubric_components["reasoning_quality"]` from the live
+   `/step` response (with a fallback to `observation.metadata.rubric_components`
+   for older env versions). The returned dict gains a 5th key
+   `reasoning_quality`, keeping it in lockstep with `_COMPONENT_LABELS`.
+
+3. `_score_completion_keyword` (the offline fallback) mirrors
+   `_ReasoningQualityRubric` exactly — `< 20` chars of reason → `0.0`;
+   otherwise `min(1.0, evidence_keyword_hits / 4.0)` over the same 18-word
+   keyword set. So the schema is identical regardless of whether the env
+   is reachable.
+
+### Verification (post-fix, executed this revision)
+`.validate_new5.py` exercises all four code paths against the live HF
+Space (`https://aniketasla-debatefloor.hf.space`):
+
+| Check | Result |
+|---|---|
+| `_COMPONENT_LABELS` keys = canonical 5-key set | PASS — `{calibration_score, decision_accuracy, evidence_quality_score, fraud_detection_score, reasoning_quality}` |
+| `_score_completion_keyword` returns canonical 5-key dict | PASS — `reasoning_quality = 1.0000` for evidence-rich text |
+| `_score_completion_keyword` short-text behaviour | PASS — `reasoning_quality = 0.0000` (mirrors `_ReasoningQualityRubric`'s `< 20` chars guard) |
+| `_score_completion_via_http` returns canonical 5-key dict from live env | PASS — `reasoning_quality = 1.0000` from live `rubric_components` |
+
+49/49 DebateFloor regression tests still pass — `test_debatefloor_rubric.py`
+already required the canonical key set (it was the NEW-2/FATAL-5 fix), so
+the rubric side has been correct since rev 5; this revision finally lifts
+the same vocabulary into the eval-time scorer and the before/after table.
+
+No further action required for NEW-5.
 
 ---
 
@@ -1159,7 +1236,7 @@ No further action required for NEW-6.
 
 ---
 
-## NEW-7 — `distribution_shift_claim` has no discovery path for its `expected_signals` (**FAIL**)
+## NEW-7 — `distribution_shift_claim` has no discovery path for its `expected_signals` (**PASS** ✅)
 
 ### Discovery (during FATAL-3 fix)
 While tracing why the FATAL-3 fix could not raise `evidence_quality` above
@@ -1238,11 +1315,101 @@ signals so the keyword check in `flag_fraud_signal` works:
 },
 ```
 
-### Verification (after fix)
-Update `_strategy_distribution_shift_claim()` to validate DOC-41 and DOC-42,
-query 2 linked claims, then flag `shared_emergency_contact` and
-`shared_repair_shop_far`. Expected: `evidence_quality > 0` for this task in
-the BEFORE/AFTER harness.
+### Resolution (shipped this revision — rev 9)
+
+Three code changes in the env, one in `app/tasks.py`, and one in
+`inference_debatefloor.py`:
+
+**`app/environment.py:_discover_signals_from_document` — added:**
+```python
+"distribution_shift_claim": {
+    "DOC-41": ["recent_policy_cluster"],     # claim_form metadata
+    "DOC-42": ["shared_repair_shop_far"],    # garage estimate exposes shop
+},
+```
+
+**`app/environment.py:_apply_action()` `query_linked_claim` branch — two
+behavioural changes:**
+
+1. After 2+ linked claims have been queried and they all share the same
+   `emergency_contact`, `shared_emergency_contact` is now **auto-recorded
+   as a discovered signal** (was hint-string only). This is what the
+   coordinated_fraud strategy was already missing too — both rings can
+   now flag the cross-claim contact match without hitting the
+   "raised before discovered" penalty.
+
+2. Broker discovery is broadened from
+   `if match.get("broker_id") and claim_id == "CLM-GROUP-304"` (hardcoded
+   to coordinated_fraud) to **also** fire for any `CLM-DIST-*` claim
+   once `len(self._queried_claims) >= 2`. Now distribution_shift_claim's
+   `clustered_policy_broker` signal becomes discoverable through the
+   exact same multi-hop pattern as coordinated_fraud's.
+
+**`app/tasks.py:get_evidence_keyword_hints()` — added a
+`distribution_shift_claim` sub-dict** with keyword anchors for all 5
+signals (FastRepair Hub Whitefield, +91-9000005555, BRK-882, etc.).
+Without this, the empty hints list was short-circuiting the keyword
+check to "always pass", which silently weakened the
+"raised before discovered" gate.
+
+**`inference_debatefloor.py:_strategy_distribution_shift_claim` — full
+rewrite** to walk the new discovery contract:
+1. `validate_document(DOC-41)` → records `recent_policy_cluster`
+2. `validate_document(DOC-42)` → records `shared_repair_shop_far`
+3. `query_historical_data` → corroborates 24-day policy age
+4. `query_linked_claim(CLM-DIST-602)` then `(CLM-DIST-603)` →
+   on the 2nd query the env auto-records `shared_emergency_contact`
+   AND `clustered_policy_broker`, AND surfaces hidden CLM-DIST-604
+5. `query_linked_claim(CLM-DIST-604)` → confirms full ring scope
+6. `flag_fraud_signal × 4` (skip `near_identical_descriptions` — still
+   no doc-level discovery, symmetric to coordinated_fraud which skips
+   `shared_emergency_contact` for the same reason in its strategy)
+7. `convene_debate_panel` → adversarial review
+8. `escalate_to_human MED` (was LOW; now justified by 4 grounded signals
+   + `ground_truth_confidence=0.70`)
+
+`TASK_CONFIG["distribution_shift_claim"]["terminal_confidence"]` updated
+from `LOW` → `MED` to match.
+
+### Verification (post-fix, executed this revision)
+
+**Local** (`.validate_new7_local.py`, in-process env, seed=42):
+- `validate_document(DOC-41)` → `discovered={recent_policy_cluster}` ✓
+- `validate_document(DOC-42)` → adds `shared_repair_shop_far` ✓
+- `query_linked_claim(CLM-DIST-603)` → adds `clustered_policy_broker`
+  AND `shared_emergency_contact` ✓
+- All 4 flag actions succeed without the
+  "raised before discovered" warning ✓
+- Final breakdown:
+  `reward=0.7827, evidence_quality_score=1.0000,
+   fraud_detection_score=0.8000, decision_accuracy=1.0000,
+   calibration_score=0.6000, evidence_hits/total=4/4, exploit_penalty=0.0`
+
+**Live HF Space** (`reports/eval_report.json` regenerated, 5 seeds × 5 tasks):
+
+| Task | Reward (every seed) | evidence_quality | exploit_penalty |
+|---|---:|---:|---:|
+| `clean_claim` | `0.7625` | `1.0000` | `0.0000` |
+| `contradictory_claim` | `0.7497` | `1.0000` | `0.0000` |
+| `distribution_shift_claim` | `0.7827` (was 0.3966) | `1.0000` (was `0.0`) | `0.0000` |
+| `coordinated_fraud` | `0.8230` (was 0.7670) | `1.0000` | `0.0000` |
+| `identity_fraud` | `0.8180` | `1.0000` | `0.0000` |
+
+- Average reward: **`0.7872`** (was `0.6988`)
+- Rows with `evidence_quality > 0`: **25/25** (was 20/25)
+- Distinct variant_ids: `[0, 1, 2, 3, 4]` (5 of 5)
+- Distinct rewards: 5 unique values
+  `{0.7497, 0.7625, 0.7827, 0.8180, 0.8230}`
+
+**Side-benefit on coordinated_fraud**: the new
+`shared_emergency_contact` auto-record fires for that task too (BRK-441
+ring also shares emergency_contact across queried claims), lifting
+fraud_detection_score from `4/5 = 0.80` to `5/5 = 1.00` and the
+total reward from `0.7670` → `0.8230` — at zero additional cost.
+
+49/49 DebateFloor regression tests still pass.
+
+No further action required for NEW-7.
 
 ---
 
@@ -1302,24 +1469,26 @@ This box is now ticked.
 ## Fix Priority Order (Day-of-Evaluation, **Remaining Work Only**)
 
 > ✅ **HIGH-2 (rev 3), FATAL-3 (rev 4), FATAL-5 / NEW-2 (rev 5),
-> NEW-1 / FATAL-4 (rev 6),** and now
-> **NEW-3 / CRITICAL-2 / NEW-6 (this rev) are DONE.**
-> README sanity script confirms all 11 cited numbers match JSON and all 10
-> forbidden hand-edited tokens are gone. List renumbered.
+> NEW-1 / FATAL-4 (rev 6), NEW-3 / CRITICAL-2 / NEW-6 (rev 7),
+> NEW-4 / HIGH-4-CF-1 (rev 8),** and now
+> **NEW-5 / NEW-7 (this rev) are DONE.**
+> All 7 newly discovered issues are now PASS. The only remaining work is
+> the FATAL-2 re-training run (lift flat training_summary.json components
+> using HF credits).
 
 | # | Issue | Fix Type | Est. Time | Blocking? |
 |---|-------|----------|-----------|-----------|
-| 1 | **NEW-5**: Reconcile component-name vocabulary | code, 2 files | 20 min | No — but visible in artifacts |
-| 2 | **NEW-7**: Add discovery hooks for `distribution_shift_claim` | code, 2 files | 30 min | Medium — caps that task's evidence at 0.0 |
-| 3 | **FATAL-2 Step 1**: Re-run training with bigger settings (use HF credits) | training | 30 min on A10G | Yes — lift flat components |
-| 4 | **FATAL-2 Step 3**: Regenerate `component_shift_summary.json` | output of #5 | auto | Yes — drops contradiction with `training_summary.json` |
+| 1 | **FATAL-2 Step 1**: Re-run training with bigger settings (use HF credits) | training | 30 min on A10G | Yes — lift flat components |
+| 2 | **FATAL-2 Step 3**: Regenerate `component_shift_summary.json` | output of #1 | auto | Yes — drops contradiction with `training_summary.json` |
 
-**Total remaining time: ~50 min of work + 1 training run.** (was 1 hr 25 min before NEW-4 / HIGH-4-CF-1 closed)
+**Total remaining time: 1 training run (~30 min on A10G).**
+(was ~50 min of code + 1 training run before NEW-5 / NEW-7 closed)
 
-> **Recommendation:** Do items 1–8 *before* spending any HF credits.
-> All 8 are zero-compute logic/text fixes. Once the pipeline is provably
-> correct end-to-end (run all `pytest`, `pre_validation_script`, and the
-> 11-call `/stats` check), spend the credits on item 9 with confidence.
+> **Recommendation:** All zero-compute logic/text fixes are done. Pipeline
+> is now provably correct end-to-end (49/49 tests pass, every cited number
+> in the README sources from JSON, all 5 strategies hit `evidence_quality
+> = 4/4 = 1.0` against the live Space). Spend the HF credits on the
+> training run with confidence.
 
 ---
 
@@ -1337,10 +1506,10 @@ earlier failure invalidates later items.
 - [ ] `/rollout?task_id=contradictory_claim&seed=42` returns a non-empty trace ending in `done: true`
 
 ### Eval Artifacts
-- [x] `reports/eval_report.json` is dated today, not 2026-04-03 ← **regen rev 8** (now 25 rows, all 5 tasks)
-- [x] **Live env confirms `evidence_quality = 1.0` for `contradictory_claim`, `coordinated_fraud`, and `identity_fraud`** (rev 8 — 4/4 evidence on every seed for both new strategies).
+- [x] `reports/eval_report.json` is dated today, not 2026-04-03 ← **regen rev 9** (now 25 rows, all 5 tasks, generated `2026-04-25T14:57:54Z` against live Space)
+- [x] **Live env confirms `evidence_quality = 1.0` for ALL 5 tasks** (rev 9 — 4/4 evidence on every seed for `contradictory_claim`, `coordinated_fraud`, `identity_fraud`, AND `distribution_shift_claim` after NEW-7 hooks).
 - [x] `reports/eval_report.json` has at least 2 distinct `variant_id` values across seeds ← **5 distinct: `{0, 1, 2, 3, 4}`** on every task
-- [x] `reports/eval_report.json` has different rewards for different tasks (not all 0.825) ← 5 distinct rewards: `{0.3966, 0.7497, 0.7625, 0.7670, 0.8180}`, `average_reward 0.6988`, `completion_rate 100%`
+- [x] `reports/eval_report.json` has different rewards for different tasks ← **5 distinct rewards: `{0.7497, 0.7625, 0.7827, 0.8180, 0.8230}`, `average_reward 0.7872`, `completion_rate 100%`** (was `0.6988` / 4 distinct rewards before NEW-7)
 - [ ] `reports/component_shift_summary.json` agrees with `reports/training_summary.json` on every common metric
 
 ### Training Artifacts
@@ -1408,4 +1577,5 @@ that the judging rubric explicitly looks for.
 | 25 Apr 18:25 | fifth pass | **NEW-2 → PASS** and **FATAL-5 → PASS**: replaced `tests/envs/test_debatefloor_rubric.py` with a 6-test suite that asserts the FATAL-5 contract (`obs.rubric_reward != obs.reward`). Live divergence proof: 0.428 vs 0.29 (Δ 0.138) for the original failing call. Full DebateFloor regression: **49/49 pass**. Priority list shrinks to 9 items. |
 | 25 Apr 19:10 | sixth pass | **NEW-1 → PASS** and **FATAL-4 → PASS**: built `train/generate_eval_report.py` (the previously-referenced `pre_validation_script.py --output/--seeds/--tasks` flags never existed). Regenerated `reports/eval_report.json` + `.md` against the live HF Space using `inference_debatefloor.py:STRATEGIES` × seeds `[7, 11, 13, 19, 25]` (all 5 variant_ids) × 3 tasks → 15 rows. Numbers: 5 distinct variant_ids, 3 distinct rewards (`{0.3966, 0.7497, 0.7625}`), 10/15 rows with `evidence_quality > 0`, 100% completion, average reward `0.6363`. PLAN-prescribed invariant assertion runs clean. Priority list shrinks to 8 items. |
 | 25 Apr 19:25 | seventh pass | **NEW-3 → PASS**, **CRITICAL-2 → PASS**, **FATAL-2 storytelling-half → PASS**, and **NEW-6 → PASS**: rewrote README `Results` block, both plot captions, and Training Pipeline install command so every cited number is read directly from `training_summary.json` / `eval_report.json` and the install command sources `requirements.txt` + `train/requirements.txt`. Sanity script verifies 11/11 cited numbers match JSON, 10/10 forbidden hand-edited tokens (`-0.34`/`+0.83`/`~82%`/`~44%`/`41%`/`73%`/`trl>=0.9.0` plus unicode-minus variants) absent, 4/4 install-command checks pass. FATAL-2 re-training half (Step 1 + Step 3) still pending HF credits. Priority list shrinks to 6 items. |
-| 25 Apr 19:55 | **eighth pass (this revision)** | **NEW-4 → PASS** and **HIGH-4 / CF-1 → PASS**: added `_strategy_coordinated_fraud` and `_strategy_identity_fraud` to `inference_debatefloor.py` (with matching `TASK_CONFIG` entries); both strategies trigger the env's full discovery path before flagging, achieving `evidence_quality 4/4 = 1.000` on every seed (`coordinated_fraud reward 0.7670`, `identity_fraud reward 0.8180`, both with `calibration_score 0.6` and `exploit_penalty 0.000`). Regenerated `reports/eval_report.json` against the live HF Space — now **25 rows** (was 15), `average_reward 0.6988` (was 0.6363), 20/25 rows with `evidence_quality > 0` (was 10/15), `completion_rate 100%`, all 5 variant_ids on every task. **HIGH-4 / CF-1**: converted the `train/train_minimal.py` variance < 0.01 warning into a hard `RuntimeError` after a 2-batch warmup, matching HACKATHON_CONSTRAINTS Part 4 CF-1; `.validate_high4.py` confirms warmup batches 1–2 do not raise, batch 3 raises with the contracted `Reward variance collapsed to 0.000000 on batch 3 (threshold 0.01). GRPO gradient is effectively zero — training will not learn.` message, and high-variance batches never raise. 49/49 DebateFloor regression tests still pass. Priority list shrinks to **4 items**. |
+| 25 Apr 19:55 | eighth pass | **NEW-4 → PASS** and **HIGH-4 / CF-1 → PASS**: added `_strategy_coordinated_fraud` and `_strategy_identity_fraud` to `inference_debatefloor.py` (with matching `TASK_CONFIG` entries); both strategies trigger the env's full discovery path before flagging, achieving `evidence_quality 4/4 = 1.000` on every seed (`coordinated_fraud reward 0.7670`, `identity_fraud reward 0.8180`, both with `calibration_score 0.6` and `exploit_penalty 0.000`). Regenerated `reports/eval_report.json` against the live HF Space — now **25 rows** (was 15), `average_reward 0.6988` (was 0.6363), 20/25 rows with `evidence_quality > 0` (was 10/15), `completion_rate 100%`, all 5 variant_ids on every task. **HIGH-4 / CF-1**: converted the `train/train_minimal.py` variance < 0.01 warning into a hard `RuntimeError` after a 2-batch warmup, matching HACKATHON_CONSTRAINTS Part 4 CF-1; `.validate_high4.py` confirms warmup batches 1–2 do not raise, batch 3 raises with the contracted `Reward variance collapsed to 0.000000 on batch 3 (threshold 0.01). GRPO gradient is effectively zero — training will not learn.` message, and high-variance batches never raise. 49/49 DebateFloor regression tests still pass. Priority list shrinks to **4 items**. |
+| 25 Apr 20:35 | **ninth pass (this revision)** | **NEW-5 → PASS** and **NEW-7 → PASS**. **NEW-7**: added doc-level + cross-claim discovery hooks for `distribution_shift_claim` in `app/environment.py` (DOC-41 → `recent_policy_cluster`, DOC-42 → `shared_repair_shop_far`; `query_linked_claim` now auto-records `shared_emergency_contact` after 2 matching contacts and broadens broker discovery to any `CLM-DIST-*` after 2 queries) and added the missing `distribution_shift_claim` sub-dict in `app/tasks.py:get_evidence_keyword_hints()`. Rewrote `_strategy_distribution_shift_claim` in `inference_debatefloor.py` to walk the new contract; bumped `TASK_CONFIG` `terminal_confidence` LOW → MED. Result on the live HF Space: `distribution_shift_claim reward 0.7827`, `evidence 4/4 = 1.000` (was `0.0`), `exploit_penalty 0.0` on every seed. Side-benefit: `coordinated_fraud` reward `0.7670 → 0.8230` (its `shared_emergency_contact` is now also discoverable). Regenerated `reports/eval_report.json` — **25 rows, average_reward 0.7872** (was 0.6988), **25/25 rows with `evidence_quality > 0`** (was 20/25), 5 distinct variant_ids `[0,1,2,3,4]`, 5 distinct rewards `{0.7497, 0.7625, 0.7827, 0.8180, 0.8230}`. **NEW-5**: added `reasoning_quality` as the 5th entry in `train/train_minimal.py:_COMPONENT_LABELS`; `_score_completion_via_http` now reads it from the live env's `observation.rubric_components`; `_score_completion_keyword` mirrors `_ReasoningQualityRubric` exactly. `.validate_new5.py` confirms all four code paths emit the canonical 5-key set; live `_score_completion_via_http` returns `reasoning_quality = 1.0000` from the live rubric. 49/49 DebateFloor regression tests still pass. Priority list shrinks to **2 items** — both are FATAL-2 re-training (HF credits). |

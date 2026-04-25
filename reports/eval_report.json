@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-25T14:26:45.997663+00:00",
+  "generated_at": "2026-04-25T14:57:54.924365+00:00",
   "base_url": "https://aniketasla-debatefloor.hf.space",
   "rows": [
     {
@@ -106,57 +106,57 @@
       "task_id": "distribution_shift_claim",
       "seed": 7,
       "done": true,
-      "reward": 0.3966,
+      "reward": 0.7827,
       "variant_id": 2,
-      "evidence_quality": 0.0,
+      "evidence_quality": 1.0,
       "exploit_penalty": 0.0,
-      "steps": 7
+      "steps": 12
     },
     {
       "task_id": "distribution_shift_claim",
       "seed": 11,
       "done": true,
-      "reward": 0.3966,
+      "reward": 0.7827,
       "variant_id": 1,
-      "evidence_quality": 0.0,
+      "evidence_quality": 1.0,
       "exploit_penalty": 0.0,
-      "steps": 7
+      "steps": 12
     },
     {
       "task_id": "distribution_shift_claim",
       "seed": 13,
       "done": true,
-      "reward": 0.3966,
+      "reward": 0.7827,
       "variant_id": 3,
-      "evidence_quality": 0.0,
+      "evidence_quality": 1.0,
       "exploit_penalty": 0.0,
-      "steps": 7
+      "steps": 12
     },
     {
       "task_id": "distribution_shift_claim",
       "seed": 19,
       "done": true,
-      "reward": 0.3966,
+      "reward": 0.7827,
       "variant_id": 4,
-      "evidence_quality": 0.0,
+      "evidence_quality": 1.0,
       "exploit_penalty": 0.0,
-      "steps": 7
+      "steps": 12
     },
     {
       "task_id": "distribution_shift_claim",
       "seed": 25,
       "done": true,
-      "reward": 0.3966,
+      "reward": 0.7827,
       "variant_id": 0,
-      "evidence_quality": 0.0,
+      "evidence_quality": 1.0,
       "exploit_penalty": 0.0,
-      "steps": 7
+      "steps": 12
     },
     {
       "task_id": "coordinated_fraud",
       "seed": 7,
       "done": true,
-      "reward": 0.767,
+      "reward": 0.823,
       "variant_id": 2,
       "evidence_quality": 1.0,
       "exploit_penalty": 0.0,
@@ -166,7 +166,7 @@
       "task_id": "coordinated_fraud",
       "seed": 11,
       "done": true,
-      "reward": 0.767,
+      "reward": 0.823,
       "variant_id": 1,
       "evidence_quality": 1.0,
       "exploit_penalty": 0.0,
@@ -176,7 +176,7 @@
       "task_id": "coordinated_fraud",
       "seed": 13,
       "done": true,
-      "reward": 0.767,
+      "reward": 0.823,
       "variant_id": 3,
       "evidence_quality": 1.0,
       "exploit_penalty": 0.0,
@@ -186,7 +186,7 @@
       "task_id": "coordinated_fraud",
       "seed": 19,
       "done": true,
-      "reward": 0.767,
+      "reward": 0.823,
       "variant_id": 4,
       "evidence_quality": 1.0,
       "exploit_penalty": 0.0,
@@ -196,7 +196,7 @@
       "task_id": "coordinated_fraud",
       "seed": 25,
       "done": true,
-      "reward": 0.767,
+      "reward": 0.823,
       "variant_id": 0,
       "evidence_quality": 1.0,
       "exploit_penalty": 0.0,
@@ -253,6 +253,6 @@
       "steps": 10
     }
   ],
-  "average_reward": 0.6988,
+  "average_reward": 0.7872,
   "completion_rate": 1.0
 }
