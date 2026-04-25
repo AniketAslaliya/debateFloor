@@ -26,6 +26,7 @@ from .tasks import (
     get_task_definition,
 )
 from server.calibration_grader import calibration_reward as compute_calibration_reward
+from .session_store import record_episode_confidence
 
 # Map Literal confidence levels to float for Brier-score compatibility
 _CONFIDENCE_TO_FLOAT = {"HIGH": 0.9, "MED": 0.6, "LOW": 0.3}
@@ -443,11 +444,14 @@ class InsuranceClaimEnvironment(
                     if ground_truth == "request_investigation"
                     else ground_truth
                 )
+                # HIGH-2 fix: use the global cross-session history so anti-gaming
+                # detection actually fires during concurrent GRPO rollouts. The
+                # per-instance _episode_history is kept only for per-session debug.
+                global_history = record_episode_confidence(conf_str)
                 self._calibration_score = compute_calibration_reward(
                     effective_decision, conf_str, effective_ground_truth,
-                    self._episode_history,
+                    global_history,
                 )
-                # Record this episode for future gaming detection
                 self._episode_history.append({"confidence": conf_str})
 
             if canonical_decision == "request_investigation":

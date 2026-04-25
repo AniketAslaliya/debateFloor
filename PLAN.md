@@ -1,862 +1,1043 @@
-# DebateFloor — Pre-Evaluation Fix Plan
+# DebateFloor — Pre-Evaluation Fix Plan (Live Status)
 
-**Status:** Pre-submission hardening  
+**Status:** Pre-submission hardening — second pass after first-round fixes  
 **Deadline:** April 25–26 2026 Grand Finale  
+**Last validated:** April 25 2026, 17:00 IST (against current repo state)  
 **Priority order:** FATAL → CRITICAL → HIGH → MEDIUM
 
-Each issue below states: what a Meta judge will see, why it fails, and the exact fix.
+> **What changed in this revision:** First-pass fixes have been applied to most items.
+> This document now reflects what is **actually in the code today**, what is still
+> broken, and the exact remaining solution for each.
+
+---
+
+## Status Legend
+
+- **PASS** — Implemented in code, verified against current files
+- **PARTIAL** — Code change present but breaks a related contract (test, eval artifact, README, or downstream call site)
+- **FAIL** — Promised fix not actually applied to the code path that runs
+- **STALE** — Fix is in code but committed artifacts have not been regenerated, so judges will read old data
+
+---
+
+## Current Status Summary
+
+| # | Issue | Status | Blocker for Submission? |
+|---|---|---|---|
+| FATAL-1 | Training loop never connects to environment | **PASS** | Resolved |
+| FATAL-2 | Training evidence shows zero improvement | **PARTIAL** | Yes — README + summary contradict |
+| FATAL-3 | Evidence quality is 0.0 in all eval rows | **FAIL** | Yes — wrong `flag_id`s still in code |
+| FATAL-4 | `variant_id` always 0 | **STALE** | Yes — eval_report.json never regenerated |
+| FATAL-5 | Rubric is decorative; echoes env reward | **PARTIAL** | Yes — test now broken & contradicts fix |
+| CRITICAL-1 | No Unsloth usage | **PASS** | Resolved |
+| CRITICAL-2 | Training and eval reward use different math | **PARTIAL** | No, but visible in README |
+| HIGH-1 | `coordinated_fraud` missing from `openenv.yaml` | **PASS** | Resolved |
+| HIGH-2 | Anti-gaming detector disabled across sessions | **FAIL** | Yes — global store exists but is never written |
+| HIGH-3 | `server/app.py` violates client/server separation | **PASS** | Resolved |
+| HIGH-4 | Training loss 0.005 = model collapse | **PARTIAL** | No, but loss still 0.005 |
+| MEDIUM-1 | reward_fn used keyword matching | **PASS** | Resolved (subsumed by FATAL-1 fix) |
+| MEDIUM-2 | WandB curve caption ambiguous | **PASS** | Resolved |
+| **NEW-1** | Stale `reports/eval_report.json` (3 weeks old) | **FAIL** | Yes |
+| **NEW-2** | `tests/envs/test_debatefloor_rubric.py` is broken | **FAIL** | Yes — pytest fails |
+| **NEW-3** | README results table contradicts JSON | **FAIL** | Yes — storytelling 30% |
+| **NEW-4** | `inference_debatefloor.py` missing strategies for 2 of 5 tasks | **FAIL** | Medium |
+| **NEW-5** | Rubric component-name vocabulary drift | **FAIL** | Medium |
+| **NEW-6** | README install command is missing deps + wrong TRL pin | **FAIL** | Yes — reviewer reproduction |
+
+**Bottom line:** 7 of the 13 originally listed items are *not* fully resolved
+and 6 new issues need attention. Total estimated remaining work: **2–3 hours
+of code/text fixes + one re-training run.**
 
 ---
 
 ## Table of Contents
 
-1. [FATAL-1] Training loop never connects to the environment
-2. [FATAL-2] Training evidence shows zero improvement (training_summary.json)
-3. [FATAL-3] Evidence quality is 0.0 in all eval rows
-4. [FATAL-4] variant_id is always 0 — procedural generation appears broken
-5. [FATAL-5] Rubric is decorative — it echoes the environment's own reward
-6. [CRITICAL-1] No Unsloth usage — violates minimum submission requirements
-7. [CRITICAL-2] Training reward and eval reward use completely different math
-8. [HIGH-1] coordinated_fraud task missing from openenv.yaml
-9. [HIGH-2] Anti-gaming detector is effectively disabled during training
-10. [HIGH-3] server/app.py violates client/server separation principle
-11. [HIGH-4] Training loss (0.005) indicates model collapse or no real gradient
-12. [MEDIUM-1] reward_fn uses keyword string matching instead of env signals
-13. [MEDIUM-2] WandB curve caption says "training signal, not evaluation score" — clarify or remove the confusion
-14. [Quick wins] README, plots, final checklist
+### Originally Tracked Issues
+1. [FATAL-1](#fatal-1--training-loop-never-connects-to-the-environment-pass) — Training loop never connects to env — **PASS**
+2. [FATAL-2](#fatal-2--training-evidence-shows-zero-improvement-partial) — Training evidence shows zero improvement — **PARTIAL**
+3. [FATAL-3](#fatal-3--evidence-quality-is-00-in-all-eval-rows-fail) — Evidence quality 0.0 in all eval rows — **FAIL**
+4. [FATAL-4](#fatal-4--variant_id-is-always-0-stale) — variant_id always 0 — **STALE**
+5. [FATAL-5](#fatal-5--rubric-is-decorative-it-echoes-the-environments-own-reward-partial) — Rubric is decorative — **PARTIAL**
+6. [CRITICAL-1](#critical-1--no-unsloth-usage-pass) — No Unsloth — **PASS**
+7. [CRITICAL-2](#critical-2--training-reward-and-eval-reward-use-completely-different-math-partial) — Training vs eval reward labelling — **PARTIAL**
+8. [HIGH-1](#high-1--coordinated_fraud-task-missing-from-openenvyaml-pass) — `coordinated_fraud` missing from YAML — **PASS**
+9. [HIGH-2](#high-2--anti-gaming-detector-is-effectively-disabled-during-training-fail) — Anti-gaming disabled across sessions — **FAIL**
+10. [HIGH-3](#high-3--serverapppy-violates-clientserver-separation-principle-pass) — `server/app.py` separation — **PASS**
+11. [HIGH-4](#high-4--training-loss-0005-indicates-model-collapse-or-no-real-gradient-partial) — Loss 0.005 = collapse — **PARTIAL**
+12. [MEDIUM-1](#medium-1--reward_fn-uses-keyword-string-matching-instead-of-env-signals-pass) — Keyword matching reward — **PASS**
+13. [MEDIUM-2](#medium-2--wandb-curve-caption-ambiguous-pass) — WandB caption — **PASS**
+
+### Newly Discovered Issues (not in original plan)
+14. [NEW-1](#new-1--stale-reportseval_reportjson--md-fail) — Stale `eval_report.json` / `.md`
+15. [NEW-2](#new-2--testsenvstest_debatefloor_rubricpy-is-broken-by-the-fatal-5-fix-fail) — Broken rubric test
+16. [NEW-3](#new-3--readme-results-table-contradicts-the-actual-json-fail) — README contradicts artifacts
+17. [NEW-4](#new-4--inference_debatefloorpy-has-no-strategies-for-2-of-5-tasks-fail) — Missing inference strategies
+18. [NEW-5](#new-5--rubric-component-name-vocabulary-drift-fail) — Component-name drift
+19. [NEW-6](#new-6--readme-install-command-misses-deps-and-pins-too-old-trl-fail) — README install command broken
+
+### Verification & Sequencing
+20. [Quick wins](#quick-wins--do-these-last-they-take--30-minutes-total)
+21. [Final fix priority order](#fix-priority-order-day-of-evaluation--remaining-work-only)
+22. [Verification checklist](#verification-checklist-final)
 
 ---
 
-## FATAL-1 — Training loop never connects to the environment
+## FATAL-1 — Training loop never connects to the environment (**PASS**)
 
-### What the judge sees
-`train/train_minimal.py` generates episodes from `server.claim_generator` directly in Python, builds a static `Dataset`, and passes it to `GRPOTrainer`. The `/reset` and `/step` HTTP endpoints are **never called** during training. The judging criteria explicitly states:
+### Original problem
+`train/train_minimal.py` generated episodes statically and never called `/reset`/`/step`.
 
-> "Your training loop should connect to your environment (not a static dataset)."
+### Current state — RESOLVED
+File `train/train_minimal.py` now:
+- Lines 128–166: `run_episode_via_http(task_id, seed, decision, confidence, reason, base_url)` posts to `/reset` then `/step` and returns `float(step_resp.json()["reward"])`.
+- Lines 89–125: `_wait_for_env()` and `_start_env_server_if_needed()` block training start until `/health` returns `{"status":"healthy"}`.
+- Lines 238–307: `reward_fn` reads `task_id` and `seed` from the GRPO dataset row, calls `run_episode_via_http` per completion, returns the live reward to `GRPOTrainer`.
+- Line 562: `_start_env_server_if_needed(ENV_BASE_URL)` runs before `wandb.init()`.
 
-This is the single biggest disqualifying issue.
+### Verification (passes today)
+- The "kill-switch test" from `HACKATHON_CONSTRAINTS.md` MR-2 holds: turn off the env, training raises `RuntimeError("Environment not reachable …")` after 15 retries.
+- `reports/training_summary.json` line 10–13 records a real reward curve `mean_start: 0.0453 → mean_end: 0.3318` from the live env HTTP path.
 
-### Why it fails
-GRPO training against a static dataset teaches the model to pattern-match pre-baked strings. It does not interact with the actual environment that judges will pull and evaluate. The trained model will behave completely differently in the live environment versus during training, because the two reward surfaces measure different things.
-
-### Fix
-
-**Step 1 — Write a rollout function that calls the live environment HTTP API**
-
-In `train/train_minimal.py`, replace the static dataset approach with a rollout function:
-
-```python
-import requests
-
-ENV_BASE_URL = os.getenv("ENV_BASE_URL", "http://localhost:7860")
-
-def run_episode_via_http(prompt_text: str, model, tok, task_id: str) -> float:
-    """Run one full episode against the live environment. Returns final reward."""
-    # 1. Reset
-    r = requests.post(f"{ENV_BASE_URL}/reset", json={"task_id": task_id, "seed": random.randint(0, 9999)}, timeout=15)
-    r.raise_for_status()
-    data = r.json()
-    session_id = data["session_id"]
-
-    # 2. Generate action from model
-    completion = _generate_completion(model, tok, prompt_text)
-
-    # 3. Parse decision + confidence from completion
-    parsed = _extract_completion_fields(completion)
-    if not parsed["decision"] or not parsed["confidence"]:
-        return -0.2  # format penalty
-
-    # 4. Submit terminal action to environment
-    action = {
-        "action_type": parsed["decision"],
-        "confidence": parsed["confidence"],
-        "parameters": {"reason": parsed["reason"]},
-        "reasoning": parsed["reason"],
-    }
-    step_r = requests.post(
-        f"{ENV_BASE_URL}/step",
-        json={"action": action, "session_id": session_id},
-        timeout=15,
-    )
-    step_r.raise_for_status()
-    step_data = step_r.json()
-    return float(step_data["reward"])
-```
-
-**Step 2 — Rewrite reward_fn to use the live environment**
-
-```python
-def reward_fn(completions, prompts, task_ids, **kwargs):
-    """
-    GRPO reward function that calls the live environment for each completion.
-    Each completion is one rollout; reward comes from /step response.
-    """
-    rewards = []
-    for completion_list, prompt, task_id in zip(completions, prompts, task_ids):
-        text = completion_list[0].get("content", "") if isinstance(completion_list, list) else completion_list
-        reward = run_episode_via_http(prompt, model_ref, tok_ref, task_id)
-        rewards.append(reward)
-    return rewards
-```
-
-**Step 3 — Start the environment server before training**
-
-Add a startup check to `main()`:
-
-```python
-def _wait_for_env(base_url: str, retries: int = 10) -> None:
-    for i in range(retries):
-        try:
-            r = requests.get(f"{base_url}/health", timeout=5)
-            if r.status_code == 200:
-                print(f"Environment ready at {base_url}")
-                return
-        except Exception:
-            pass
-        time.sleep(3)
-    raise RuntimeError(f"Environment not reachable at {base_url} after {retries} retries")
-
-# In main(), before training:
-_wait_for_env(ENV_BASE_URL)
-```
-
-**Step 4 — Update the dataset to include task_id per row**
-
-```python
-rows = []
-for ep in training_episodes:
-    row = make_row(ep, tok)
-    row["task_id"] = ep.task_id   # <- pass task_id so reward_fn can call the right endpoint
-    rows.append(row)
-dataset = Dataset.from_list(rows)
-```
-
-**Step 5 — In the Colab notebook, start the server in background before training cell**
-
-Add a cell before training:
-```python
-import subprocess, time
-server_proc = subprocess.Popen(
-    ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7860"],
-    cwd="/content/debateFloor"
-)
-time.sleep(8)  # wait for startup
-import requests
-assert requests.get("http://localhost:7860/health").json()["status"] == "healthy"
-print("Environment server running.")
-```
+### No further action required for FATAL-1.
 
 ---
 
-## FATAL-2 — Training evidence shows zero improvement
+## FATAL-2 — Training evidence shows zero improvement (**PARTIAL**)
 
-### What the judge sees
-`reports/training_summary.json` contains:
-```json
-"component_shift": {
-  "before": { "Decision accuracy": 0.0, "Fraud detection": 0.0, "Evidence quality": 0.5, "Calibration": -0.8 },
-  "after":  { "Decision accuracy": 0.0, "Fraud detection": 0.0, "Evidence quality": 0.0, "Calibration": 0.0 }
-}
-```
+### Original problem
+`reports/training_summary.json` showed `Decision accuracy: 0.0 → 0.0` after training.
 
-Decision accuracy and Fraud detection are 0.0 both before and after. Evidence quality went down. Calibration went to 0.0 (not an improvement — it means the model stopped committing to any answer). The README claims "−0.34 → +0.83 mean reward" but this number does not appear in the JSON file judges will open.
+### What was fixed
+- `reports/training_summary.json` (current): `Decision accuracy: 0.3333 → 0.6667` — non-zero improvement on at least one component.
+- `mean_reward_before: 0.0453`, `mean_reward_after_training: 0.3318` — real curve in the JSON.
+- `eval_reward_before` and `eval_reward_after` are now separate top-level keys.
 
-### Why it fails
-This is the primary evidence artifact judges look at to verify the "Showing Improvement in Rewards" criterion (20% of score). Showing 0.0 → 0.0 on every meaningful metric is worse than having no evidence at all.
+### What is still broken
+1. **Three of four components do not improve:**
+   - `Fraud detection`: 0.3333 → 0.3333
+   - `Evidence quality`: 0.3333 → 0.3333
+   - `Calibration`: 0.3333 → 0.2 (regression)
 
-### Fix
+   Only `Decision accuracy` moves. Judges scanning the table will see "1 of 4 metrics improved, 1 of 4 regressed."
 
-**Step 1 — Re-run training after FATAL-1 is fixed.** The component scores will be non-zero once the reward function actually interacts with the environment.
+2. **README headline numbers do not exist anywhere in the JSON.**
+   README line 50: `Mean reward: −0.34 → +0.83`. Actual JSON: `0.0453 → 0.3318`. The −0.34/+0.83 numbers are not produced by any current code path.
 
-**Step 2 — Verify the eval harness measures what it claims**
+3. **`reports/component_shift_summary.json` is stale** and contradicts `training_summary.json`:
+   - `component_shift_summary.json`: `Calibration: -0.8 → -0.2`
+   - `training_summary.json`: `Calibration: 0.3333 → 0.2`
+   
+   These are the same metric in two different files showing different values.
 
-In `evaluate_component_shift()`, the scoring function `_score_completion()` checks:
+### Remaining solution
+
+**Step 1 — Re-run training with stronger settings (cost: ~30 min on T4 or A10G credits)**
 ```python
-fraud_hits = sum(1 for signal in expected if signal.replace("_", " ") in completion_lc)
+EPISODES = 500          # was 300
+EPOCHS   = 3
+num_generations = 8     # was 6
+max_completion_length = 128
 ```
-This is keyword matching, not environment scoring. Fix it to call the environment and use `reward_breakdown` fields directly from the `/step` response instead of re-scoring locally. See FATAL-1 fix above.
+Goal: lift `Fraud detection` and `Evidence quality` off the 0.33 floor.
+This requires the model to actually call `validate_document` + `flag_fraud_signal` with a *correct* `flag_id` — which today it cannot, because the prompt only asks for `DECISION/CONFIDENCE/REASON`. Either (a) add a multi-action prompt format, or (b) accept that those two components stay at 0.33 and flag this honestly in the README.
 
-**Step 3 — After re-running, ensure the mean reward in README matches the JSON**
-
-In `save_training_artifacts()`, add the mean reward to the summary JSON:
-```python
-rewards = [r.get("reward") or r.get("rewards/mean") for r in log_history if r.get("reward") or r.get("rewards/mean")]
-summary["mean_reward_before"] = float(before_components.get("Decision accuracy", 0.0))  # use a real metric
-summary["mean_reward_after_training"] = float(sum(rewards) / len(rewards)) if rewards else 0.0
-summary["mean_reward_final"] = summary["mean_reward_after_training"]
+**Step 2 — Replace README headline numbers with actual JSON values**
+In `README.md` lines 48–54, replace:
 ```
+| **Mean reward** | −0.34 | **+0.83** |
+| **HIGH-confidence episodes** | ~82% | **~44%** |
+| **Debate panel convened (hard task)** | 41% | **73%** |
+```
+With:
+```
+| **Training reward (live env scalar)** | 0.0453 | **0.3318** (+632%) |
+| **Decision accuracy (eval)** | 0.3333 | **0.6667** (+100%) |
+| **Calibration score (eval)** | 0.3333 | 0.2000 (regressed; under investigation) |
+```
+Plus a one-line caveat: "Reward components for Fraud detection and Evidence quality
+are flat at 0.3333 because the current prompt format only requests a single terminal
+action; multi-step investigative actions are validated separately via `pre_validation_script.py`."
 
-**Step 4 — Commit the updated reports/ artifacts to the repo.** Judges pull the repo, not just the Space. The JSON must reflect real training numbers.
+**Step 3 — Regenerate `reports/component_shift_summary.json`**
+After Step 1 completes, `save_training_artifacts()` writes both files. Verify they
+agree on every common key.
 
 ---
 
-## FATAL-3 — Evidence quality is 0.0 in all eval rows
+## FATAL-3 — Evidence quality is 0.0 in all eval rows (**FAIL**)
 
-### What the judge sees
-Every row in `reports/eval_report.json`:
-```json
-{ "task_id": "clean_claim", "seed": 7, "reward": 0.825, "evidence_quality": 0.0 }
-```
+### Original problem
+The scripted baseline raised wrong `flag_id`s, so `_evidence_total > 0` never triggered.
 
-`evidence_quality` is 0.0 for every single task and seed. This is the column that measures whether the agent grounded fraud signals with actual evidence text. A weighted component at 14% that is always 0 means 14 points are left on the table every episode.
-
-### Why it fails
-The `evidence_quality_score` is only non-zero when `self._evidence_total > 0`, which only happens when `flag_fraud_signal` is called with evidence matching the keyword hints in `get_evidence_keyword_hints()`. The scripted eval agent in `inference_debatefloor.py` raises the wrong `flag_id` (`procedure_mismatch`) which is not in the task's `expected_signals`, so `self._evidence_hits` never increments.
-
-### Fix
-
-**Step 1 — Fix the scripted baseline in `inference_debatefloor.py`**
-
-In `_strategy_contradictory_claim()`, the flag_id must match an expected_signal for the task. Check `app/tasks.py` — the `contradictory_claim` task expects `["date_mismatch", "cost_inflation", "signature_mismatch"]`. Fix:
+### Current state — STILL BROKEN
+File `inference_debatefloor.py` was **not** corrected:
 
 ```python
-# OLD (wrong flag_id — not in expected_signals)
-actions.append({
-    "action_type": "flag_fraud_signal",
-    "parameters": {
-        "flag_id": "procedure_mismatch",
-        "evidence": "...",
-    },
-})
+# inference_debatefloor.py line 154 — still wrong
+"flag_id": "procedure_mismatch",
+```
 
-# NEW (correct flag_id with evidence keyword that matches get_evidence_keyword_hints)
+`procedure_mismatch` is not in `contradictory_claim`'s `expected_signals`, which `app/tasks.py` lines 200–204 declare as:
+```python
+expected_signals=[
+    "date_mismatch",
+    "cost_inflation",
+    "signature_mismatch",
+    "prior_similar_claim",
+],
+```
+
+Same problem at line 213:
+```python
+"flag_id": "clustered_policy_broker",   # for distribution_shift_claim
+```
+But `distribution_shift_claim` declares `expected_signals = ["shared_repair_shop_far", "shared_emergency_contact", …]` (`app/tasks.py` line 308). The flag is dropped silently → `_evidence_hits` never increments → `evidence_quality_score` stays 0.0.
+
+### Why the other plan's fix did not land
+The PLAN.md page for FATAL-3 was written but the corresponding edit to `inference_debatefloor.py` was never made.
+
+### Remaining solution
+
+**Edit `inference_debatefloor.py` `_strategy_contradictory_claim()` (around line 150):**
+```python
+# REPLACE the wrong flag with one that IS in expected_signals
 actions.append({
     "action_type": "flag_fraud_signal",
     "parameters": {
         "flag_id": "date_mismatch",
-        "evidence": "Claim form records incident date 2026-02-20 but hospital admission on 2026-02-17 — date mismatch confirmed.",
+        "evidence": (
+            "Claim form records incident date 2026-02-20 but hospital admission "
+            "on 2026-02-17 — date mismatch confirmed across documents."
+        ),
     },
-    "reasoning": "Document contradiction is a strong fraud indicator.",
+    "reasoning": "Date inconsistency is a strong fraud indicator grounded in evidence.",
+})
+actions.append({
+    "action_type": "flag_fraud_signal",
+    "parameters": {
+        "flag_id": "cost_inflation",
+        "evidence": "Hospital bill rate is 2.4× regional standard — cost inflation pattern.",
+    },
+    "reasoning": "Inflated cost vs benchmark suggests billing fraud.",
 })
 ```
 
-**Step 2 — Validate get_evidence_keyword_hints covers the flags being raised**
+**Edit `_strategy_distribution_shift_claim()` (around line 210):**
+```python
+# REPLACE clustered_policy_broker with one that IS in expected_signals
+actions.append({
+    "action_type": "flag_fraud_signal",
+    "parameters": {
+        "flag_id": "shared_emergency_contact",
+        "evidence": "Multiple linked claims share emergency contact phone +91-9000002222.",
+    },
+    "reasoning": "Shared emergency contact across simultaneous claims indicates coordinated ring.",
+})
+```
 
-In `app/tasks.py`, `get_evidence_keyword_hints()` must return keywords that appear in the evidence strings your agent writes. Audit the mapping and ensure each expected signal has at least 2–3 keywords a real agent would naturally write.
+**Verification keyword hints** that must match `app/tasks.py` `get_evidence_keyword_hints()` (lines 645–663):
+- `date_mismatch` → keywords: `date`, `admission`, `mismatch`, `incident` ✓ (evidence string above contains all four)
+- `cost_inflation` → keywords: `cost`, `rate`, `2.4`, `inflation`, `overbilled` ✓
+- `shared_emergency_contact` → keywords: `contact`, `phone`, `emergency`, `shared`, `9000002222` ✓
 
-**Step 3 — Re-run `pre_validation_script.py` and `inference_debatefloor.py` after the fix**
-
-After the fix, re-generate `reports/eval_report.json`. Evidence quality should be non-zero for `contradictory_claim` and `coordinated_fraud` tasks.
+After this edit, re-run:
+```bash
+PYTHONPATH=. uvicorn app.main:app --port 7860 &
+sleep 5
+python inference_debatefloor.py --all-tasks --seed 7 --base-url http://localhost:7860
+python pre_validation_script.py --base-url http://localhost:7860
+```
+Then commit the regenerated `reports/eval_report.json`.
 
 ---
 
-## FATAL-4 — variant_id is always 0
+## FATAL-4 — variant_id is always 0 (**STALE**)
 
-### What the judge sees
-```json
-{ "task_id": "clean_claim", "seed": 7, "variant_id": 0 }
-{ "task_id": "clean_claim", "seed": 17, "variant_id": 0 }
+### Original problem
+Eval script did not pass `seed` in the POST body, so `build_runtime_task` always got seed=None → `variant_id = abs(seed) % 5 = 0`.
+
+### Current state
+- **Server-side code is correct:** `app/main.py` line 91 forwards `body.seed` to `env.reset(...)`. `app/environment.py` reset path passes `seed` to `build_runtime_task`. `inference_debatefloor.py` line 72 sends `seed` in the JSON body of `/reset`.
+- **Stale artifact:** `reports/eval_report.json` is dated **2026-04-03** (3 weeks old) and still contains:
+  ```json
+  { "task_id": "clean_claim",         "seed": 7,  "variant_id": 0 },
+  { "task_id": "clean_claim",         "seed": 17, "variant_id": 0 },
+  { "task_id": "contradictory_claim", "seed": 7,  "variant_id": 0 },
+  …
+  ```
+  All 6 rows have `variant_id: 0` and identical reward `0.825`. The fix exists in
+  code but the JSON judges will read was never regenerated.
+
+### Remaining solution
+
+**After fixing FATAL-3** (so the same regen pass also produces non-zero
+`evidence_quality`), run:
+```bash
+PYTHONPATH=. uvicorn app.main:app --port 7860 &
+sleep 5
+python pre_validation_script.py --base-url http://localhost:7860 \
+    --output reports/eval_report.json \
+    --output-md reports/eval_report.md \
+    --seeds 7,17,42 --tasks clean_claim,contradictory_claim,distribution_shift_claim,coordinated_fraud,identity_fraud
 ```
 
-Both seed=7 and seed=17 return variant_id=0. With `variant_id = abs(seed) % 5`, seed=7 gives 7%5=2 and seed=17 gives 17%5=2. Both should be variant 2, not 0. This means the eval script is not passing the seed through to `build_runtime_task`.
-
-### Why it fails
-The openenv.yaml claims "500+ unique episodes via seed variation." Judges will test this by calling `/reset` with different seeds and checking that episode content varies. If variant_id is always 0, the procedural generation claim is false.
-
-### Fix
-
-**Step 1 — Audit how seed flows through `/reset` to `build_runtime_task`**
-
-In `app/main.py`, the `reset` endpoint receives `body.seed`. Trace it to `env.reset(task_id=body.task_id, seed=body.seed, ...)`. In `app/environment.py`, `reset()` passes `seed` to `build_runtime_task(selected_task, seed=seed)`. This looks correct in code.
-
-**The likely bug:** the eval script generating `eval_report.json` calls `/reset` without passing `seed` in the body, or it passes seed as a query param instead of body. Check your eval script and ensure seed is in the POST body:
-
+**Sanity check before commit:**
 ```python
-# In your eval script — ensure seed is in the JSON body, not a query param
-requests.post(f"{base_url}/reset", json={"task_id": task_id, "seed": seed}, timeout=15)
+import json
+data = json.load(open("reports/eval_report.json"))
+variants = {row["variant_id"] for row in data["rows"]}
+assert len(variants) > 1, f"variant_id still constant: {variants}"
+evidence = [row["evidence_quality"] for row in data["rows"]]
+assert any(e > 0 for e in evidence), "evidence_quality still zero everywhere"
+print("✅ eval_report.json passes both invariants")
 ```
 
-**Step 2 — Verify variant changes are observable in the response**
-
-After reset with seed=7, the `observation.incident` or `observation.documents` content should differ from seed=42. Add a quick test:
-
-```python
-r1 = requests.post(f"{base}/reset", json={"task_id": "clean_claim", "seed": 7}).json()
-r2 = requests.post(f"{base}/reset", json={"task_id": "clean_claim", "seed": 42}).json()
-assert r1["observation"]["reward_breakdown"]["payout_accuracy"] != r2["observation"]["reward_breakdown"]["payout_accuracy"] \
-    or r1["observation"]["documents"] != r2["observation"]["documents"], "Variants must differ"
-```
-
-**Step 3 — Update eval_report.json after fix**
-
-Re-run the eval script and commit the updated report. variant_id must show different values across seeds.
+Then `git add reports/eval_report.json reports/eval_report.md && git commit`.
 
 ---
 
-## FATAL-5 — Rubric is decorative; it echoes the environment's own reward
+## FATAL-5 — Rubric is decorative; it echoes the environment's own reward (**PARTIAL**)
 
-### What the judge sees
-In `tests/envs/test_debatefloor_rubric.py`:
+### Original problem
+`DebateFloorRubric.forward()` summed env-derived components only → `obs.rubric_reward == obs.reward` always.
+
+### What was fixed (`app/rubrics.py`)
+- Added `_ReasoningQualityRubric` (lines 48–70): scans `action.reasoning` for evidence keywords, returns `min(1.0, hits/4.0)`. Independent of env reward.
+- `DebateFloorRubric._weights` (lines 94–101) now allocates 0.20 weight to `reasoning_quality`.
+- `forward()` (lines 103–109) blends env-derived components with reasoning_quality, then clamps to `[0,1]`.
+
+### What is still broken
+**`tests/envs/test_debatefloor_rubric.py` was never updated**, so it now:
+
+1. **Asserts the property the fix invalidates** (line 28):
+   ```python
+   assert obs.rubric_reward == pytest.approx(obs.reward)
+   ```
+   This is exactly what HACKATHON_CONSTRAINTS.md AR-2 says is wrong. With the
+   new rubric, this assertion can fail (and *should* fail when reasoning_quality
+   diverges from env reward).
+
+2. **Expects component keys that no longer exist** (lines 29–39):
+   ```python
+   assert set(obs.rubric_components) == {
+       "fraud_detection", "decision_accuracy",
+       "payout_accuracy",         # ← not in new rubric
+       "efficiency_score",
+       "consistency_score",       # ← not in new rubric
+       "evidence_quality_score",
+       "calibration_score",
+       "penalty",
+       "total",
+   }
+   ```
+   `payout_accuracy` and `consistency_score` were renamed/removed during the
+   rubric rewrite. The test fails immediately on this set comparison.
+
+A reviewer running `pytest tests/envs/test_debatefloor_rubric.py` today gets a
+red bar — much worse for the submission than no test at all.
+
+### Remaining solution
+
+**Replace the test body:**
 ```python
-assert obs.rubric_reward == pytest.approx(obs.reward)
-```
+# tests/envs/test_debatefloor_rubric.py
+from __future__ import annotations
+import pytest
+from app.environment import InsuranceClaimEnvironment
+from app.models import InsuranceClaimAction
+from app.rubrics import DebateFloorRubric
 
-The test asserts they are equal. In `app/rubrics.py`, `DebateFloorRubric.forward()` reads fields from `observation.reward_breakdown` — the same fields the environment already computed. The rubric has no independent logic; it just re-weights what's already there.
 
-### Why it fails
-OpenEnv rubrics are supposed to provide an **independent evaluation signal** — a separate judgment layer that can disagree with or supplement the environment's reward. A rubric that always equals the environment reward provides no additional information to the training infrastructure and is architecturally wrong.
+def test_environment_uses_debatefloor_rubric() -> None:
+    env = InsuranceClaimEnvironment()
+    assert isinstance(env.rubric, DebateFloorRubric)
 
-### Fix
 
-**Step 1 — Give the rubric an independent evaluation role**
+def test_rubric_components_are_exposed_on_step() -> None:
+    env = InsuranceClaimEnvironment()
+    env.reset(task_id="contradictory_claim", seed=42)
 
-The rubric should evaluate the **reasoning quality** of the action independently of the environment's outcome. Implement a lightweight independent check — for example, the rubric checks whether the agent's `action.reasoning` field contains structured evidence:
+    obs = env.step(
+        InsuranceClaimAction(
+            action_type="deny_claim",
+            confidence="MED",
+            parameters={"reason": "date mismatch confirmed"},
+            reasoning="Date mismatch and cost inflation found across documents — clear fraud signals.",
+        )
+    )
 
-```python
-class _ReasoningQualityRubric(Rubric):
-    """
-    Independent of environment reward.
-    Scores whether the agent's reasoning text references specific evidence.
-    This fires on every step, giving a dense process signal the env reward doesn't have.
-    """
-    EVIDENCE_KEYWORDS = [
-        "date", "mismatch", "document", "inconsistency", "signal", "evidence",
-        "policy", "hospital", "bill", "procedure", "claim", "fraud", "verified",
-    ]
+    # Rubric value is well-formed
+    assert 0.0 <= obs.rubric_reward <= 1.0
 
-    def forward(self, action: Any, observation: Any) -> float:
-        reasoning = getattr(action, "reasoning", "") or ""
-        if len(reasoning) < 20:
-            return 0.0
-        reasoning_lc = reasoning.lower()
-        hits = sum(1 for kw in self.EVIDENCE_KEYWORDS if kw in reasoning_lc)
-        return min(1.0, hits / 4.0)   # 4 keywords = full score; independent of env outcome
-```
-
-**Step 2 — Update DebateFloorRubric to compose env-based + independent signals**
-
-```python
-class DebateFloorRubric(Rubric):
-    def __init__(self):
-        super().__init__()
-        # Env-derived components (as before)
-        self.fraud_detection = _RewardFieldRubric("fraud_detection_score")
-        self.decision_accuracy = _RewardFieldRubric("decision_accuracy")
-        self.calibration_score = _RewardFieldRubric("calibration_score")
-        # New: independent rubric — can disagree with env reward
-        self.reasoning_quality = _ReasoningQualityRubric()
-
-        self._weights = {
-            "fraud_detection":   0.30,
-            "decision_accuracy": 0.25,
-            "calibration_score": 0.25,
-            "reasoning_quality": 0.20,   # <- independent signal
-        }
-```
-
-**Step 3 — Update the test to reflect the rubric is now independent**
-
-```python
-# OLD (asserts equality — wrong)
-assert obs.rubric_reward == pytest.approx(obs.reward)
-
-# NEW (asserts rubric ran and produced a value, not that it equals env reward)
-assert 0.0 <= obs.rubric_reward <= 1.0
-assert obs.rubric_components["reasoning_quality"] >= 0.0
-# Rubric and env reward should NOT always be equal
-```
-
----
-
-## CRITICAL-1 — No Unsloth usage
-
-### What the judge sees
-`train/train_minimal.py` docstring says "no Unsloth" right in the title. The judging criteria says:
-
-> "A working training script using **Unsloth** or HF TRL"
-
-The hackathon stack explicitly features Unsloth for memory efficiency and it is named in the requirements document. `train/requirements.txt` does not list `unsloth`.
-
-### Fix
-
-**Step 1 — Add Unsloth to `train/requirements.txt`**
-
-```
-unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git
-```
-
-Or for stable release:
-```
-unsloth>=2024.8
-```
-
-**Step 2 — Replace model loading in `train_minimal.py` with Unsloth's `FastLanguageModel`**
-
-```python
-# OLD
-from transformers import AutoModelForCausalLM, AutoTokenizer
-model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, torch_dtype=DTYPE, device_map="auto")
-tok = AutoTokenizer.from_pretrained(MODEL_NAME)
-
-# NEW
-from unsloth import FastLanguageModel
-model, tok = FastLanguageModel.from_pretrained(
-    model_name=MODEL_NAME,
-    max_seq_length=512,
-    dtype=None,          # auto-detect
-    load_in_4bit=True,   # QLoRA on T4
-)
-model = FastLanguageModel.get_peft_model(
-    model,
-    r=16,
-    target_modules=["q_proj", "v_proj"],
-    lora_alpha=16,
-    lora_dropout=0,
-    bias="none",
-    use_gradient_checkpointing="unsloth",
-)
-```
-
-**Step 3 — Fix model save to use Unsloth's correct merged save path**
-
-The hackathon guide explicitly warns: "Do not upcast a 4-bit model to 16-bit and then merge the LoRA weights naively."
-
-```python
-# OLD (potentially corrupts QLoRA weights)
-model.save_pretrained("./debatefloor_checkpoint")
-
-# NEW (Unsloth's safe merge path)
-model.save_pretrained_merged(
-    "./debatefloor_checkpoint",
-    tok,
-    save_method="merged_16bit",   # safe merge
-)
-```
-
-**Step 4 — Update `GRPOConfig` for Unsloth compatibility**
-
-Remove `fp16` / `bf16` flags — Unsloth handles this internally. Set `gradient_checkpointing=True`.
-
-**Step 5 — Update notebook Cell 1 install to include Unsloth**
-
-```python
-!pip install -q "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"
-!pip install -q trl>=0.12.0 transformers peft accelerate datasets wandb matplotlib requests
-```
-
----
-
-## CRITICAL-2 — Training reward and eval reward use completely different math
-
-### What the judge sees
-`openenv.yaml` states `never_mix: true` and calls this "CRITICAL — compound rewards break GRPO." Yet:
-
-- Training uses `training_reward()` from `calibration_grader.py` — an unbounded scalar: `−0.05 step penalty + 1.0/−0.5 decision + 0.3*flags + 0.5*calibration`
-- The environment observation returns `reward_breakdown.total` — a `[0, 1]` clamped weighted sum
-- These two numbers are presented interchangeably in the README and WandB curves
-
-Judges will ask: "Which reward is the curve showing?" and there is no clear answer.
-
-### Fix
-
-**Step 1 — Decide on one reward definition for training and be explicit**
-
-The training scalar from `training_reward()` is correct for GRPO (unbounded is fine). The env reward (0–1) is correct for evaluation. Keep both. Make the distinction explicit everywhere.
-
-**Step 2 — Label the WandB run clearly**
-
-In `wandb.init()`:
-```python
-wandb.init(
-    ...
-    config={
-        "reward_type": "training_scalar_unbounded",
-        "reward_range": "[-1.5, 2.2] approximately — not clamped",
-        "eval_reward_type": "six_component_clamped_0_1",
+    # New canonical key set (must match app/rubrics.py:component_scores())
+    expected_keys = {
+        "fraud_detection",
+        "decision_accuracy",
+        "calibration_score",
+        "evidence_quality_score",
+        "efficiency_score",
+        "reasoning_quality",   # ← NEW independent signal
+        "penalty",
+        "total",
     }
-)
+    assert set(obs.rubric_components) == expected_keys
+
+    # Independent rubric MAY differ from env reward — do NOT assert equality
+    # (this is the AR-2 contract from HACKATHON_CONSTRAINTS.md)
+    assert obs.rubric_components["reasoning_quality"] >= 0.0
+
+
+def test_rubric_can_diverge_from_env_reward() -> None:
+    """Independent rubric must be able to disagree with env reward."""
+    env = InsuranceClaimEnvironment()
+    env.reset(task_id="contradictory_claim", seed=42)
+
+    # Correct decision but no reasoning → reasoning_quality=0, env may still award
+    obs_no_reasoning = env.step(
+        InsuranceClaimAction(
+            action_type="deny_claim",
+            confidence="MED",
+            parameters={"reason": ""},
+            reasoning="",   # empty
+        )
+    )
+    assert obs_no_reasoning.rubric_components["reasoning_quality"] == 0.0
 ```
 
-**Step 3 — Fix README to clarify the distinction**
-
-Update the results table caption:
-```
-Note: "Mean reward" in the training curve is the raw GRPO training scalar 
-(unbounded, used for gradient stability). The evaluation reward in the 
-before/after table is the six-component score clamped to [0.0, 1.0]. 
-These are different numbers measuring different things — this is intentional 
-per openenv.yaml:never_mix=true.
-```
-
-**Step 4 — Ensure `save_training_artifacts()` saves both reward types separately**
-
-```python
-summary["training_reward_curve"] = {
-    "type": "unbounded_scalar",
-    "values": [r["reward"] for r in log_history if "reward" in r],
-}
-summary["eval_reward_before"] = before_components
-summary["eval_reward_after"] = after_components
-```
+Run: `pytest tests/envs/test_debatefloor_rubric.py -v` — must be green.
 
 ---
 
-## HIGH-1 — coordinated_fraud task missing from openenv.yaml
+## CRITICAL-1 — No Unsloth usage (**PASS**)
 
-### What the judge sees
-`openenv.yaml` defines exactly 3 tasks: `clean_claim`, `contradictory_claim`, `distribution_shift_claim`. But `app/tasks.py` has `coordinated_fraud` as a full `TaskDefinition` in the `TASKS` dict, and `reports/eval_report.json` tests it. Judges pull the YAML to understand what your environment does — it is the manifest.
+### Current state — RESOLVED
 
-### Fix
+`train/train_minimal.py`:
+- Lines 72–79: `from unsloth import FastLanguageModel` with graceful fallback to plain transformers if Unsloth import fails.
+- Lines 583–599: `FastLanguageModel.from_pretrained(load_in_4bit=True)` + `FastLanguageModel.get_peft_model(r=16, …, use_gradient_checkpointing="unsloth")`.
+- Line 682: `model.save_pretrained_merged("./debatefloor_checkpoint", tok, save_method="merged_16bit")`.
 
-Add `coordinated_fraud` to the `tasks:` section in `openenv.yaml`:
+`train/requirements.txt`:
+- Line 12: `unsloth` (will need `[colab-new]` extras when installed in Colab; line 11 comment documents the Colab install command).
 
-```yaml
-tasks:
-  - id: clean_claim
-    difficulty: easy
-    max_steps: 10
-    objective: >-
-      Validate a legitimate insurance claim. All documents are in order.
-      Correct decision: approve_claim with HIGH confidence.
-
-  - id: contradictory_claim
-    difficulty: medium
-    max_steps: 18
-    objective: >-
-      Detect fraud signals in a claim with contradictory documents.
-      Correct decision: deny_claim with MED confidence.
-
-  - id: coordinated_fraud
-    difficulty: hard
-    max_steps: 22
-    objective: >-
-      Investigate a coordinated fraud ring. Multiple linked claims share
-      emergency contact and broker. Agent must query_linked_claim to discover
-      cross-claim signals. Correct decision: escalate_to_human or request_investigation.
-
-  - id: distribution_shift_claim
-    difficulty: hard
-    max_steps: 28
-    objective: >-
-      Investigate a phantom provider or distribution-shifted claim.
-      Agent must verify_provider_registration and query historical data.
-      Correct decision: escalate_to_human with LOW confidence.
-
-  - id: identity_fraud
-    difficulty: medium
-    max_steps: 20
-    objective: >-
-      Detect identity fraud. Agent must verify_identity to reveal mismatch.
-      Correct decision: deny_claim with MED confidence.
-```
-
-Also verify `list_tasks_summary()` in `app/tasks.py` returns all tasks from the `TASKS` dict — currently it may only list the 3 in the YAML. Check the `/tasks` endpoint returns all 5 task IDs.
+### No further action required.
 
 ---
 
-## HIGH-2 — Anti-gaming detector is effectively disabled during training
+## CRITICAL-2 — Training reward and eval reward use completely different math (**PARTIAL**)
 
-### What the judge sees
-`self._episode_history` accumulates within one `InsuranceClaimEnvironment` instance. But `app/main.py` creates one environment per `session_id`. A GRPO run spawning 64 concurrent sessions means each session only ever sees 1–2 episodes — far below the `MIN_HISTORY_FOR_GAMING_DETECTION = 10` threshold. The anti-gaming system never fires during training.
+### What was fixed
+- `wandb.init()` config (lines 564–580) tags the run with `reward_type: env_http_reward` and notes the eval scale separately.
+- `training_summary.json` saves both `training_reward_curve` (unbounded) and `eval_reward_before/after` (clamped) under separate keys.
+- `save_training_artifacts()` plot annotation: "training scalar is unbounded. See eval table for [0,1] clamped scores."
 
-### Fix
-
-**Step 1 — Move episode history to a shared, process-level store**
-
-In `app/main.py`, add a global confidence history store:
-
-```python
-from collections import deque
-from threading import Lock
-
-_global_confidence_history: deque = deque(maxlen=500)  # last 500 episodes, all sessions
-_confidence_history_lock = Lock()
-
-def record_episode_confidence(confidence: str) -> list[dict]:
-    """Thread-safe append. Returns snapshot for gaming detection."""
-    with _confidence_history_lock:
-        _global_confidence_history.append({"confidence": confidence})
-        return list(_global_confidence_history)
+### What is still broken
+README presents one "Mean reward" row mixing both:
 ```
+| **Mean reward** | −0.34 | **+0.83** |
+```
+- −0.34 looks like an unbounded training scalar.
+- +0.83 looks like an eval-clamped score.
+- Neither value is reproducible from any committed JSON.
 
-**Step 2 — Pass the global history to `calibration_reward()` instead of per-instance history**
+### Remaining solution
+Already covered in [FATAL-2 Step 2](#fatal-2--training-evidence-shows-zero-improvement-partial). Replace the row with two clearly-labelled rows: one for training scalar, one for eval-clamped score, both citing their JSON source.
 
-In `app/environment.py`, after a terminal action:
+---
 
+## HIGH-1 — coordinated_fraud task missing from openenv.yaml (**PASS**)
+
+### Current state — RESOLVED
+
+`openenv.yaml` lines 34–75 list all 5 tasks: `clean_claim`, `contradictory_claim`,
+`distribution_shift_claim`, `coordinated_fraud`, `identity_fraud`.
+
+`app/tasks.py` line 509 `list_tasks_summary()` iterates the full `TASKS` dict, so
+`GET /tasks` returns all 5 task IDs.
+
+### No further action required.
+
+---
+
+## HIGH-2 — Anti-gaming detector is effectively disabled during training (**FAIL**)
+
+### Original problem
+`self._episode_history` lives on each `InsuranceClaimEnvironment` instance, but
+`app/main.py` creates one env per `session_id`. With 64 concurrent GRPO sessions,
+each session sees ≤2 episodes — far below `MIN_HISTORY_FOR_GAMING_DETECTION = 10`.
+
+### What was scaffolded
+- `app/session_store.py` was created with:
+  - `_global_confidence_history: deque(maxlen=500)`
+  - `_confidence_history_lock: Lock()`
+  - `record_episode_confidence(confidence)` — thread-safe append + return snapshot
+  - `get_confidence_distribution()` — returns counts for `/stats`
+- `app/main.py` line 17: `from .session_store import get_confidence_distribution`
+- `app/main.py` lines 154–157: `/stats` endpoint exists and returns the distribution.
+
+### What is still broken
+**No code anywhere calls `record_episode_confidence`.** The global deque is
+permanently empty.
+
+`app/environment.py` lines 446–451 still uses the per-instance store:
 ```python
-# OLD
 self._calibration_score = compute_calibration_reward(
     effective_decision, conf_str, effective_ground_truth,
-    self._episode_history,   # <- only this session's history
+    self._episode_history,        # ← per-session, resets every episode
 )
+self._episode_history.append({"confidence": conf_str})  # ← also per-session
+```
 
-# NEW
-from app.main import record_episode_confidence
+`/stats` will report `episodes_recorded: 0` forever, which silently fails the
+"anti-gaming is active" claim in the YAML and the README.
+
+### Remaining solution
+
+**Edit `app/environment.py` (around line 28 and lines 446–451):**
+
+```python
+# At the top of app/environment.py — add the import
+from .session_store import record_episode_confidence
+
+# In the terminal-action branch, REPLACE lines 446–451 with:
 global_history = record_episode_confidence(conf_str)
 self._calibration_score = compute_calibration_reward(
     effective_decision, conf_str, effective_ground_truth,
-    global_history,   # <- all sessions' history
+    global_history,        # ← cross-session shared history
 )
+# Optional: also keep self._episode_history for per-session debug/observability
+self._episode_history.append({"confidence": conf_str})
 ```
 
-**Note:** Avoid circular import — move `record_episode_confidence` to a separate `app/session_store.py` module imported by both `main.py` and `environment.py`.
-
-**Step 3 — Add a `/stats` endpoint so judges can verify anti-gaming is active**
-
-```python
-@app.get("/stats")
-def stats() -> dict:
-    with _confidence_history_lock:
-        history = list(_global_confidence_history)
-    total = len(history)
-    if total == 0:
-        return {"episodes_recorded": 0, "confidence_distribution": {}}
-    return {
-        "episodes_recorded": total,
-        "confidence_distribution": {
-            "HIGH": sum(1 for e in history if e["confidence"] == "HIGH") / total,
-            "MED":  sum(1 for e in history if e["confidence"] == "MED")  / total,
-            "LOW":  sum(1 for e in history if e["confidence"] == "LOW")  / total,
-        },
-        "gaming_detected": total >= 10,
-    }
+**Verification (must pass after the edit):**
+```bash
+PYTHONPATH=. uvicorn app.main:app --port 7860 &
+sleep 4
+for i in 1 2 3 4 5 6 7 8 9 10 11; do
+  SID=$(curl -sX POST http://localhost:7860/reset \
+    -H "Content-Type: application/json" \
+    -d "{\"task_id\":\"clean_claim\",\"seed\":$i}" | jq -r .session_id)
+  curl -sX POST http://localhost:7860/step \
+    -H "Content-Type: application/json" \
+    -d "{\"action\":{\"action_type\":\"approve_claim\",\"confidence\":\"HIGH\"},\"session_id\":\"$SID\"}" \
+    > /dev/null
+done
+curl -s http://localhost:7860/stats | jq
+# Must show:  episodes_recorded ≥ 11,  gaming_detection_active: true
 ```
+
+If `episodes_recorded` is still 0, the import or call site is wrong.
 
 ---
 
-## HIGH-3 — server/app.py violates client/server separation
+## HIGH-3 — server/app.py violates client/server separation principle (**PASS**)
 
-### What the judge sees
-`server/app.py` contains exactly one line:
+### Current state — RESOLVED
+
+`server/app.py` is a real entry point:
 ```python
-from app.main import app
-```
-
-The `server/` module is supposed to be the server boundary. Having it just re-export from `app/` means any code importing `server.app` is actually importing `app.main`. This violates the OpenEnv architecture principle:
-
-> "Clients should never import server internals."
-
-### Fix
-
-**Option A (minimal) — Make server/app.py a proper entry point**
-
-```python
-# server/app.py
-"""
-Server entry point for DebateFloor environment.
-All business logic lives in app/. This module is the deployment boundary.
-"""
 import uvicorn
 from app.main import app  # noqa: F401 — re-exported for uvicorn discovery
 
 __all__ = ["app"]
 
-
-def serve(host: str = "0.0.0.0", port: int = 7860) -> None:
-    uvicorn.run("server.app:app", host=host, port=port, workers=1)
-
+def serve(host="0.0.0.0", port=7860, workers=1):
+    uvicorn.run("server.app:app", host=host, port=port, workers=workers)
 
 if __name__ == "__main__":
     serve()
 ```
 
-**Option B (proper) — Move FastAPI app creation to server/app.py**
+This is "Option A (minimal)" from the original plan — sufficient for AR-4
+compliance. Option B (moving the FastAPI app instantiation) was not done and
+is not required.
 
-Move the `app = FastAPI(...)` instantiation and all route definitions from `app/main.py` into `server/app.py`. Keep `app/` as pure business logic (environment, models, tasks, rubrics). This is the architecturally correct separation.
+### No further action required.
 
-**Update Dockerfile CMD** to reflect whichever option you choose:
-```dockerfile
-CMD ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "7860", "--workers", "1"]
+---
+
+## HIGH-4 — Training loss 0.005 indicates model collapse or no real gradient (**PARTIAL**)
+
+### Original problem
+`training_loss: 0.005647` — too low for genuine GRPO learning over 100 episodes.
+
+### What was fixed
+- `EPISODES`: 100 → 300 (`train_minimal.py` line 56).
+- `EPOCHS`: 2 → 3.
+- `num_generations`: 4 → 6 (line 641 — note: lowered from PLAN's recommended 8 to fit T4 VRAM without Unsloth).
+- Reward variance is now logged per batch (`reward_fn` lines 293–305) and emitted to WandB as `train/reward_variance`.
+
+### What is still warning-level
+- Latest `training_summary.json` line 8: `"training_loss": 0.005260027962633305` — essentially unchanged from the original symptom.
+- `reward_fn` only **prints** when variance < 0.01; the `HACKATHON_CONSTRAINTS.md` Part 4 CF-1 pattern says `raise RuntimeError`.
+- Reward did rise (0.045 → 0.332) so *some* learning is happening — the loss number alone is not necessarily a problem for GRPO, but combined with the flat 3-of-4 components, it merits scrutiny.
+
+### Remaining solution
+
+**Step 1 — Convert variance warning to a hard guard (matches CF-1 contract).**
+
+In `train/train_minimal.py` lines 292–306, change:
+```python
+if variance < 0.01:
+    print(f"  ⚠️  Low reward variance ({variance:.4f}) — GRPO gradient may be near zero")
+```
+to:
+```python
+if variance < 0.01:
+    # Allow first 2 batches to warm up; raise after that
+    if getattr(reward_fn, "_warmup_done", False):
+        raise RuntimeError(
+            f"Reward variance collapsed to {variance:.4f}. GRPO will not learn. "
+            "Check reward_fn output and dataset diversity."
+        )
+    print(f"  ⚠️  Low reward variance ({variance:.4f}) — warming up")
+reward_fn._warmup_done = True
+```
+
+**Step 2 — When you re-train (FATAL-2 Step 1), bump `num_generations` back to 8**
+if you have HF credits / A10G+ — more generations per prompt produces more
+within-group variance, which is what GRPO actually learns from. T4 may OOM at 8;
+A10G/A100 will not.
+
+---
+
+## MEDIUM-1 — reward_fn uses keyword string matching instead of env signals (**PASS**)
+
+### Current state — RESOLVED
+
+This was subsumed by the FATAL-1 fix. `reward_fn` (lines 238–307) now sources
+reward exclusively from POST `/step`. The keyword-matching path
+(`_score_completion_keyword`, lines 391–415) is retained only as a fallback for
+the eval harness when the env is unreachable.
+
+### No further action required.
+
+---
+
+## MEDIUM-2 — WandB curve caption ambiguous (**PASS**)
+
+### Current state — RESOLVED
+
+- `save_training_artifacts()` lines 515–518: matplotlib annotation reads
+  *"Note: training scalar is unbounded. See eval table for [0,1] clamped scores."*
+- Figure title (line 519): *"DebateFloor GRPO Training Progress (training scalar — not eval score)"*
+- Y-axis (line 513): *"Mean reward (training scalar — unbounded)"*
+- README has a `> Note on reward scale` block.
+
+### No further action required.
+
+---
+
+## NEW-1 — Stale `reports/eval_report.json` + `.md` (**FAIL**)
+
+### Discovery
+Both files are dated **2026-04-03** (3 weeks before today). They contain the
+exact `variant_id: 0` / `evidence_quality: 0.0` / constant `0.825 reward`
+rows that FATAL-3 and FATAL-4 were supposed to fix.
+
+A judge searching the canonical filename `eval_report.json` will see the broken
+3-week-old data and ignore the newer `component_eval_detailed.json`.
+
+### Solution
+**Option A (preferred):** Regenerate after FATAL-3 fix:
+```bash
+python pre_validation_script.py --base-url http://localhost:7860 \
+    --output reports/eval_report.json \
+    --output-md reports/eval_report.md
+```
+Verify with the assertion script in [FATAL-4 Remaining solution](#fatal-4--variant_id-is-always-0-stale).
+
+**Option B (acceptable):** Delete both files and rename
+`component_eval_detailed.json` → `eval_report.json` if the new file's schema
+matches what `pre_validation_script.py` expects.
+
+---
+
+## NEW-2 — `tests/envs/test_debatefloor_rubric.py` is broken by the FATAL-5 fix (**FAIL**)
+
+### Discovery
+Already detailed in [FATAL-5](#fatal-5--rubric-is-decorative-it-echoes-the-environments-own-reward-partial).
+The test file was not updated when the rubric was rewritten and now:
+- Asserts equality with env reward (the property FATAL-5 was meant to break).
+- References component names (`payout_accuracy`, `consistency_score`) that
+  no longer exist in `app/rubrics.py`.
+
+### Solution
+Replace the test body with the version in [FATAL-5 Remaining solution](#fatal-5--rubric-is-decorative-it-echoes-the-environments-own-reward-partial).
+Then `pytest tests/envs/test_debatefloor_rubric.py -v` must be green.
+
+---
+
+## NEW-3 — README results table contradicts the actual JSON (**FAIL**)
+
+### Discovery
+README lines 48–54:
+```
+| **Mean reward** | −0.34 | **+0.83** |
+| **HIGH-confidence episodes** | ~82% | **~44%** |
+| **Debate panel convened (hard task)** | 41% | **73%** |
+```
+
+None of those numbers are computed by any current code path:
+- `−0.34 / +0.83` does not match any field in `training_summary.json`.
+- `82% / 44%` HIGH-confidence rate is not measured anywhere; closest signal
+  would be `/stats` distribution (which is permanently 0 because of HIGH-2).
+- `41% / 73%` debate-panel-convened rate is not tracked.
+
+### Solution
+Already covered in [FATAL-2 Step 2](#fatal-2--training-evidence-shows-zero-improvement-partial).
+Replace the table with values that exist in committed JSON. If you want to
+keep the HIGH-confidence and debate-panel rows, add the metrics to the eval
+script:
+
+```python
+# In pre_validation_script.py or run_component_eval.py
+from collections import Counter
+confidence_dist = Counter(row["agent_confidence"] for row in rows)
+high_rate = confidence_dist["HIGH"] / sum(confidence_dist.values())
+
+debate_episodes = sum(1 for row in rows if row.get("debate_convened"))
+debate_rate = debate_episodes / len(rows)
+
+summary["high_confidence_rate"] = high_rate
+summary["debate_panel_convene_rate"] = debate_rate
+```
+
+Then cite those JSON keys in the README.
+
+---
+
+## NEW-4 — `inference_debatefloor.py` has no strategies for 2 of 5 tasks (**FAIL**)
+
+### Discovery
+After HIGH-1 added `coordinated_fraud` and `identity_fraud` to the YAML and to
+`app/tasks.py`, `inference_debatefloor.py` still defines `STRATEGIES` for only
+3 tasks (lines 237–241):
+```python
+STRATEGIES = {
+    "clean_claim":              _strategy_clean_claim,
+    "contradictory_claim":      _strategy_contradictory_claim,
+    "distribution_shift_claim": _strategy_distribution_shift_claim,
+}
+```
+
+Running `python inference_debatefloor.py --all-tasks` will hit:
+```
+[ERROR] No strategy for task 'coordinated_fraud'
+[ERROR] No strategy for task 'identity_fraud'
+```
+
+### Solution
+
+Add two strategies. Use `expected_signals` from `app/tasks.py` to pick valid `flag_id`s:
+
+```python
+def _strategy_coordinated_fraud(client: DebateFloorClient, obs: Dict) -> List[Dict]:
+    """Coordinated ring — query linked claims, flag shared signals, escalate LOW."""
+    actions = []
+    docs = obs.get("observation", obs).get("documents", [])
+    linked = obs.get("observation", obs).get("linked_claims", [])
+
+    for doc in docs[:2]:
+        actions.append({
+            "action_type": "validate_document",
+            "parameters": {"doc_id": doc["doc_id"]},
+            "reasoning": "Validating documents before cross-claim investigation.",
+        })
+
+    for lc in linked[:2]:
+        cid = lc.get("claim_id")
+        if cid:
+            actions.append({
+                "action_type": "query_linked_claim",
+                "parameters": {"claim_id": cid},
+                "reasoning": f"Investigating linked claim {cid} for coordinated patterns.",
+            })
+
+    actions.append({
+        "action_type": "flag_fraud_signal",
+        "parameters": {
+            "flag_id": "shared_emergency_contact",
+            "evidence": "Multiple linked claims share emergency contact +91-9000002222.",
+        },
+        "reasoning": "Shared emergency contact across simultaneous claims = ring indicator.",
+    })
+    actions.append({
+        "action_type": "flag_fraud_signal",
+        "parameters": {
+            "flag_id": "shared_repair_shop_far",
+            "evidence": "Repair shop 'RapidFix Kota' is hundreds of km from accident sites.",
+        },
+        "reasoning": "Shared distant repair shop is geographically improbable.",
+    })
+
+    actions.append({
+        "action_type": "escalate_to_human",
+        "confidence": "LOW",
+        "parameters": {"reason": "Coordinated ring suspected; expert review required."},
+        "reasoning": "Ring scope unclear — LOW is the calibrated answer.",
+    })
+    return actions
+
+
+def _strategy_identity_fraud(client: DebateFloorClient, obs: Dict) -> List[Dict]:
+    """Identity fraud — verify identity, flag mismatch, deny MED."""
+    actions = []
+    docs = obs.get("observation", obs).get("documents", [])
+
+    for doc in docs[:2]:
+        actions.append({
+            "action_type": "validate_document",
+            "parameters": {"doc_id": doc["doc_id"]},
+            "reasoning": "Validating ID documents.",
+        })
+
+    actions.append({
+        "action_type": "verify_identity",
+        "parameters": {},
+        "reasoning": "Cross-checking claimant identity against national registry.",
+    })
+
+    actions.append({
+        "action_type": "flag_fraud_signal",
+        "parameters": {
+            "flag_id": "identity_mismatch",
+            "evidence": "National ID registry returns no record matching policy holder name 7821.",
+        },
+        "reasoning": "Identity mismatch confirmed via verify_identity.",
+    })
+    actions.append({
+        "action_type": "flag_fraud_signal",
+        "parameters": {
+            "flag_id": "hospital_no_record",
+            "evidence": "Hospital admission record has no matching patient name on the claim form.",
+        },
+        "reasoning": "Hospital lookup confirms ghost claimant.",
+    })
+
+    actions.append({
+        "action_type": "deny_claim",
+        "confidence": "MED",
+        "parameters": {"reason": "Identity mismatch confirmed; ghost claimant indicators."},
+        "reasoning": "Deny with MED — strong evidence but document forgery cannot be 100% certain.",
+    })
+    return actions
+
+
+# Register both
+STRATEGIES = {
+    "clean_claim":              _strategy_clean_claim,
+    "contradictory_claim":      _strategy_contradictory_claim,
+    "distribution_shift_claim": _strategy_distribution_shift_claim,
+    "coordinated_fraud":        _strategy_coordinated_fraud,
+    "identity_fraud":           _strategy_identity_fraud,
+}
+```
+
+Also update the top-level `TASK_CONFIG` (lines 39–52) to include the two new tasks.
+
+---
+
+## NEW-5 — Rubric component-name vocabulary drift (**FAIL**)
+
+### Discovery
+Three places use three different vocabularies for the same components:
+
+| Source | Names used |
+|---|---|
+| `app/rubrics.py` `_weights` (lines 94–101) | `fraud_detection`, `decision_accuracy`, `calibration_score`, `evidence_quality_score`, `efficiency_score`, `reasoning_quality` |
+| `app/rubrics.py` `component_scores()` (lines 111–122) | Same six + `penalty` + `total` |
+| `tests/envs/test_debatefloor_rubric.py` (lines 29–39) | Includes `payout_accuracy` and `consistency_score` (which **don't exist** in the current rubric) |
+| `train/train_minimal.py` `_COMPONENT_LABELS` (lines 184–188) | Uses display labels `Fraud detection`, `Decision accuracy`, `Evidence quality`, `Calibration` |
+| `reports/training_summary.json` | Uses display labels (matches train_minimal) |
+
+### Solution
+Pick **one canonical key set** and propagate. Recommended:
+- Programmatic keys (snake_case): `fraud_detection`, `decision_accuracy`,
+  `calibration_score`, `evidence_quality_score`, `efficiency_score`,
+  `reasoning_quality`, `penalty`, `total`.
+- Display labels (in JSON/README/plots): map via a single dict in
+  `train/train_minimal.py`:
+  ```python
+  _COMPONENT_LABELS = [
+      ("fraud_detection",        "Fraud detection"),
+      ("decision_accuracy",      "Decision accuracy"),
+      ("evidence_quality_score", "Evidence quality"),
+      ("calibration_score",      "Calibration"),
+      ("reasoning_quality",      "Reasoning quality"),  # ← add this
+  ]
+  ```
+
+After updating, `_score_completion_via_http` should also surface `reasoning_quality`
+from the rubric so the before/after table covers it (otherwise the new rubric
+component is invisible to judges).
+
+---
+
+## NEW-6 — README install command misses deps and pins too-old TRL (**FAIL**)
+
+### Discovery
+README line 238:
+```bash
+pip install trl>=0.9.0 transformers peft accelerate datasets wandb matplotlib
+```
+
+Issues:
+1. **TRL >=0.9.0** is too old. `train/train_minimal.py` line 52 imports `GRPOConfig, GRPOTrainer` which were added in TRL 0.10. `train/requirements.txt` correctly pins `trl>=0.12.0`.
+2. **Missing `unsloth`** — but `train_minimal.py` requires it (CRITICAL-1) and degrades to vanilla transformers only as a fallback.
+3. **Missing `requests`** — used by `run_episode_via_http`.
+4. **Missing `openenv-core`** — needed because `train_minimal.py` imports `from server.calibration_grader import …` and the env server in turn imports `openenv.core.env_server.interfaces`.
+
+A reviewer copy-pasting this line gets `ImportError: cannot import name 'GRPOConfig'` and stops.
+
+### Solution
+Replace README lines 235–240 with:
+```bash
+git clone https://github.com/AniketAslaliya/debateFloor.git && cd debateFloor
+
+# Use the canonical pinned requirements
+pip install -r requirements.txt          # env server deps
+pip install -r train/requirements.txt    # training deps incl. Unsloth, TRL>=0.12
+
+# Optional (Colab T4): use the Unsloth nightly for best 4-bit speed
+# pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"
+
+PYTHONPATH=. python train/train_minimal.py
 ```
 
 ---
 
-## HIGH-4 — Training loss of 0.005 indicates model collapse
+## Quick Wins — do these last, they take < 30 minutes total
 
-### What the judge sees
-`training_summary.json` shows `training_loss: 0.005647`. For a 0.5B model doing GRPO over 100 episodes / 2 epochs with batch size 2, normal loss is in the 0.5–2.0 range. A loss of 0.005 means either the model memorised the tiny dataset in epoch 1 and the gradient went to zero, or the reward function produced near-constant rewards (zero gradient signal).
-
-### Fix
-
-**Step 1 — Increase dataset size before re-running**
-
-Change `EPISODES = 100` to at least `EPISODES = 300`. 100 episodes with batch_size=2 and 2 epochs is only 100 gradient steps — far too few for meaningful GRPO learning.
-
-**Step 2 — Ensure reward variance is non-zero**
-
-GRPO learns from reward differences within a group. If all 4 completions for a prompt get the same reward (e.g., all −0.05 because the model always outputs garbage), the advantage is zero and no learning happens. Add reward variance logging:
-
-```python
-# In reward_fn, before returning rewards:
-import statistics
-if len(rewards) > 1:
-    variance = statistics.variance(rewards)
-    if variance < 0.01:
-        print(f"WARNING: Low reward variance ({variance:.4f}) — GRPO gradient may be near zero")
-wandb.log({"reward_variance": variance}) if USE_WANDB else None
-```
-
-**Step 3 — Increase num_generations from 4 to 8**
-
-More generations per prompt = more reward variance = stronger GRPO gradient:
-```python
-args = GRPOConfig(
-    ...
-    num_generations=8,   # was 4
-    ...
-)
-```
-
-**Step 4 — After re-running with the env-connected reward (FATAL-1 fix), loss should normalise.** The root cause is that `training_reward()` was returning −0.05 (step penalty with `done=False`) for every step because the static dataset approach never set `done=True` for most rows.
-
----
-
-## MEDIUM-1 — reward_fn uses keyword matching instead of environment signals
-
-### What the judge sees
-In `train_minimal.py`:
-```python
-legit = sum(1 for s in sigs if s.replace("_", " ") in text.lower())
-r = training_reward(decision, confidence, gt, legit, step_num=1, done=True)
-```
-
-`legit` counts how many fraud signal names appear anywhere in the completion text. The actual environment only awards fraud detection credit when `validate_document` or `query_linked_claim` is called first, then `flag_fraud_signal` with grounded evidence. These are completely different checks.
-
-### Fix
-
-This is fully resolved by FATAL-1 (connecting to the live environment). Once reward comes from `/step`, `legit` is no longer computed from text matching — it comes from the environment's `reward_breakdown.fraud_detection_score` directly.
-
-If you still want a simple scalar reward for GRPO training (recommended for stability), extract it from the environment response:
-
-```python
-def reward_fn(completions, prompts, task_ids, **kwargs):
-    rewards = []
-    for completion_list, prompt, task_id in zip(completions, prompts, task_ids):
-        text = ...  # get completion text
-        env_reward = run_episode_via_http(prompt, model_ref, tok_ref, task_id)
-        rewards.append(env_reward)
-    return rewards
-```
-
-No more keyword matching needed.
-
----
-
-## MEDIUM-2 — WandB curve caption is ambiguous
-
-### What the judge sees
-README says:
-> "Note on reward scale: Training reward is an unbounded shaped scalar for gradient stability. Evaluation reward is clamped to [0.0, 1.0]. The curve shows the training signal, not the evaluation score."
-
-This note is buried after the plots. Judges looking at the WandB run first will see values outside [0, 1] and be confused.
-
-### Fix
-
-**Step 1 — In the WandB run, log both signals separately with clear names**
-
-```python
-wandb.log({
-    "train/reward_scalar": training_reward_value,       # unbounded
-    "eval/reward_clamped": eval_reward_clamped,         # [0, 1]
-    "eval/decision_accuracy": decision_accuracy,
-    "eval/calibration_score": calibration_score,
-})
-```
-
-**Step 2 — Add axis labels to the reward curve SVG**
-
-In `save_training_artifacts()`, the matplotlib plot already labels axes. Verify the saved `docs/reward_curve.svg` has:
-- x-axis: "Training step"
-- y-axis: "Training reward (unbounded scalar)"
-- Title: "DebateFloor GRPO training — training reward per step"
-
-Add a text annotation:
-```python
-ax1.annotate(
-    "Note: training scalar is unbounded.\nSee eval table for [0,1] clamped scores.",
-    xy=(0.02, 0.05), xycoords='axes fraction', fontsize=9, color='gray'
-)
-```
-
----
-
-## Quick Wins — Do these last, they take < 30 minutes total
-
-### QW-1 — Run pre_validation_script.py against the live Space before eval
-
+### QW-1 — Run pre_validation_script.py against the live Space
 ```bash
 python pre_validation_script.py --base-url https://huggingface.co/spaces/AniketAsla/debatefloor
 ```
+All checks must be green. Pin the Space (Settings → Pin Space) so judges don't see a cold-start delay.
 
-All checks must be green. Fix any failures before the evaluation day.
-
-### QW-2 — Ensure `/tasks` returns all 5 task IDs
-
+### QW-2 — Verify `/tasks` returns all 5 task IDs against the live Space
 ```python
-r = requests.get("https://your-space.hf.space/tasks").json()
-task_ids = {t["task_id"] for t in r["tasks"]}
-assert task_ids == {"clean_claim", "contradictory_claim", "coordinated_fraud", "identity_fraud", "distribution_shift_claim"}
+import requests
+r = requests.get("https://aniketasla-debatefloor.hf.space/tasks").json()
+ids = {t["task_id"] for t in r["tasks"]}
+assert ids == {"clean_claim", "contradictory_claim", "coordinated_fraud",
+               "identity_fraud", "distribution_shift_claim"}
 ```
 
-### QW-3 — Add Colab badge to README pointing to the notebook
+### QW-3 — Confirm Colab badge in README opens the right notebook
+README line 17 already has the badge. Click it from a logged-out browser to
+ensure GitHub serves the public notebook.
 
-Judges need a one-click path to re-run training. Add:
-```markdown
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/AniketAslaliya/debateFloor/blob/main/train/train_debatefloor.ipynb)
-```
-
-### QW-4 — Commit the updated reports/ to the repo
-
-After re-running all evals and training:
+### QW-4 — Commit regenerated artifacts
+After [FATAL-3, FATAL-4, NEW-1, FATAL-2 re-train]:
 ```bash
-git add reports/ docs/reward_curve.svg docs/component_shift.svg
-git commit -m "fix: update training artifacts with env-connected GRPO results"
+git add reports/ docs/reward_curve.svg docs/component_shift.svg \
+        inference_debatefloor.py app/environment.py \
+        tests/envs/test_debatefloor_rubric.py README.md
+git commit -m "fix: complete second-pass FATAL/HIGH fixes; regenerate eval artifacts"
 git push
 ```
 
-### QW-5 — Verify the HF Space link in README resolves to a running environment
+### QW-5 — `/rollout` endpoint already exists (`app/main.py` lines 160–185)
+Verify it works against the live Space:
+```bash
+curl -X POST "https://aniketasla-debatefloor.hf.space/rollout?task_id=contradictory_claim&seed=42" | jq
+```
+Should return a step-by-step trace ending in a terminal action.
 
-The README links to `https://huggingface.co/spaces/AniketAsla/debatefloor`. Hit `/health` from a fresh browser. If the Space is sleeping, judges will see a cold-start delay. Pin the Space (Settings → Pin Space) to keep it warm.
-
-### QW-6 — Add a `/rollout` endpoint for judges to test the full agent loop
-
-This is a bonus that impresses. One endpoint that runs a full scripted episode and returns the step-by-step trace:
-```python
-@app.post("/rollout")
-def rollout(task_id: str = "contradictory_claim", seed: int = 42) -> dict:
-    """Runs a scripted demo episode. Returns full trace for judges."""
-    ...
+### QW-6 — Make sure `/stats` actually reports non-zero (depends on HIGH-2 fix)
+```bash
+curl -s https://aniketasla-debatefloor.hf.space/stats | jq
+# AFTER HIGH-2 fix + a few episodes, must show episodes_recorded > 0
 ```
 
 ---
 
-## Fix Priority Order (Day-of-Evaluation)
+## Fix Priority Order (Day-of-Evaluation, **Remaining Work Only**)
 
-| Order | Issue | Time estimate | Blocking? |
-|-------|-------|---------------|-----------|
-| 1 | FATAL-1: Connect training to env | 2–3 hours | Yes — everything else depends on real training |
-| 2 | CRITICAL-1: Add Unsloth | 30 min | Yes — minimum requirement |
-| 3 | FATAL-3: Fix evidence_quality (wrong flag_id) | 20 min | Yes — eval report |
-| 4 | FATAL-4: Fix variant_id in eval script | 20 min | Yes — procedural generation claim |
-| 5 | HIGH-1: Add coordinated_fraud to openenv.yaml | 10 min | Yes — YAML is what judges read |
-| 6 | Re-run training with FATAL-1+CRITICAL-1 fixes | 15–30 min (T4) | Yes — need real artifacts |
-| 7 | FATAL-2: Commit updated reports/ JSON | 5 min | Yes |
-| 8 | FATAL-5: Make rubric independent | 45 min | No — but visible in code review |
-| 9 | HIGH-2: Global anti-gaming store | 30 min | No — but listed as innovation |
-| 10 | HIGH-3: Fix server/app.py | 15 min | No — architectural |
-| 11 | CRITICAL-2: Label reward types clearly | 20 min | No — but affects WandB clarity |
-| 12 | MEDIUM-2: Fix WandB axis labels | 10 min | No |
-| 13 | Quick wins QW-1 through QW-6 | 30 min total | No |
+| # | Issue | Fix Type | Est. Time | Blocking? |
+|---|-------|----------|-----------|-----------|
+| 1 | **HIGH-2**: Wire `record_episode_confidence` in `environment.py` | code, 1 file | 10 min | Yes — `/stats` claims fail |
+| 2 | **FATAL-3**: Fix `flag_id`s in `inference_debatefloor.py` | code, 1 file | 15 min | Yes — eval evidence quality |
+| 3 | **NEW-2 / FATAL-5**: Update `tests/envs/test_debatefloor_rubric.py` | test, 1 file | 15 min | Yes — pytest fails |
+| 4 | **NEW-1 / FATAL-4**: Regenerate `reports/eval_report.json` + `.md` | run + commit | 10 min | Yes — stale variant_id=0 |
+| 5 | **NEW-3 / FATAL-2 / CRITICAL-2**: Rewrite README results table | docs, 1 file | 15 min | Yes — storytelling 30% |
+| 6 | **NEW-6**: Fix README install command | docs, 1 file | 2 min | Yes — reviewer reproduction |
+| 7 | **NEW-4**: Add `_strategy_coordinated_fraud` + `_strategy_identity_fraud` | code, 1 file | 30 min | Medium — `--all-tasks` errors |
+| 8 | **HIGH-4 / CF-1**: Convert variance warning → `raise RuntimeError` | code, 1 file | 5 min | No — but Part 4 contract |
+| 9 | **NEW-5**: Reconcile component-name vocabulary | code, 2 files | 20 min | No — but visible in artifacts |
+| 10 | **FATAL-2 Step 1**: Re-run training with bigger settings (use HF credits) | training | 30 min on A10G | Yes — lift flat components |
+| 11 | **FATAL-2 Step 3**: Regenerate `component_shift_summary.json` | output of #10 | auto | Yes — drops contradiction |
 
-**Total estimated time: 6–8 hours of focused work.**
+**Total remaining time: ~2 hours of work + 1 training run.**
+
+> **Recommendation:** Do items 1–9 *before* spending any HF credits.
+> All 9 are zero-compute logic/text fixes. Once the pipeline is provably
+> correct end-to-end (run all `pytest`, `pre_validation_script`, and the
+> 11-call `/stats` check), spend the credits on item 10 with confidence.
 
 ---
 
-## Verification Checklist
+## Verification Checklist (Final)
 
-Before submitting, every item below must be true:
+Every item below must be `true` before submitting. Tick them in order; an
+earlier failure invalidates later items.
 
-- [ ] `/health` returns `{ "status": "healthy" }` on the live Space
-- [ ] `/reset` with seed=7 and seed=42 return different `documents[0].content` values
-- [ ] `/step` with a valid action returns `reward` that changes based on action quality
-- [ ] `reports/eval_report.json` has `evidence_quality > 0.0` for at least one task row
-- [ ] `reports/eval_report.json` has `variant_id` values other than 0
-- [ ] `reports/training_summary.json` has `decision_accuracy > 0.0` in the `after` block
-- [ ] `train/train_minimal.py` imports and uses `FastLanguageModel` from Unsloth
-- [ ] `train/train_minimal.py` calls `/reset` and `/step` during training (not static dataset only)
-- [ ] `openenv.yaml` lists all 5 task IDs
-- [ ] `server/app.py` is more than a one-line re-export
-- [ ] The Colab notebook runs end-to-end without errors on a T4 runtime
-- [ ] WandB run URL in README resolves to a real run with a reward curve that goes up
+### Live Environment
+- [ ] `/health` returns `{"status": "healthy"}` on the live HF Space
+- [ ] `/tasks` returns all 5 task IDs on the live Space
+- [ ] `/reset` with seed=7 vs seed=42 returns different `documents[0].content`
+- [ ] `/step` with `deny_claim MED` returns higher reward than `approve_claim HIGH` on `contradictory_claim`
+- [ ] `/stats` after 11 episodes returns `episodes_recorded ≥ 11`, `gaming_detection_active: true`
+- [ ] `/rollout?task_id=contradictory_claim&seed=42` returns a non-empty trace ending in `done: true`
+
+### Eval Artifacts
+- [ ] `reports/eval_report.json` is dated today, not 2026-04-03
+- [ ] `reports/eval_report.json` has `evidence_quality > 0.0` for at least one row
+- [ ] `reports/eval_report.json` has at least 2 distinct `variant_id` values across seeds
+- [ ] `reports/eval_report.json` has different rewards for different tasks (not all 0.825)
+- [ ] `reports/component_shift_summary.json` agrees with `reports/training_summary.json` on every common metric
+
+### Training Artifacts
+- [ ] `reports/training_summary.json` shows `decision_accuracy after > before`
+- [ ] `reports/training_summary.json` shows at least 2 of 4 components improving (currently only 1)
+- [ ] `docs/reward_curve.svg` has labeled axes and shows the curve going up
+- [ ] `docs/component_shift.svg` shows a meaningful before/after delta (not flat)
+- [ ] WandB run URL in README resolves to a real run with `eval/before/*` and `eval/after/*` keys logged
+
+### Code & Tests
+- [ ] `pytest tests/envs/test_debatefloor_rubric.py -v` passes (currently fails)
+- [ ] `train/train_minimal.py` imports `FastLanguageModel` from `unsloth`
+- [ ] `train/train_minimal.py` `reward_fn` calls `run_episode_via_http`
+- [ ] `app/environment.py` calls `record_episode_confidence` on every terminal action
+- [ ] `inference_debatefloor.py` has `STRATEGIES` entry for all 5 task IDs
+- [ ] `inference_debatefloor.py` `flag_id`s in `_strategy_contradictory_claim` and `_strategy_distribution_shift_claim` are in their tasks' `expected_signals`
+
+### YAML & Spec Compliance
+- [ ] `openenv.yaml` lists all 5 task IDs (currently true)
+- [ ] Every action in `openenv.yaml:action_space` is handled in `app/environment.py:_apply_action`
+- [ ] `server/app.py` is a real entry point, not a one-line re-export (currently true)
+
+### Submission Documents
+- [ ] README HF Space URL is live and serving
+- [ ] README WandB run URL resolves to the correct run (matches the JSON we ship)
 - [ ] README Colab badge opens the correct notebook
-- [ ] `pre_validation_script.py` exits with code 0 against the live Space
+- [ ] README "Mean reward" row matches numbers in `training_summary.json`
+- [ ] README install command uses `pip install -r ...` not the broken inline list
+- [ ] README links the writeup (`docs/HFBlogPost.md` — already linked)
+- [ ] Trained model is pushed to HF Hub and linked from README (already linked at line 40)
+
+---
+
+## When to Use the HF Credits
+
+**Not yet.** All items 1–9 above are zero-compute. They are also the items most
+likely to make a judge mark you down on day-of-evaluation: a failing test, a
+contradictory README, an empty `/stats`, a stale `eval_report.json`.
+
+Burn the credits exactly once, on item 10, **after** items 1–9 are done and a
+local 50-episode smoke training (T4) confirms all 4 component scores move.
+
+The model choice (Qwen2.5-0.5B-Instruct) is correct for this submission and
+should not be changed. A bigger model would invalidate the before/after delta
+that the judging rubric explicitly looks for.
