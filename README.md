@@ -50,6 +50,14 @@ Imagine a robot that helps you make big decisions. But sometimes, this robot is 
 
 > **Note on the reward scale:** Training reward is an unbounded shaped scalar used for gradient stability. Evaluation reward is clamped to `[0.0, 1.0]`. The curve shows the training signal — not the evaluation score.
 
+### 📈 Training Plots
+
+![Reward Curve](docs/reward_curve.svg)
+*The reward curve shows the model learning to optimize the calibration matrix over time.*
+
+![Component Shift](docs/component_shift.svg)
+*Component shift demonstrates the model learning to hedge (Calibration goes from -0.8 to 0.0) instead of guessing with high confidence.*
+
 ### Start here (3 minutes)
 
 1. **Open the live UI:** https://huggingface.co/spaces/AniketAsla/debatefloor
