@@ -1,17 +1,35 @@
-trl>=0.12.0
-# TRL 0.2x: grpo_trainer import chain loads mergekit_utils — without mergekit, Colab
-# fails with: ModuleNotFoundError: No module named 'mergekit'
-mergekit
-transformers>=4.46.0
-peft>=0.12.0
-accelerate>=0.34.0
+# Training deps for DebateFloor GRPO.
+# Pinned versions known to work together on HF Jobs L4
+# (pytorch/pytorch:2.4.0-cuda12.1-cudnn9-runtime base image, 2026-04).
+# These pins specifically avoid the dep-hell we hit on Colab where the latest
+# mergekit / TRL / pydantic snapshot is mutually incompatible.
+
+# Core RL trainer
+trl==0.12.2
+
+# TRL 0.12.x's callbacks.py imports from mergekit at module load time.
+# 0.0.5.2 exposes the names TRL 0.12.x expects; newer mergekit (0.0.6+)
+# requires accelerate~=1.3.0 and pydantic 2.x schema features that conflict.
+mergekit==0.0.5.2
+
+# Model + LoRA
+transformers>=4.46.0,<4.47.0
+peft==0.13.2
+accelerate==1.0.1
 datasets>=2.19.0
+
+# Logging / IO
 wandb>=0.17.0
 requests>=2.32.0
 matplotlib>=3.8.0
+
+# Env server (uvicorn + FastAPI come from root requirements.txt; we just need
+# the openenv-core import path because train_minimal.py loads
+# server.calibration_grader + server.claim_generator).
 uvicorn>=0.30.0
-# Unsloth for 4-bit QLoRA training (MR-3 — required by hackathon spec)
-# In Colab, install via: pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"
-unsloth
-# env server deps (train_minimal.py imports server.calibration_grader + server.claim_generator)
 openenv-core>=0.2.3
+
+# Unsloth 4-bit QLoRA (MR-3 hackathon constraint).
+# On HF Jobs L4 the standard wheel works; the colab-new variant is only
+# needed inside Google Colab.
+unsloth>=2024.10
