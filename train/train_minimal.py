@@ -637,7 +637,7 @@ def main():
                 folder_path="./debatefloor_checkpoint",
                 repo_id="AniketAsla/debatefloor-grpo-qwen2.5-0.5b-instruct",
                 repo_type="model",
-                commit_message="Update: GRPO training — direct reward, no server",
+                commit_message="Update: GRPO training — env-connected HTTP reward",
             )
             print("✅ Model pushed to HF Hub")
         except Exception as exc:

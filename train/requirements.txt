@@ -7,7 +7,8 @@ wandb>=0.17.0
 requests>=2.32.0
 matplotlib>=3.8.0
 uvicorn>=0.30.0
-# Unsloth for 4-bit QLoRA training (CRITICAL-1 — required by hackathon spec)
-# Install separately in Colab: pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"
+# Unsloth for 4-bit QLoRA training (MR-3 — required by hackathon spec)
+# In Colab, install via: pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"
+unsloth
 # env server deps (train_minimal.py imports server.calibration_grader + server.claim_generator)
 openenv-core>=0.2.3
