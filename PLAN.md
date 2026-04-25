@@ -1,27 +1,27 @@
 # DebateFloor — Pre-Evaluation Fix Plan (Live Status)
 
-**Status:** Pre-submission hardening — fourth pass after FATAL-3 production fix  
+**Status:** Pre-submission hardening — fifth pass after NEW-2 / FATAL-5 test fix  
 **Deadline:** April 25–26 2026 Grand Finale  
-**Last validated:** April 25 2026, 17:55 IST (against current repo state + live HF Space)  
+**Last validated:** April 25 2026, 18:25 IST (against current repo state + live HF Space)  
 **Priority order:** FATAL → CRITICAL → HIGH → MEDIUM
 
 > **What changed in this revision:**
-> - **FATAL-3 → PASS.** `inference_debatefloor.py` now uses `flag_id`s that
->   are in each task's `expected_signals` and that the env can actually
->   discover via `validate_document`. Apples-to-apples BEFORE/AFTER on
->   `seed=42` (live env, no fabricated numbers):
->   - `contradictory_claim`: evidence_quality `0.0000 → 1.0000`
->     (+1.0000), reward `0.5180 → 0.7497` (+0.2317), penalty `0.1000 → 0.0000`
->   - `distribution_shift_claim`: penalty `0.1000 → 0.0000`, reward
->     `0.2930 → 0.3966` (+0.1036). Evidence stays at 0.0 because the env code
->     has no discovery path for any of this task's expected signals — that's
->     a deeper structural bug, not a strategy bug; logged as future work.
-> - **HIGH-2 → PASS** (previous revision): `record_episode_confidence` wired
->   into `app/environment.py`, live HF `/stats` confirms `episodes_recorded:
->   11`, distribution `HIGH 0.364 / MED 0.364 / LOW 0.273`,
->   `gaming_detection_active: true`.
-> - GitHub `origin/main` and HF Space `AniketAsla/debatefloor` SHAs updated
->   below in the FATAL-3 and HIGH-2 sections.
+> - **NEW-2 → PASS** and **FATAL-5 → PASS.** Replaced
+>   `tests/envs/test_debatefloor_rubric.py` with a 6-test suite that
+>   defends the FATAL-5 contract instead of breaking it. Live numbers
+>   from the env (no fabrication):
+>   - `obs.reward = 0.428`, `obs.rubric_reward = 0.29` for the original
+>     failing call → divergence `0.138` proves the rubric is independent.
+>   - For evidence-rich reasoning: `reasoning_quality = 1.0` (rubric `0.52`
+>     diverges from env `0.458`).
+>   - For empty reasoning: `reasoning_quality = 0.0` as required.
+>   - All 8 canonical component keys are exposed on every step.
+>   - **49 / 49** DebateFloor tests pass (43 pre-existing + 6 new).
+> - **FATAL-3 → PASS** (previous revision): `inference_debatefloor.py`
+>   evidence_quality `0.0 → 1.0` for `contradictory_claim`.
+> - **HIGH-2 → PASS** (revision 3): `record_episode_confidence` wired into
+>   `app/environment.py`, live HF `/stats` confirms `episodes_recorded: 11`
+>   across distinct sessions.
 
 ---
 
@@ -42,7 +42,7 @@
 | FATAL-2 | Training evidence shows zero improvement | **PARTIAL** | Yes — README + summary contradict |
 | FATAL-3 | Evidence quality is 0.0 in all eval rows | **PASS** ✅ | **Resolved 25 Apr 17:50 IST** (contradictory_claim 0.0 → 1.0) |
 | FATAL-4 | `variant_id` always 0 | **STALE** | Yes — eval_report.json never regenerated |
-| FATAL-5 | Rubric is decorative; echoes env reward | **PARTIAL** | Yes — test now broken & contradicts fix |
+| FATAL-5 | Rubric is decorative; echoes env reward | **PASS** ✅ | **Resolved 25 Apr 18:20 IST** (rubric `0.29` vs env `0.428` for same step → divergence proven) |
 | CRITICAL-1 | No Unsloth usage | **PASS** | Resolved |
 | CRITICAL-2 | Training and eval reward use different math | **PARTIAL** | No, but visible in README |
 | HIGH-1 | `coordinated_fraud` missing from `openenv.yaml` | **PASS** | Resolved |
@@ -52,17 +52,17 @@
 | MEDIUM-1 | reward_fn used keyword matching | **PASS** | Resolved (subsumed by FATAL-1 fix) |
 | MEDIUM-2 | WandB curve caption ambiguous | **PASS** | Resolved |
 | **NEW-1** | Stale `reports/eval_report.json` (3 weeks old) | **FAIL** | Yes |
-| **NEW-2** | `tests/envs/test_debatefloor_rubric.py` is broken | **FAIL** | Yes — pytest fails |
+| **NEW-2** | `tests/envs/test_debatefloor_rubric.py` is broken | **PASS** ✅ | **Resolved 25 Apr 18:20 IST** (49/49 tests pass) |
 | **NEW-3** | README results table contradicts JSON | **FAIL** | Yes — storytelling 30% |
 | **NEW-4** | `inference_debatefloor.py` missing strategies for 2 of 5 tasks | **FAIL** | Medium |
 | **NEW-5** | Rubric component-name vocabulary drift | **FAIL** | Medium |
 | **NEW-6** | README install command is missing deps + wrong TRL pin | **FAIL** | Yes — reviewer reproduction |
 | **NEW-7** | `distribution_shift_claim` has no discovery path for its `expected_signals` | **FAIL** | Medium — caps that task's evidence_quality at 0.0 |
 
-**Bottom line:** 5 of the 13 originally listed items are *not* fully resolved
-(down from 6 in the previous revision; FATAL-3 is now PASS), and 6 newly
-discovered issues remain. Total estimated remaining work:
-**~1 hr 35 min of code/text fixes + one re-training run.**
+**Bottom line:** 4 of the 13 originally listed items are *not* fully resolved
+(down from 5 in the previous revision; FATAL-5 is now PASS), and 5 newly
+discovered issues remain (NEW-2 is also now PASS). Total estimated remaining
+work: **~1 hr 20 min of code/text fixes + one re-training run.**
 
 ---
 
@@ -73,7 +73,7 @@ discovered issues remain. Total estimated remaining work:
 2. [FATAL-2](#fatal-2--training-evidence-shows-zero-improvement-partial) — Training evidence shows zero improvement — **PARTIAL**
 3. [FATAL-3](#fatal-3--evidence-quality-is-00-in-all-eval-rows-pass) — Evidence quality 0.0 in all eval rows — **PASS** ✅
 4. [FATAL-4](#fatal-4--variant_id-is-always-0-stale) — variant_id always 0 — **STALE**
-5. [FATAL-5](#fatal-5--rubric-is-decorative-it-echoes-the-environments-own-reward-partial) — Rubric is decorative — **PARTIAL**
+5. [FATAL-5](#fatal-5--rubric-is-decorative-it-echoes-the-environments-own-reward-pass) — Rubric is decorative — **PASS** ✅
 6. [CRITICAL-1](#critical-1--no-unsloth-usage-pass) — No Unsloth — **PASS**
 7. [CRITICAL-2](#critical-2--training-reward-and-eval-reward-use-completely-different-math-partial) — Training vs eval reward labelling — **PARTIAL**
 8. [HIGH-1](#high-1--coordinated_fraud-task-missing-from-openenvyaml-pass) — `coordinated_fraud` missing from YAML — **PASS**
@@ -85,7 +85,7 @@ discovered issues remain. Total estimated remaining work:
 
 ### Newly Discovered Issues (not in original plan)
 14. [NEW-1](#new-1--stale-reportseval_reportjson--md-fail) — Stale `eval_report.json` / `.md`
-15. [NEW-2](#new-2--testsenvstest_debatefloor_rubricpy-is-broken-by-the-fatal-5-fix-fail) — Broken rubric test
+15. [NEW-2](#new-2--testsenvstest_debatefloor_rubricpy-is-broken-by-the-fatal-5-fix-pass) — Broken rubric test — **PASS** ✅
 16. [NEW-3](#new-3--readme-results-table-contradicts-the-actual-json-fail) — README contradicts artifacts
 17. [NEW-4](#new-4--inference_debatefloorpy-has-no-strategies-for-2-of-5-tasks-fail) — Missing inference strategies
 18. [NEW-5](#new-5--rubric-component-name-vocabulary-drift-fail) — Component-name drift
@@ -302,7 +302,7 @@ Then `git add reports/eval_report.json reports/eval_report.md && git commit`.
 
 ---
 
-## FATAL-5 — Rubric is decorative; it echoes the environment's own reward (**PARTIAL**)
+## FATAL-5 — Rubric is decorative; it echoes the environment's own reward (**PASS** ✅)
 
 ### Original problem
 `DebateFloorRubric.forward()` summed env-derived components only → `obs.rubric_reward == obs.reward` always.
@@ -312,8 +312,8 @@ Then `git add reports/eval_report.json reports/eval_report.md && git commit`.
 - `DebateFloorRubric._weights` (lines 94–101) now allocates 0.20 weight to `reasoning_quality`.
 - `forward()` (lines 103–109) blends env-derived components with reasoning_quality, then clamps to `[0,1]`.
 
-### What is still broken
-**`tests/envs/test_debatefloor_rubric.py` was never updated**, so it now:
+### What WAS still broken (now resolved this revision)
+**`tests/envs/test_debatefloor_rubric.py` was never updated**, so it:
 
 1. **Asserts the property the fix invalidates** (line 28):
    ```python
@@ -339,12 +339,53 @@ Then `git add reports/eval_report.json reports/eval_report.md && git commit`.
    `payout_accuracy` and `consistency_score` were renamed/removed during the
    rubric rewrite. The test fails immediately on this set comparison.
 
-A reviewer running `pytest tests/envs/test_debatefloor_rubric.py` today gets a
+A reviewer running `pytest tests/envs/test_debatefloor_rubric.py` would get a
 red bar — much worse for the submission than no test at all.
 
-### Remaining solution
+### What was shipped this revision
 
-**Replace the test body:**
+**Replaced the test file with a 6-test suite that defends the FATAL-5 contract.**
+Live numbers from `app.environment.InsuranceClaimEnvironment` (no fabrication):
+
+| Test | obs.reward | obs.rubric_reward | divergence | reasoning_quality |
+|---|---|---|---|---|
+| `test_rubric_diverges_from_env_reward` (deny + "validation check") | 0.428 | 0.29 | **0.138** | 0.0 |
+| `test_reasoning_quality_zero_for_empty_reasoning` | 0.428 | 0.29 | **0.138** | 0.0 |
+| `test_reasoning_quality_positive_for_evidence_rich_reasoning` | 0.458 | 0.52 | **0.062** | **1.0** |
+| `test_rubric_components_present_on_intermediate_steps` (validate_document) | 0.17 | 0.2625 | **0.0925** | 1.0 |
+
+The non-zero divergence column is the **proof** that `obs.rubric_reward != obs.reward`,
+which is what FATAL-5 was originally about and what the original test was
+silently masking by asserting equality.
+
+`pytest tests/envs/test_debatefloor_rubric.py -v` →
+**6 passed in 12.74s.**
+
+`pytest tests/test_calibration.py tests/envs/test_insurance_claim_reward_and_exploit.py tests/envs/test_debatefloor_rubric.py -v` →
+**49 passed in 12.26s** (full DebateFloor regression).
+
+### Test design — what each new test guards
+
+1. `test_environment_uses_debatefloor_rubric` — env wires the right rubric class.
+2. `test_rubric_components_are_exposed_on_step` — exact 8-key set is exposed
+   (`fraud_detection`, `decision_accuracy`, `calibration_score`,
+   `evidence_quality_score`, `efficiency_score`, `reasoning_quality`,
+   `penalty`, `total`); `total` matches `obs.rubric_reward`; metadata mirror
+   matches.
+3. `test_rubric_diverges_from_env_reward` — strict inequality
+   `obs.rubric_reward != pytest.approx(obs.reward, abs=1e-3)` for the same
+   action that previously asserted equality. **This is the FATAL-5 contract
+   in code form.** A regression here means the rubric has stopped being
+   independent.
+4. `test_reasoning_quality_zero_for_empty_reasoning` — empty/short reasoning
+   forces `reasoning_quality = 0.0` (the 20-char threshold in
+   `_ReasoningQualityRubric`).
+5. `test_reasoning_quality_positive_for_evidence_rich_reasoning` — evidence
+   keywords push `reasoning_quality` above 0; bounded at 1.0.
+6. `test_rubric_components_present_on_intermediate_steps` — rubric fires on
+   non-terminal actions too (regression guard for `validate_document`).
+
+### Original (no longer needed) verbatim solution kept for reference
 ```python
 # tests/envs/test_debatefloor_rubric.py
 from __future__ import annotations
@@ -656,18 +697,23 @@ matches what `pre_validation_script.py` expects.
 
 ---
 
-## NEW-2 — `tests/envs/test_debatefloor_rubric.py` is broken by the FATAL-5 fix (**FAIL**)
+## NEW-2 — `tests/envs/test_debatefloor_rubric.py` is broken by the FATAL-5 fix (**PASS** ✅)
 
 ### Discovery
-Already detailed in [FATAL-5](#fatal-5--rubric-is-decorative-it-echoes-the-environments-own-reward-partial).
-The test file was not updated when the rubric was rewritten and now:
-- Asserts equality with env reward (the property FATAL-5 was meant to break).
-- References component names (`payout_accuracy`, `consistency_score`) that
+Already detailed in [FATAL-5](#fatal-5--rubric-is-decorative-it-echoes-the-environments-own-reward-pass).
+The test file was not updated when the rubric was rewritten and:
+- Asserted equality with env reward (the property FATAL-5 was meant to break).
+- Referenced component names (`payout_accuracy`, `consistency_score`) that
   no longer exist in `app/rubrics.py`.
 
-### Solution
-Replace the test body with the version in [FATAL-5 Remaining solution](#fatal-5--rubric-is-decorative-it-echoes-the-environments-own-reward-partial).
-Then `pytest tests/envs/test_debatefloor_rubric.py -v` must be green.
+### Resolution (shipped this revision)
+Replaced the test body with the 6-test suite documented in
+[FATAL-5 → What was shipped](#fatal-5--rubric-is-decorative-it-echoes-the-environments-own-reward-pass).
+
+`pytest tests/envs/test_debatefloor_rubric.py -v` → **6 / 6 PASS** in 12.74s.
+
+`pytest tests/test_calibration.py tests/envs/test_insurance_claim_reward_and_exploit.py tests/envs/test_debatefloor_rubric.py -v`
+→ **49 / 49 PASS** in 12.26s.
 
 ---
 
@@ -1055,25 +1101,24 @@ This box is now ticked.
 
 ## Fix Priority Order (Day-of-Evaluation, **Remaining Work Only**)
 
-> ✅ **HIGH-2 (revision 3) and FATAL-3 (this revision) are DONE.**
-> HIGH-2: code committed (`9f2d218`), HF Space (`402ef31bbbe0`),
-> live `/stats` proof captured. FATAL-3: contradictory_claim
-> evidence_quality `0.0 → 1.0`, reward `0.518 → 0.7497`. List renumbered.
+> ✅ **HIGH-2 (rev 3), FATAL-3 (rev 4), and FATAL-5 / NEW-2 (this rev) are DONE.**
+> FATAL-5 / NEW-2: 49/49 tests pass (43 pre-existing + 6 new). The new
+> rubric test suite locks in the FATAL-5 contract by asserting strict
+> divergence between `obs.rubric_reward` and `obs.reward`. List renumbered.
 
 | # | Issue | Fix Type | Est. Time | Blocking? |
 |---|-------|----------|-----------|-----------|
-| 1 | **NEW-2 / FATAL-5**: Update `tests/envs/test_debatefloor_rubric.py` | test, 1 file | 15 min | Yes — pytest fails |
-| 2 | **NEW-1 / FATAL-4**: Regenerate `reports/eval_report.json` + `.md` | run + commit | 10 min | Yes — stale variant_id=0 |
-| 3 | **NEW-3 / FATAL-2 / CRITICAL-2**: Rewrite README results table | docs, 1 file | 15 min | Yes — storytelling 30% |
-| 4 | **NEW-6**: Fix README install command | docs, 1 file | 2 min | Yes — reviewer reproduction |
-| 5 | **NEW-4**: Add `_strategy_coordinated_fraud` + `_strategy_identity_fraud` | code, 1 file | 30 min | Medium — `--all-tasks` errors |
-| 6 | **HIGH-4 / CF-1**: Convert variance warning → `raise RuntimeError` | code, 1 file | 5 min | No — but Part 4 contract |
-| 7 | **NEW-5**: Reconcile component-name vocabulary | code, 2 files | 20 min | No — but visible in artifacts |
-| 8 | **NEW-7**: Add discovery hooks for `distribution_shift_claim` | code, 2 files | 30 min | Medium — caps that task's evidence at 0.0 |
-| 9 | **FATAL-2 Step 1**: Re-run training with bigger settings (use HF credits) | training | 30 min on A10G | Yes — lift flat components |
-| 10 | **FATAL-2 Step 3**: Regenerate `component_shift_summary.json` | output of #9 | auto | Yes — drops contradiction |
+| 1 | **NEW-1 / FATAL-4**: Regenerate `reports/eval_report.json` + `.md` | run + commit | 10 min | Yes — stale variant_id=0 |
+| 2 | **NEW-3 / FATAL-2 / CRITICAL-2**: Rewrite README results table | docs, 1 file | 15 min | Yes — storytelling 30% |
+| 3 | **NEW-6**: Fix README install command | docs, 1 file | 2 min | Yes — reviewer reproduction |
+| 4 | **NEW-4**: Add `_strategy_coordinated_fraud` + `_strategy_identity_fraud` | code, 1 file | 30 min | Medium — `--all-tasks` errors |
+| 5 | **HIGH-4 / CF-1**: Convert variance warning → `raise RuntimeError` | code, 1 file | 5 min | No — but Part 4 contract |
+| 6 | **NEW-5**: Reconcile component-name vocabulary | code, 2 files | 20 min | No — but visible in artifacts |
+| 7 | **NEW-7**: Add discovery hooks for `distribution_shift_claim` | code, 2 files | 30 min | Medium — caps that task's evidence at 0.0 |
+| 8 | **FATAL-2 Step 1**: Re-run training with bigger settings (use HF credits) | training | 30 min on A10G | Yes — lift flat components |
+| 9 | **FATAL-2 Step 3**: Regenerate `component_shift_summary.json` | output of #8 | auto | Yes — drops contradiction |
 
-**Total remaining time: ~2 hrs of work + 1 training run.** (NEW-7 added; was 1 hr 50 min before NEW-7 surfaced)
+**Total remaining time: ~1 hr 50 min of work + 1 training run.** (was 2 hrs before NEW-2 / FATAL-5 closed)
 
 > **Recommendation:** Do items 1–8 *before* spending any HF credits.
 > All 8 are zero-compute logic/text fixes. Once the pipeline is provably
@@ -1110,7 +1155,8 @@ earlier failure invalidates later items.
 - [ ] WandB run URL in README resolves to a real run with `eval/before/*` and `eval/after/*` keys logged
 
 ### Code & Tests
-- [ ] `pytest tests/envs/test_debatefloor_rubric.py -v` passes (currently fails — NEW-2)
+- [x] `pytest tests/envs/test_debatefloor_rubric.py -v` → **6 / 6 PASS** ← **NEW-2 / FATAL-5 fix (this revision)**
+- [x] `pytest tests/test_calibration.py tests/envs/test_insurance_claim_reward_and_exploit.py tests/envs/test_debatefloor_rubric.py -v` → **49 / 49 PASS**
 - [x] `train/train_minimal.py` imports `FastLanguageModel` from `unsloth`
 - [x] `train/train_minimal.py` `reward_fn` calls `run_episode_via_http`
 - [x] `app/environment.py` calls `record_episode_confidence` on every terminal action ← **HIGH-2 fix (commit `9f2d218`)**
@@ -1158,4 +1204,5 @@ that the judging rubric explicitly looks for.
 |---|---|---|
 | 25 Apr 17:00 | second pass | First-round fixes audited; 6 NEW issues uncovered; HIGH-2 still FAIL |
 | 25 Apr 17:30 | third pass | **HIGH-2 → PASS** (code `9f2d218`, HF `402ef31bbbe0`); priority list renumbered; live `/stats` proof captured |
-| 25 Apr 17:55 | **fourth pass (this revision)** | **FATAL-3 → PASS**: contradictory_claim evidence_quality `0.0 → 1.0` and reward `0.518 → 0.7497` (live env, seed=42). NEW-7 added: distribution_shift_claim has no env-side discovery path for its expected_signals. Priority list renumbered (10 → 10 with FATAL-3 removed and NEW-7 added). |
+| 25 Apr 17:55 | fourth pass | **FATAL-3 → PASS**: contradictory_claim evidence_quality `0.0 → 1.0` and reward `0.518 → 0.7497` (live env, seed=42). NEW-7 added: distribution_shift_claim has no env-side discovery path for its expected_signals. Priority list renumbered (10 → 10 with FATAL-3 removed and NEW-7 added). |
+| 25 Apr 18:25 | **fifth pass (this revision)** | **NEW-2 → PASS** and **FATAL-5 → PASS**: replaced `tests/envs/test_debatefloor_rubric.py` with a 6-test suite that asserts the FATAL-5 contract (`obs.rubric_reward != obs.reward`). Live divergence proof: 0.428 vs 0.29 (Δ 0.138) for the original failing call. Full DebateFloor regression: **49/49 pass**. Priority list shrinks to 9 items. |
