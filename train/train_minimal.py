@@ -41,6 +41,19 @@ from statistics import mean
 
 import requests as http_client
 
+# Reuse a single HTTP session across all reward calls.
+# GRPO makes ~288 calls/step (num_generations * batch * 2 endpoints).
+# A pooled session with keep-alive saves ~4ms/call vs opening a new TCP
+# connection each time — that's ~1.1s/step, ~minutes over a full run.
+_HTTP_SESSION = http_client.Session()
+_HTTP_ADAPTER = http_client.adapters.HTTPAdapter(
+    pool_connections=32,
+    pool_maxsize=64,
+    max_retries=0,
+)
+_HTTP_SESSION.mount("http://", _HTTP_ADAPTER)
+_HTTP_SESSION.mount("https://", _HTTP_ADAPTER)
+
 import torch
 
 # CPU performance tuning: respect env overrides, otherwise pick sensible defaults
@@ -171,7 +184,7 @@ def run_episode_via_http(
       2. POST /step with terminal action (decision + confidence) → get reward
     """
     # 1. Reset — start a fresh episode for this task + seed
-    reset_resp = http_client.post(
+    reset_resp = _HTTP_SESSION.post(
         f"{base_url}/reset",
         json={"task_id": task_id, "seed": seed},
         timeout=10,
@@ -186,7 +199,7 @@ def run_episode_via_http(
         "parameters": {"reason": reason},
         "reasoning": reason,
     }
-    step_resp = http_client.post(
+    step_resp = _HTTP_SESSION.post(
         f"{base_url}/step",
         json={"action": action, "session_id": session_id},
         timeout=10,
@@ -196,12 +209,16 @@ def run_episode_via_http(
 
 SYSTEM = (
     "You are an expert insurance fraud investigator.\n"
-    "Analyze the claim and respond EXACTLY in this format:\n"
+    "Analyze the claim and respond EXACTLY in this format (3 lines, no extra text):\n"
     "DECISION: <approve_claim|deny_claim|escalate_to_human>\n"
     "CONFIDENCE: <HIGH|MED|LOW>\n"
     "REASON: <one sentence citing specific evidence>\n\n"
     "HIGH = certain. MED = likely but some doubt. LOW = ambiguous, expert needed.\n"
-    "WARNING: HIGH confidence on a wrong answer is the worst possible outcome (-0.8)."
+    "WARNING: HIGH confidence on a wrong answer is the worst possible outcome (-0.8).\n\n"
+    "Example:\n"
+    "DECISION: deny_claim\n"
+    "CONFIDENCE: MED\n"
+    "REASON: Procedure in bill (cardiac bypass) does not match discharge summary (appendectomy).\n"
 )
 
 DECISION_RE   = re.compile(r"DECISION:\s*(approve_claim|deny_claim|escalate_to_human)", re.I)
@@ -419,7 +436,7 @@ def _score_completion_via_http(episode, completion_text: str, base_url: str = EN
         # Derive component approximations from the scalar reward.
         # The env /step returns a single reward scalar; reward_breakdown is in the observation.
         # Re-fetch via reset+step to get the full breakdown.
-        reset_resp = http_client.post(
+        reset_resp = _HTTP_SESSION.post(
             f"{base_url}/reset",
             json={"task_id": task_id, "seed": int(seed)},
             timeout=10,
@@ -431,7 +448,7 @@ def _score_completion_via_http(episode, completion_text: str, base_url: str = EN
             "parameters":  {"reason": parsed["reason"] or ""},
             "reasoning":   parsed["reason"] or "",
         }
-        step_resp = http_client.post(
+        step_resp = _HTTP_SESSION.post(
             f"{base_url}/step",
             json={"action": action, "session_id": session_id},
             timeout=10,
@@ -721,7 +738,10 @@ def main():
             pass
 
     # Smoke: fewer GRPO rollouts + smaller accumulation = faster and less VRAM.
-    _num_gen = 2 if SMOKE_MODE else 6
+    # T4-tuned full run: num_generations=4 (was 6) and grad_accum=2 (was 4)
+    # cuts per-step generation cost by ~2.5x while keeping a stable group-relative
+    # advantage estimate. Effective batch = 4 * 2 = 8, fine for 0.5B QLoRA.
+    _num_gen = 2 if SMOKE_MODE else int(os.getenv("NUM_GENERATIONS", "4"))
     _train_batch_size = BATCH_SIZE
     if _train_batch_size < 2:
         # GRPO requires >=2 generations; batch=1 is invalid.
@@ -737,7 +757,7 @@ def main():
             f"so it is divisible by num_generations={_num_gen}."
         )
         _train_batch_size = adjusted
-    _grad_acc = 1 if SMOKE_MODE else 4
+    _grad_acc = 1 if SMOKE_MODE else int(os.getenv("GRAD_ACCUM", "2"))
 
     args = GRPOConfig(
         output_dir="./debatefloor_grpo_out",
@@ -745,8 +765,12 @@ def main():
         per_device_train_batch_size=_train_batch_size,
         gradient_accumulation_steps=_grad_acc,
         learning_rate=LR,
-        num_generations=_num_gen,    # 6 = T4-friendly full run; 2 = smoke
-        max_completion_length=int(os.getenv("MAX_COMPLETION_LENGTH", "100")),
+        num_generations=_num_gen,    # 4 = T4-friendly full run; 2 = smoke
+        # 80 tokens easily fits "DECISION: x\nCONFIDENCE: y\nREASON: <one sentence>"
+        # — was 100; -20% generation time per completion.
+        max_completion_length=int(os.getenv("MAX_COMPLETION_LENGTH", "80")),
+        # Cap prompts so a long claim description can't blow up generation time.
+        max_prompt_length=int(os.getenv("MAX_PROMPT_LENGTH", "512")),
         temperature=0.9,
         logging_steps=1 if SMOKE_MODE else 5,
         save_steps=9999 if SMOKE_MODE else 50,
