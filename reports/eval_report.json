@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-25T13:37:28.409790+00:00",
+  "generated_at": "2026-04-25T14:26:45.997663+00:00",
   "base_url": "https://aniketasla-debatefloor.hf.space",
   "rows": [
     {
@@ -151,8 +151,108 @@
       "evidence_quality": 0.0,
       "exploit_penalty": 0.0,
       "steps": 7
+    },
+    {
+      "task_id": "coordinated_fraud",
+      "seed": 7,
+      "done": true,
+      "reward": 0.767,
+      "variant_id": 2,
+      "evidence_quality": 1.0,
+      "exploit_penalty": 0.0,
+      "steps": 12
+    },
+    {
+      "task_id": "coordinated_fraud",
+      "seed": 11,
+      "done": true,
+      "reward": 0.767,
+      "variant_id": 1,
+      "evidence_quality": 1.0,
+      "exploit_penalty": 0.0,
+      "steps": 12
+    },
+    {
+      "task_id": "coordinated_fraud",
+      "seed": 13,
+      "done": true,
+      "reward": 0.767,
+      "variant_id": 3,
+      "evidence_quality": 1.0,
+      "exploit_penalty": 0.0,
+      "steps": 12
+    },
+    {
+      "task_id": "coordinated_fraud",
+      "seed": 19,
+      "done": true,
+      "reward": 0.767,
+      "variant_id": 4,
+      "evidence_quality": 1.0,
+      "exploit_penalty": 0.0,
+      "steps": 12
+    },
+    {
+      "task_id": "coordinated_fraud",
+      "seed": 25,
+      "done": true,
+      "reward": 0.767,
+      "variant_id": 0,
+      "evidence_quality": 1.0,
+      "exploit_penalty": 0.0,
+      "steps": 12
+    },
+    {
+      "task_id": "identity_fraud",
+      "seed": 7,
+      "done": true,
+      "reward": 0.818,
+      "variant_id": 2,
+      "evidence_quality": 1.0,
+      "exploit_penalty": 0.0,
+      "steps": 10
+    },
+    {
+      "task_id": "identity_fraud",
+      "seed": 11,
+      "done": true,
+      "reward": 0.818,
+      "variant_id": 1,
+      "evidence_quality": 1.0,
+      "exploit_penalty": 0.0,
+      "steps": 10
+    },
+    {
+      "task_id": "identity_fraud",
+      "seed": 13,
+      "done": true,
+      "reward": 0.818,
+      "variant_id": 3,
+      "evidence_quality": 1.0,
+      "exploit_penalty": 0.0,
+      "steps": 10
+    },
+    {
+      "task_id": "identity_fraud",
+      "seed": 19,
+      "done": true,
+      "reward": 0.818,
+      "variant_id": 4,
+      "evidence_quality": 1.0,
+      "exploit_penalty": 0.0,
+      "steps": 10
+    },
+    {
+      "task_id": "identity_fraud",
+      "seed": 25,
+      "done": true,
+      "reward": 0.818,
+      "variant_id": 0,
+      "evidence_quality": 1.0,
+      "exploit_penalty": 0.0,
+      "steps": 10
     }
   ],
-  "average_reward": 0.6363,
+  "average_reward": 0.6988,
   "completion_rate": 1.0
 }

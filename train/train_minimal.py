@@ -289,12 +289,14 @@ def reward_fn(completions, prompts, **kwargs):
             print(f"  ⚠️  HTTP reward failed for {task_id}: {exc}")
             rewards.append(-0.1)
 
-    # Log reward variance (detect zero-gradient situations)
+    # HIGH-4 / CF-1 — variance is a hard contract, not a warning. The
+    # HACKATHON_CONSTRAINTS Part 4 CF-1 pattern says low GRPO reward variance
+    # must raise (the gradient is genuinely near zero and training is wasted
+    # compute). We allow the first 2 batches to warm up so initial
+    # warm-start runs (cold model, identical generations) do not crash.
     if len(rewards) > 1:
         import statistics
         variance = statistics.variance(rewards)
-        if variance < 0.01:
-            print(f"  ⚠️  Low reward variance ({variance:.4f}) — GRPO gradient may be near zero")
         if USE_WANDB:
             try:
                 wandb.log({
@@ -303,6 +305,21 @@ def reward_fn(completions, prompts, **kwargs):
                 })
             except Exception:
                 pass
+
+        # Track batches seen on the function object itself so the contract
+        # survives across GRPO's repeated invocations within an epoch.
+        reward_fn._batches_seen = getattr(reward_fn, "_batches_seen", 0) + 1
+        if variance < 0.01:
+            if reward_fn._batches_seen <= 2:
+                print(f"  ⚠️  Low reward variance ({variance:.4f}) on warmup batch "
+                      f"{reward_fn._batches_seen}/2 — allowing.")
+            else:
+                raise RuntimeError(
+                    f"Reward variance collapsed to {variance:.6f} on batch "
+                    f"{reward_fn._batches_seen} (threshold 0.01). GRPO gradient "
+                    "is effectively zero — training will not learn. Inspect "
+                    "reward_fn output, dataset diversity, and num_generations."
+                )
 
     return rewards
 

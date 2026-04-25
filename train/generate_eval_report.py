@@ -14,9 +14,11 @@ Why this exists (NEW-1 / FATAL-4):
   - This is the dedicated regeneration tool.
 
 What it does:
-  - Sweeps all 3 STRATEGIES tasks
-    × 5 distinct seeds (7, 11, 13, 19, 25) covering all 5 variant_ids
-      (variant_id = abs(seed) % 5 — see app/tasks.py:548).
+  - Sweeps every task registered in inference_debatefloor.STRATEGIES
+    (currently 5 — clean_claim, contradictory_claim, distribution_shift_claim,
+    coordinated_fraud, identity_fraud) × 5 distinct seeds
+    (7, 11, 13, 19, 25) covering all 5 variant_ids
+    (variant_id = abs(seed) % 5 — see app/tasks.py:548).
   - Per row captures: task_id, seed, done, reward, variant_id,
     evidence_quality, exploit_penalty.
   - Writes JSON (schema-compatible with the previous file) + Markdown.
@@ -46,7 +48,7 @@ from inference_debatefloor import (  # noqa: E402
 # Seeds chosen so that abs(seed) % 5 covers all 5 variants:
 #   7 -> 2, 11 -> 1, 13 -> 3, 19 -> 4, 25 -> 0
 SEEDS = [7, 11, 13, 19, 25]
-TASKS = list(STRATEGIES.keys())  # clean_claim, contradictory_claim, distribution_shift_claim
+TASKS = list(STRATEGIES.keys())
 
 
 def run_one(client: DebateFloorClient, task_id: str, seed: int) -> dict:

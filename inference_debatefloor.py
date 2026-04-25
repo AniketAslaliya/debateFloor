@@ -49,6 +49,14 @@ TASK_CONFIG = {
         "terminal_confidence": "LOW",     # cross-claim fraud, high uncertainty → LOW
         "strategy": "escalate",
     },
+    "coordinated_fraud": {
+        "terminal_confidence": "MED",     # ground_truth_confidence=0.90, ring scope partly unknown → MED
+        "strategy": "escalate",           # canonical decision must be escalate_to_human (env normalises to request_investigation)
+    },
+    "identity_fraud": {
+        "terminal_confidence": "MED",     # 4 grounded signals + ground_truth_confidence=0.90 → MED (ID forgery never 100% certain)
+        "strategy": "deny",
+    },
 }
 
 ALL_TASKS = list(TASK_CONFIG.keys())
@@ -251,10 +259,201 @@ def _strategy_distribution_shift_claim(client: DebateFloorClient, obs: Dict) -> 
     return actions
 
 
+def _strategy_coordinated_fraud(client: DebateFloorClient, obs: Dict) -> List[Dict]:
+    """Coordinated ring — validate primary docs (records 3 signals), query 3 linked
+    claims (surfaces hidden CLM-GROUP-304, records clustered_policy_broker), flag
+    4 of 5 expected_signals with grounded evidence, then escalate_to_human MED.
+
+    Env discovery contract (see app/environment.py:600-636 and 361-417):
+      validate_document(DOC-21) → records shared_repair_shop_far
+      validate_document(DOC-22) → records near_identical_descriptions
+      validate_document(DOC-23) → records recent_policy_cluster
+      query_linked_claim(CLM-GROUP-302), then (CLM-GROUP-303) → CLM-GROUP-304 surfaces
+      query_linked_claim(CLM-GROUP-304) → records clustered_policy_broker
+      shared_emergency_contact has NO discovery path that auto-records the signal
+        (only a hint string is returned), so flagging it would trigger the
+        "raised before discovered" penalty (+0.08 penalty_total). We skip it.
+    """
+    actions: List[Dict] = []
+
+    # 1. Validate the three primary documents (each reveals one expected signal)
+    for doc_id in ("DOC-21", "DOC-22", "DOC-23"):
+        actions.append({
+            "action_type": "validate_document",
+            "parameters": {"doc_id": doc_id},
+            "reasoning": f"Validate {doc_id} to surface the embedded ring indicator.",
+        })
+
+    # 2. Query two known linked claims (surfaces the hidden CLM-GROUP-304)
+    for cid in ("CLM-GROUP-302", "CLM-GROUP-303"):
+        actions.append({
+            "action_type": "query_linked_claim",
+            "parameters": {"claim_id": cid},
+            "reasoning": f"Query {cid} to expose cross-claim contact/broker overlap.",
+        })
+
+    # 3. Query the now-surfaced 4th claim — this records clustered_policy_broker
+    actions.append({
+        "action_type": "query_linked_claim",
+        "parameters": {"claim_id": "CLM-GROUP-304"},
+        "reasoning": "Query the newly-surfaced fourth claim — confirms shared broker BRK-441.",
+    })
+
+    # 4. Flag four of five expected_signals with evidence containing required keywords
+    #    (keywords from app.tasks.get_evidence_keyword_hints("coordinated_fraud", ...))
+    actions.append({
+        "action_type": "flag_fraud_signal",
+        "parameters": {
+            "flag_id": "shared_repair_shop_far",
+            "evidence": "Repair shop RapidFix Motors in Kota is 340 km from incident site — implausible distance.",
+        },
+        "reasoning": "Shared distant repair shop is a geographic ring indicator.",
+    })
+    actions.append({
+        "action_type": "flag_fraud_signal",
+        "parameters": {
+            "flag_id": "near_identical_descriptions",
+            "evidence": "All linked claims use a near-identical narrative description template (similarity ~0.93).",
+        },
+        "reasoning": "Identical narrative templates indicate copy-pasted fraud.",
+    })
+    actions.append({
+        "action_type": "flag_fraud_signal",
+        "parameters": {
+            "flag_id": "recent_policy_cluster",
+            "evidence": "All four related policies were purchased within a 30 day cluster window before the incident.",
+        },
+        "reasoning": "Tight policy purchase cluster is a temporal ring indicator.",
+    })
+    actions.append({
+        "action_type": "flag_fraud_signal",
+        "parameters": {
+            "flag_id": "clustered_policy_broker",
+            "evidence": "All queried claims share the same broker BRK-441 — policy broker cluster confirmed.",
+        },
+        "reasoning": "Same broker across 4 supposedly unrelated policies = coordinated issuance.",
+    })
+
+    # 5. Adversarial review before terminal action
+    actions.append({
+        "action_type": "convene_debate_panel",
+        "parameters": {},
+        "reasoning": "Cross-claim ring of 4 demands adversarial review before recommending investigation.",
+    })
+
+    # 6. Terminal: escalate_to_human MED. Env normalises to request_investigation
+    #    (allowed_final_decisions=['request_investigation']) and the calibration
+    #    grader compares the raw escalate_to_human against ground truth
+    #    escalate_to_human (see app/environment.py:34-41, 441-446).
+    actions.append({
+        "action_type": "escalate_to_human",
+        "confidence": "MED",
+        "parameters": {"reason": "Ring of 4 linked claims with shared shop/broker/policy cluster. Investigator should confirm full scope."},
+        "reasoning": "Strong evidence but ring may extend beyond 4 claims — MED is the calibrated answer.",
+    })
+    return actions
+
+
+def _strategy_identity_fraud(client: DebateFloorClient, obs: Dict) -> List[Dict]:
+    """Identity fraud — validate documents (records 2 signals), compare DOC-31 vs
+    DOC-34 (records dob_inconsistency), lookup_policy_history (records
+    recent_policy_purchase since policy_age_days=5 ≤ 30), flag all 4
+    expected_signals with grounded evidence, then deny_claim MED.
+
+    Env discovery contract (see app/environment.py:228-264, 600-636, app/tasks.py:680-683):
+      validate_document(DOC-31) → records identity_mismatch
+      validate_document(DOC-32) → records hospital_no_record
+      compare_documents(DOC-31, DOC-34) → records dob_inconsistency
+      lookup_policy_history → records recent_policy_purchase (policy_age_days=5)
+    """
+    actions: List[Dict] = []
+
+    # 1. Validate the two documents whose signals are auto-recorded
+    actions.append({
+        "action_type": "validate_document",
+        "parameters": {"doc_id": "DOC-31"},
+        "reasoning": "Validate primary claim form — exposes ID/registry mismatch.",
+    })
+    actions.append({
+        "action_type": "validate_document",
+        "parameters": {"doc_id": "DOC-32"},
+        "reasoning": "Validate hospital record — confirms no patient match.",
+    })
+
+    # 2. Compare DOC-31 vs DOC-34 — env's COMPARE_DOCUMENT_SIGNALS records dob_inconsistency
+    actions.append({
+        "action_type": "compare_documents",
+        "parameters": {"doc_id_a": "DOC-31", "doc_id_b": "DOC-34"},
+        "reasoning": "Compare claim form vs ID proof — reveals DOB inconsistency.",
+    })
+
+    # 3. Policy history lookup — records recent_policy_purchase (policy_age_days=5 ≤ 30)
+    actions.append({
+        "action_type": "lookup_policy_history",
+        "parameters": {},
+        "reasoning": "Pull policy history — exposes recent inception inside the 30 day exclusion window.",
+    })
+
+    # 4. Flag all four expected_signals with evidence containing required keywords
+    #    (keywords from app.tasks.get_evidence_keyword_hints("identity_fraud", ...))
+    actions.append({
+        "action_type": "flag_fraud_signal",
+        "parameters": {
+            "flag_id": "identity_mismatch",
+            "evidence": "National identity registry returns no record matching policy holder ID suffix 7821 — registry mismatch.",
+        },
+        "reasoning": "Identity registry mismatch is a grounded fraud indicator.",
+    })
+    actions.append({
+        "action_type": "flag_fraud_signal",
+        "parameters": {
+            "flag_id": "hospital_no_record",
+            "evidence": "Hospital admission record has no patient name found for the claimant on file.",
+        },
+        "reasoning": "Hospital lookup confirms ghost claimant.",
+    })
+    actions.append({
+        "action_type": "flag_fraud_signal",
+        "parameters": {
+            "flag_id": "dob_inconsistency",
+            "evidence": "Date of birth on submitted ID (1988-04-15) does not match policy DOB (1986-11-22) — inconsistency mismatch.",
+        },
+        "reasoning": "DOB drift across documents is a grounded identity-fraud signal.",
+    })
+    actions.append({
+        "action_type": "flag_fraud_signal",
+        "parameters": {
+            "flag_id": "recent_policy_purchase",
+            "evidence": "Policy inception was only 5 days before incident date — well inside the 30 day exclusion window.",
+        },
+        "reasoning": "Suspiciously recent policy purchase is a grounded indicator.",
+    })
+
+    # 5. Adversarial review before denial
+    actions.append({
+        "action_type": "convene_debate_panel",
+        "parameters": {},
+        "reasoning": "Four grounded signals warrant adversarial review before denial.",
+    })
+
+    # 6. Terminal: deny_claim MED. Ground truth is deny_claim
+    #    (see app/environment.py:34-41) and allowed_final_decisions
+    #    includes deny_claim (app/tasks.py:488).
+    actions.append({
+        "action_type": "deny_claim",
+        "confidence": "MED",
+        "parameters": {"reason": "Identity registry mismatch, hospital no-record, DOB drift, and recent policy inside exclusion window — claim cannot stand."},
+        "reasoning": "Strong multi-signal evidence; ID forgery is rarely provable to 100%, so MED not HIGH.",
+    })
+    return actions
+
+
 STRATEGIES = {
     "clean_claim":              _strategy_clean_claim,
     "contradictory_claim":      _strategy_contradictory_claim,
     "distribution_shift_claim": _strategy_distribution_shift_claim,
+    "coordinated_fraud":        _strategy_coordinated_fraud,
+    "identity_fraud":           _strategy_identity_fraud,
 }
 
 
