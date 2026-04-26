@@ -27,6 +27,22 @@ pinned: true
 
 ---
 
+## The story (~3 minutes — not an API doc)
+
+**Problem — what capability gap?** In insurance (and in GRPO-trained LLMs generally), models can be **wrong and overconfident**. That is unsafe for approve/deny. [CAPO](https://arxiv.org/abs/2604.12632) shows GRPO can make miscalibration worse. We built an environment where **calibration is part of the task**, not an afterthought.
+
+**Environment — what does the agent see, do, and get rewarded for?** Each episode is a **synthetic claim**: documents, fraud hints, sometimes linked cases. The agent **investigates** (validate, compare, flag signals, query history), may **convene a Court Panel** (adversarial prosecutor vs defender), then submits a **terminal decision** (`approve_claim` / `deny_claim` / `escalate_to_human`) plus **HIGH / MED / LOW** confidence. The live server scores **decision correctness**, **evidence**, and a **3×2 calibration matrix** so “confident but wrong” hurts more than “unsure and wrong.” Anti-gaming stops trivial policies like “always LOW.”
+
+**Results — what changed after training?** One full run: mean training reward **0.130 → 0.469** (see **Figure 1** below); held-out eval **decision accuracy 0 → 1.0** and **calibration 0 → 1.0** (**Figure 2** — before vs after on the **same** components so the comparison is obvious). Numbers tie to committed JSON, not screenshots.
+
+**Why it matters — who cares?** **Insurers and regulators** under pressure on fraud and new IRDAI rules; **RL / LLM researchers** who need a reproducible place to study **confidence-aware** policies instead of accuracy-only rewards.
+
+**Try it in one minute:** [Open the Space](https://huggingface.co/spaces/AniketAsla/debatefloor) → task **`contradictory_claim`** → **Run Episode** → watch the Court Panel and the calibration matrix.
+
+**Longer narrative:** [BLOG.md](BLOG.md) · **Demo video (script + checklist):** [docs/VideoScript_ClaimCourt.md](docs/VideoScript_ClaimCourt.md) — *when your walkthrough is on YouTube or Loom, add that public URL at the top of this README (Submission Artifacts) and in the script file so judges can click through.*
+
+---
+
 ## Problem Statement
 
 LLMs deployed in high-stakes domains suffer from a well-documented failure mode: **overconfidence**. A model that approves or denies an insurance claim with 100 % certainty — but is wrong — causes real harm. The [CAPO paper (arXiv:2604.12632, 2026)](https://arxiv.org/abs/2604.12632) measures up to a 15 % AUC drop in standard GRPO training, and [DCPO (arXiv:2603.09117, 2026)](https://arxiv.org/abs/2603.09117) shows a 71 % Expected-Calibration-Error reduction is achievable when calibration is treated as a first-class objective.
@@ -46,6 +62,7 @@ Indian health-insurance fraud, waste & abuse drains **₹8,000–10,000 crore ev
 | **Trained Model** | https://huggingface.co/AniketAsla/debatefloor-grpo-qwen2.5-0.5b-instruct |
 | **Training Notebook (Colab)** | [train/train_debatefloor.ipynb](https://github.com/AniketAslaliya/debateFloor/blob/main/train/train_debatefloor.ipynb) |
 | **Mini-Blog** | [BLOG.md](https://huggingface.co/spaces/AniketAsla/debatefloor/blob/main/BLOG.md) |
+| **Demo walkthrough (video)** | *[Script / shot list](docs/VideoScript_ClaimCourt.md)* — add your **public** YouTube or Loom URL here when published (hackathon asks for a link from the README). |
 
 ---
 
@@ -116,15 +133,13 @@ decision-making.
 
 ### Training Plots
 
-![Reward Curve](docs/reward_curve.png)
-*Mean training reward across 2,500 GRPO steps (5,000 episodes, 1 epoch).
-Reward climbs from 0.130 to 0.469 — a 3.6× improvement. Source:
-[`reports/training_summary.json`](reports/training_summary.json).*
+**Figure 1 — GRPO training curve** ([`docs/reward_curve.png`](docs/reward_curve.png), committed PNG). **X-axis:** training step (0–2,500). **Left Y-axis:** training loss (unitless). **Right Y-axis:** mean GRPO training reward (TRL scalar from the live env — unbounded, *not* the 0–1 eval score). **What to see:** reward rising from ~0.13 to ~0.47 over the run. **Source:** [`reports/training_summary.json`](reports/training_summary.json). **WandB:** interactive curves in the [project workspace](https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl) — open the **5K-episode** run named `grpo-qwen0.5b-env-connected`; README figures always match the committed JSON + PNGs.
 
-![Component Shift](docs/component_shift.png)
-*Before vs after on held-out eval: Decision accuracy 0 → 1.0,
-Calibration 0 → 1.0, Fraud detection 0 → 0.33. Source:
-[`reports/component_shift_summary.json`](reports/component_shift_summary.json).*
+![Figure 1: training loss and mean reward vs training step](docs/reward_curve.png)
+
+**Figure 2 — Held-out eval: same components, before vs after** ([`docs/component_shift.png`](docs/component_shift.png)). **X-axis:** rubric component (decision, calibration, fraud, evidence, reasoning). **Y-axis:** score in **[0, 1]** (clamped eval). **What to see:** **gray = before GRPO**, **green = after** on the **same** axes so the comparison is immediate. **Source:** [`reports/component_shift_summary.json`](reports/component_shift_summary.json).
+
+![Figure 2: component scores before vs after training (same axes)](docs/component_shift.png)
 
 ### Environment baseline — 25 episodes against the live HF Space
 
@@ -311,7 +326,7 @@ if HIGH_rate > 80% across 10+ episodes:  penalty = (rate − 0.80) × 1.5
 **Algorithm:** HF TRL `GRPOTrainer` + Unsloth 4-bit QLoRA (Group Relative Policy Optimization — same as DeepSeek-R1)
 **Full run:** L4 GPU on HF Jobs — 5,000 episodes, 2,500 steps, 3 h 3 min
 **Quick run:** Free Colab T4 GPU — 100 episodes, ~15 min (see notebook)
-**WandB:** https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl — pick the latest `grpo-qwen0.5b-env-connected` run. Plots in this README come from committed `reports/training_summary.json` (not from a pinned WandB run ID).
+**WandB:** https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl — open the **5,000-episode** run named **`grpo-qwen0.5b-env-connected`** (~3 h on L4, Apr 2026) for the raw training curves. **Canonical plots for judges** are the **committed** [`docs/reward_curve.png`](docs/reward_curve.png) and [`docs/component_shift.png`](docs/component_shift.png) (axes labeled on the figure), backed by [`reports/training_summary.json`](reports/training_summary.json).
 
 ```bash
 # Reproduce the training run

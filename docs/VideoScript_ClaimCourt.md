@@ -4,6 +4,8 @@
 **Length:** ~1:55–2:00. Speak slowly; pause on numbers.  
 **Brand on screen:** **ClaimCourt**. **URLs always use codename** `debatefloor` (unchanged links).
 
+**Public demo URL (paste when live):** _Add your YouTube or Loom link here, then copy it into the README table row **Demo walkthrough (video)** so judges have a one-click watch._
+
 **Training proof (for one short segment):** 5,000 practice claims, reward **0.13 → 0.47**, held-out **calibration 0 → 1** and **decision accuracy 0 → 1** (see table at bottom).
 
 ---
