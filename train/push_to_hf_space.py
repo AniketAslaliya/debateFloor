@@ -1,24 +1,28 @@
 """
-push_to_hf_space.py — Upload code + artifacts directly to HF Space via API.
+push_to_hf_space.py — Make the Hugging Face Space match this Git repo (like GitHub).
 
-Bypasses git (which has .mov file issues) by using huggingface_hub upload_folder.
-Only uploads the files that matter for the Space runtime, not media assets.
+Exports `git archive HEAD` (exactly what is committed) and uploads it to the Space
+in one Hub commit. Remote files not present in that tree are removed via
+`delete_patterns` so the Space does not keep stale paths from older deploys.
 
-**Not uploaded** (intentional — Space serves the env API only): `tests/`,
-`inference_debatefloor.py`, `pre_validation_script.py`, `.claude/`, notebooks,
-and one-off root `push_*.py` scripts. Training runs locally or on a separate
-HF GPU job; do not bloat the Space with full `train/` except the few files
-listed in UPLOAD_PATTERNS below.
+Optional env:
+  HF_SPACE_BUILD_FRONTEND=1 — run `npm run build` in frontend/ before `git archive`
+      (only affects your working tree if you have uncommitted dist changes;
+       normally commit built `frontend/dist` so GitHub and HF match.)
 """
+from __future__ import annotations
+
 import os
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
-from huggingface_hub import HfApi, upload_file
+from huggingface_hub import HfApi
 
-REPO_ID    = "AniketAsla/debatefloor"
-REPO_TYPE  = "space"
-LOCAL_ROOT = Path(__file__).parent.parent  # repo root
+REPO_ID = "AniketAsla/debatefloor"
+REPO_TYPE = "space"
+LOCAL_ROOT = Path(__file__).resolve().parent.parent
 
 HF_TOKEN = os.getenv("HF_TOKEN", "").strip()
 if not HF_TOKEN:
@@ -32,86 +36,74 @@ if not HF_TOKEN:
     print("ERROR: No HF token. Set HF_TOKEN or run `hf auth login`.")
     sys.exit(1)
 
-api = HfApi(token=HF_TOKEN)
+BUILD_FRONTEND = os.getenv("HF_SPACE_BUILD_FRONTEND", "0").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+)
 
-# Directories + files to upload (relative to repo root)
-UPLOAD_PATTERNS = [
-    "app",
-    "server",
-    # React UI built with: cd frontend && npm run build  (outputs frontend/dist)
-    "frontend/dist",
-    "docs",
-    "reports",
-    "train/train_minimal.py",
-    "train/real_model_eval.py",
-    "train/post_training_eval.py",
-    "train/requirements.txt",
-    "train/jobs_run.py",
-    "openenv.yaml",
-    "requirements.txt",
-    "pyproject.toml",
-    "README.md",
-]
 
-# Files to explicitly skip (they're too large or not needed by the Space)
-SKIP_SUFFIXES = {".mov", ".mp4", ".avi", ".safetensors", ".bin"}
-SKIP_DIRS     = {"__pycache__", ".git", ".venv", "venv", "node_modules", ".mypy_cache"}
+def _git_rev_short() -> str:
+    return subprocess.check_output(
+        ["git", "-C", str(LOCAL_ROOT), "rev-parse", "--short", "HEAD"],
+        text=True,
+    ).strip()
 
-def should_skip(path: Path) -> bool:
-    if path.suffix.lower() in SKIP_SUFFIXES:
-        return True
-    if any(part in SKIP_DIRS for part in path.parts):
-        return True
-    return False
 
-print(f"Uploading to {REPO_ID} ({REPO_TYPE}) ...")
+def _export_git_head_tar_extract(dest: Path) -> None:
+    """Materialize committed tree only (matches GitHub after push)."""
+    archived = subprocess.run(
+        ["git", "-C", str(LOCAL_ROOT), "archive", "--format=tar", "HEAD"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["tar", "-x", "-C", str(dest)],
+        input=archived.stdout,
+        check=True,
+    )
 
-uploaded = 0
-errors   = 0
-for pattern in UPLOAD_PATTERNS:
-    local_path = LOCAL_ROOT / pattern
-    if not local_path.exists():
-        print(f"  [skip] {pattern} — not found")
-        continue
 
-    if local_path.is_file():
-        if should_skip(local_path):
-            print(f"  [skip] {pattern} — large/binary")
-            continue
-        rel = str(local_path.relative_to(LOCAL_ROOT)).replace("\\", "/")
-        try:
-            api.upload_file(
-                path_or_fileobj=str(local_path),
-                path_in_repo=rel,
-                repo_id=REPO_ID,
-                repo_type=REPO_TYPE,
-                commit_message=f"deploy: update {rel}",
-            )
-            print(f"  [ok] {rel}")
-            uploaded += 1
-        except Exception as exc:
-            print(f"  [err] {rel}: {exc}")
-            errors += 1
+def _maybe_build_frontend() -> None:
+    if not BUILD_FRONTEND:
+        return
+    fe = LOCAL_ROOT / "frontend"
+    if not (fe / "package.json").is_file():
+        return
+    print("HF_SPACE_BUILD_FRONTEND=1 — npm run build …")
+    if sys.platform == "win32":
+        subprocess.check_call("npm run build", cwd=str(fe), shell=True)
+    else:
+        subprocess.check_call(["npm", "run", "build"], cwd=str(fe))
 
-    elif local_path.is_dir():
-        for fpath in sorted(local_path.rglob("*")):
-            if not fpath.is_file():
-                continue
-            if should_skip(fpath):
-                continue
-            rel = str(fpath.relative_to(LOCAL_ROOT)).replace("\\", "/")
-            try:
-                api.upload_file(
-                    path_or_fileobj=str(fpath),
-                    path_in_repo=rel,
-                    repo_id=REPO_ID,
-                    repo_type=REPO_TYPE,
-                    commit_message=f"deploy: update {rel}",
-                )
-                print(f"  [ok] {rel}")
-                uploaded += 1
-            except Exception as exc:
-                print(f"  [err] {rel}: {exc}")
-                errors += 1
 
-print(f"\nDone: {uploaded} uploaded, {errors} errors.")
+def main() -> None:
+    _maybe_build_frontend()
+    rev = _git_rev_short()
+    print(f"Sync Space <- git HEAD {rev} (full mirror of committed files)")
+
+    api = HfApi(token=HF_TOKEN)
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _export_git_head_tar_extract(root)
+        nfiles = sum(1 for p in root.rglob("*") if p.is_file())
+        print(f"  Archive: {nfiles} files -> {REPO_ID}")
+
+        # Remove remote files not in this upload so HF matches Git (no orphans).
+        api.upload_folder(
+            folder_path=str(root),
+            repo_id=REPO_ID,
+            repo_type=REPO_TYPE,
+            commit_message=f"sync: mirror git {rev} to Space",
+            delete_patterns="**/*",
+        )
+
+    print("Done.")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except subprocess.CalledProcessError as exc:
+        print(f"ERROR: {exc}")
+        sys.exit(1)
