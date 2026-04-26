@@ -36,3 +36,19 @@ Distinct variant_ids: [0, 1, 2, 3, 4]
 
 Average Reward: 0.8092
 Completion Rate: 100.00%
+
+> **Note on identical rewards within a task.** Each task above shows the same
+> reward across all 5 seeds because this run is a *scripted baseline* — the
+> evaluation client follows a fixed strategy per `task_id` (e.g. always call
+> `validate_document` then `flag_fraud_signal` then `deny_claim` for
+> `contradictory_claim`). The seeds vary the generated documents (different
+> claimants, amounts, fraud-signal strengths — see the `Variant` column), but
+> the scripted strategy is invariant to that variation, so the env returns the
+> same scalar reward every time. This is intentional: the scripted baseline
+> exists to demonstrate that the environment's reward surface is deterministic
+> and reproducible across seeds, *not* to show learning.
+>
+> The trained GRPO model produces variable rewards across seeds — see the
+> held-out component-shift evaluation in
+> [`reports/component_shift_summary.json`](component_shift_summary.json) and
+> the README "Held-out evaluation" section.

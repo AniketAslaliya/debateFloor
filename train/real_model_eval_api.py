@@ -262,7 +262,7 @@ def save_results(before_means, after_means, before_rows, after_rows):
 
         delta_str = "  |  ".join(f"{k}: {'+' if v>=0 else ''}{v:.2f}" for k, v in delta.items())
         ax.annotate(
-            f"Deltas: {delta_str}\nTraining reward: 0.045 → 0.332 (7x, live env HTTP)\n"
+            f"Deltas: {delta_str}\nTraining reward: 0.130 → 0.469 (3.6x, live env HTTP, 2,500 steps)\n"
             "Source: real model inference via HF API",
             xy=(0.01, 0.01), xycoords="axes fraction", fontsize=7.5, color="#555",
             bbox=dict(boxstyle="round,pad=0.3", facecolor="#f0f8f0", edgecolor="#06a77d", alpha=0.85),

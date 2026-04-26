@@ -151,3 +151,12 @@ docs/source/_build/
 # Sphinx-gallery generated output
 docs/source/auto_getting_started/
 docs/source/sg_execution_times.rst
+
+# Internal team docs — kept locally for reference, never shipped to GitHub or HF Space
+# (judges don't need plans/audits cluttering the file tree)
+/BRAHMASTRA.md
+/PLAN.md
+/VALIDATION_REPORT.md
+/HACKATHON_CONSTRAINTS.md
+/Final_Execution_Plan.md
+/Validation_Audit_V2.md

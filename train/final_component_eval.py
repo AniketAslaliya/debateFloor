@@ -256,7 +256,7 @@ def save_results(before_means, after_means, before_rows, after_rows):
     summary["component_shift_delta"] = delta
     summary["eval_methodology"] = (
         "before=naive always-approve-HIGH agent (zero training), "
-        f"after={TRAINED_MODEL} (300-episode GRPO training, 450 steps). "
+        f"after={TRAINED_MODEL} (5,000-episode GRPO training, 2,500 steps). "
         f"Tasks: {EVAL_TASKS}. Seeds per task: {SEEDS}. "
         "All rewards from live env POST /step (not keyword matching). MR-2 compliant."
     )
@@ -307,7 +307,7 @@ def save_results(before_means, after_means, before_rows, after_rows):
         delta_str = "  |  ".join(f"{k}: {'+' if v>=0 else ''}{v:.2f}" for k, v in delta.items())
         ax.annotate(
             f"Deltas: {delta_str}\n"
-            "Training reward: 0.045 → 0.332 (+0.287, 7x via live env HTTP, 450 steps)\n"
+            "Training reward: 0.130 → 0.469 (+0.339, 3.6x via live env HTTP, 2,500 steps)\n"
             "Source: real model inference (not scripted agents)",
             xy=(0.01, 0.01), xycoords="axes fraction", fontsize=7.5, color="#555",
             bbox=dict(boxstyle="round,pad=0.3", facecolor="#f0f8f0", edgecolor="#06a77d", alpha=0.85),

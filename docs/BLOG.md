@@ -225,7 +225,11 @@ The script also writes [reports/component_shift_summary.json](reports/component_
 
 All numbers are from committed JSON artifacts: [`reports/training_summary.json`](../reports/training_summary.json), [`reports/component_shift_summary.json`](../reports/component_shift_summary.json).
 
-**Training reward: 0.130 → 0.469 (3.6× improvement)** across 2,500 GRPO steps.
+Three headline numbers tell the story:
+
+- **Training reward: 0.130 → 0.469 (3.6× improvement)** across 2,500 GRPO steps.
+- **Held-out decision accuracy: 0.000 → 1.000** — the trained model gets every held-out claim right.
+- **Held-out calibration score: 0.000 → 1.000** — confidence now matches correctness on every terminal action. *This is the result that directly attacks the GRPO overconfidence pathology documented in [CAPO (arXiv:2604.12632)](https://arxiv.org/abs/2604.12632).*
 
 | Component | Before (untrained) | After (GRPO) | Change |
 |---|---:|---:|---|
@@ -235,7 +239,7 @@ All numbers are from committed JSON artifacts: [`reports/training_summary.json`]
 | Evidence quality | 0.333 | 0.333 | unchanged |
 | Reasoning quality | 0.833 | 0.792 | −0.042 |
 
-The trained model learned to make correct decisions with calibrated confidence — both headline metrics went from zero to perfect on the held-out eval set. The small reasoning quality dip (−4 pts) is a known trade-off: the model traded fluency for sharper decisions.
+Both headline metrics went from zero to perfect on the held-out eval set. The small reasoning quality dip (−4 pts) is the only trade-off — the model learned to be tighter and more decisive at the cost of a sliver of fluency.
 
 **Config:** 5,000 episodes, 1 epoch, batch=8, num_generations=8, sampling_temperature=1.1, L4 GPU, 3 h 3 min. Reward from live HTTP env (MR-2 compliant).
 

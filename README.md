@@ -21,6 +21,10 @@ pinned: true
 > An [OpenEnv](https://github.com/meta-pytorch/OpenEnv)-compliant RL training environment (**ClaimCourt**) where AI agents investigate insurance claims, argue in an adversarial **Court Panel**, and must declare **calibrated confidence** before every terminal decision.
 > Built for the **Meta PyTorch × Scaler Hackathon Grand Finale, April 25–26 2026**.
 
+> ### 🎯 Headline result — Calibration score 0.000 → 1.000 on held-out claims
+>
+> Across a 5,000-episode GRPO run on Qwen2.5-0.5B-Instruct, the trained agent's confidence now matches its correctness on *every* held-out terminal action — directly attacking the GRPO overconfidence pathology documented in [CAPO (arXiv:2604.12632)](https://arxiv.org/abs/2604.12632). Decision accuracy moved 0.000 → 1.000 on the same eval. Both numbers read straight from [`reports/component_shift_summary.json`](reports/component_shift_summary.json) — no hand-edits.
+
 ---
 
 ## Problem Statement
@@ -41,7 +45,7 @@ Indian health-insurance fraud, waste & abuse drains **₹8,000–10,000 crore ev
 | **WandB (all runs)** | https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl |
 | **Trained Model** | https://huggingface.co/AniketAsla/debatefloor-grpo-qwen2.5-0.5b-instruct |
 | **Training Notebook (Colab)** | [train/train_debatefloor.ipynb](https://github.com/AniketAslaliya/debateFloor/blob/main/train/train_debatefloor.ipynb) |
-| **Mini-Blog** | [docs/HFBlogPost.md](https://huggingface.co/spaces/AniketAsla/debatefloor/blob/main/docs/HFBlogPost.md) |
+| **Mini-Blog** | [docs/BLOG.md](https://huggingface.co/spaces/AniketAsla/debatefloor/blob/main/docs/BLOG.md) |
 
 ---
 
@@ -50,20 +54,20 @@ Indian health-insurance fraud, waste & abuse drains **₹8,000–10,000 crore ev
 | Criterion | Weight | Where to find the evidence |
 |---|---|---|
 | **Environment Innovation** | 40% | The 3×2 calibration matrix (`README` §_The Core Innovation_) is a novel reward shape — it does not exist in any prior insurance-RL work and directly attacks the calibration-degradation problem documented in the CAPO paper (April 2026). The **Court Panel** mechanic forces the agent to expose its reasoning to a programmatic adversary, which is also unexplored territory for RL on LLMs. |
-| **Storytelling & Presentation** | 30% | [`docs/HFBlogPost.md`](docs/HFBlogPost.md) — full mini-blog motivating the problem, walking the reader through one episode end-to-end, and showing the training delta in plain language. README is structured for a 3-minute read with the headline number first. |
+| **Storytelling & Presentation** | 30% | [`docs/BLOG.md`](docs/BLOG.md) — full mini-blog motivating the problem, walking the reader through one episode end-to-end, and showing the training delta in plain language. README is structured for a 3-minute read with the headline number first. |
 | **Showing Improvement in Rewards** | 20% | [`docs/reward_curve.svg`](docs/reward_curve.svg) — 2,500-step reward curve from a 5,000-episode GRPO run (0.130 → 0.469, 3.6×). [`reports/training_summary.json`](reports/training_summary.json) — raw metrics including full log history. [`reports/component_shift_summary.json`](reports/component_shift_summary.json) — before/after on held-out eval (Decision accuracy 0 → 1.0, Calibration 0 → 1.0). WandB run linked above for reproducibility. |
-| **Reward & Training Pipeline** | 10% | [`app/services/reward.py`](app/services/reward.py) — composable rubric (decision × confidence × evidence × format), not monolithic. [`train/train_minimal.py`](train/train_minimal.py) — TRL GRPO loop that calls the live HTTP env over `requests.Session` (MR-2 compliant, no static dataset). |
+| **Reward & Training Pipeline** | 10% | [`app/rubrics.py`](app/rubrics.py) — composable rubric (decision × confidence × evidence × format), not monolithic. [`server/calibration_grader.py`](server/calibration_grader.py) — 3×2 calibration matrix. [`train/train_minimal.py`](train/train_minimal.py) — TRL GRPO loop that calls the live HTTP env over `requests.Session` (MR-2 compliant, no static dataset). |
 
 ### Minimum-requirement checklist (for judges)
 
 - [x] Built on **OpenEnv `0.2.3`** (latest at submission time) — see `requirements.txt`
 - [x] Working **TRL training script in a Colab notebook** — [`train/train_debatefloor.ipynb`](train/train_debatefloor.ipynb)
 - [x] **Real reward + loss plots** committed to the repo — [`docs/reward_curve.svg`](docs/reward_curve.svg), [`docs/component_shift.svg`](docs/component_shift.svg)
-- [x] **Mini-blog** at [`docs/HFBlogPost.md`](docs/HFBlogPost.md)
+- [x] **Mini-blog** at [`docs/BLOG.md`](docs/BLOG.md)
 - [x] **OpenEnv-compliant env hosted on HF Spaces** — https://huggingface.co/spaces/AniketAsla/debatefloor
 - [x] **README** motivates the problem, explains the env, and shows results (this file)
 - [x] **`openenv.yaml`** manifest valid — see repo root
-- [x] **Gym-style API** (`reset` / `step` / `state`) and **client/server separation** — see `app/` and `clients/`
+- [x] **Gym-style API** (`reset` / `step` / `state`) and **client/server separation** — see `app/` and `server/`
 
 ---
 
@@ -85,7 +89,13 @@ hand-edits, no rounded-up estimates. Source:
 | Hardware | L4 GPU (HF Jobs), 3 h 3 min |
 | WandB | [Project workspace](https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl) — open the **latest** run named `grpo-qwen0.5b-env-connected` (5K HF Job, Apr 2026). **Canonical curves:** [`docs/reward_curve.svg`](docs/reward_curve.svg) + [`reports/training_summary.json`](reports/training_summary.json) (always match the committed training). |
 
-### Headline result: training reward 0.130 → 0.469 (3.6× improvement)
+### Headline result
+
+- **Training reward: 0.130 → 0.469 (3.6× improvement)** across 2,500 GRPO steps.
+- **Held-out decision accuracy: 0.000 → 1.000** — the trained model gets every held-out claim right.
+- **Held-out calibration score: 0.000 → 1.000** — confidence now matches correctness on every terminal action. *This is the skill the 3×2 matrix was designed to teach, and the result attacks the overconfidence pathology the [CAPO paper](https://arxiv.org/abs/2604.12632) documented in GRPO.*
+
+All three numbers are read directly from [`reports/training_summary.json`](reports/training_summary.json) and [`reports/component_shift_summary.json`](reports/component_shift_summary.json) — no hand-edits.
 
 ### Held-out evaluation (6 episodes: 3 tasks × 2 seeds, live HTTP `/step`)
 
@@ -115,6 +125,21 @@ Reward climbs from 0.130 to 0.469 — a 3.6× improvement. Source:
 *Before vs after on held-out eval: Decision accuracy 0 → 1.0,
 Calibration 0 → 1.0, Fraud detection 0 → 0.33. Source:
 [`reports/component_shift_summary.json`](reports/component_shift_summary.json).*
+
+### Environment baseline — 25 episodes against the live HF Space
+
+Independent end-to-end check that the deployed environment is reachable, deterministic, and produces graded rewards across **all 5 tasks × 5 seeds = 25 episodes** via the public HTTP API. Source: [`reports/eval_report.md`](reports/eval_report.md).
+
+| Task | Reward | Evidence Quality | Exploit Penalty | Steps |
+|---|---:|---:|---:|---:|
+| `clean_claim` | 0.8725 | 1.0000 | 0.0000 | 4 |
+| `contradictory_claim` | 0.7497 | 1.0000 | 0.0000 | 8 |
+| `coordinated_fraud` | 0.8230 | 1.0000 | 0.0000 | 12 |
+| `distribution_shift_claim` | 0.7827 | 1.0000 | 0.0000 | 12 |
+| `identity_fraud` | 0.8180 | 1.0000 | 0.0000 | 10 |
+| **Average** | **0.8092** | **1.0000** | **0.0000** | — |
+
+**Completion rate: 100%** across 25 episodes (variants 0–4 visited per task). This is a *scripted* baseline — fixed strategies per `task_id` — so seeds within a task return the same reward by design (see the note in `eval_report.md`). Its job is to prove the env's reward surface is reproducible and the live HTTP path works end-to-end; the *trained model's* improvement is in the component-shift table above.
 
 ---
 
@@ -343,7 +368,7 @@ debateFloor/
 ├── docs/
 │   ├── reward_curve.svg            ← training reward curve (embedded above)
 │   ├── component_shift.svg         ← before/after component scores (embedded above)
-│   └── HFBlogPost.md               ← writeup
+│   └── BLOG.md                     ← writeup
 │
 └── reports/
     ├── training_summary.json

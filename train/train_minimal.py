@@ -674,8 +674,8 @@ def save_training_artifacts(trainer, result, before_components=None, after_compo
         "global_step": int(getattr(result, "global_step", 0) or 0),
         "training_loss": float(getattr(result, "training_loss", 0.0) or 0.0),
         "training_reward_curve": {
-            "type": "unbounded_scalar",
-            "note": "Direct training_reward() scalar. Not comparable to eval_reward.",
+            "type": "env_http_reward",
+            "note": "Reward from live environment via POST /reset + /step (MR-2 compliant). Not comparable to eval_reward which is clamped [0,1].",
             "mean_start": round(float(train_rewards[0]), 4) if train_rewards else None,
             "mean_end":   round(float(train_rewards[-1]), 4) if train_rewards else None,
         },

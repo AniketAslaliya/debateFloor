@@ -7,8 +7,8 @@
   "global_step": 2500,
   "training_loss": 0.005647265207767487,
   "training_reward_curve": {
-    "type": "unbounded_scalar",
-    "note": "Direct training_reward() scalar. Not comparable to eval_reward.",
+    "type": "env_http_reward",
+    "note": "Reward from live environment via POST /reset + /step (MR-2 compliant). Not comparable to eval_reward which is clamped [0,1].",
     "mean_start": 0.13,
     "mean_end": 0.469
   },

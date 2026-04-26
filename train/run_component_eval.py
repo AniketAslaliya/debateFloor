@@ -414,7 +414,7 @@ def main():
         # summary note
         delta_str = "  |  ".join(f"{k}: {'+' if v>=0 else ''}{v:.2f}" for k, v in eval_report["delta"].items())
         ax.annotate(
-            f"Deltas: {delta_str}\nTraining reward: 0.045 -> 0.332 (+0.287, 7x via live env HTTP)",
+            f"Deltas: {delta_str}\nTraining reward: 0.130 -> 0.469 (+0.339, 3.6x via live env HTTP, 2,500 steps)",
             xy=(0.01, 0.01), xycoords="axes fraction", fontsize=8.5, color="#555",
             bbox=dict(boxstyle="round,pad=0.3", facecolor="#f0f8f0", edgecolor="#06a77d", alpha=0.8),
         )
