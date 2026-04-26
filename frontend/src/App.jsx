@@ -136,11 +136,11 @@ function App() {
       <nav className="nav-bar">
         <div className="nav-logo">
           <Scale size={22} color="var(--accent-primary)" />
-          <span>DebateFloor</span>
+          <span>ClaimCourt</span>
         </div>
         <div className="nav-links">
           <a href="https://github.com/AniketAslaliya/debateFloor" target="_blank" rel="noreferrer">GitHub</a>
-          <a href="https://arxiv.org/abs/2603.05881" target="_blank" rel="noreferrer">CoCA Paper</a>
+          <a href="https://arxiv.org/abs/2604.12632" target="_blank" rel="noreferrer">CAPO Paper</a>
           <span className="nav-badge">Meta PyTorch × Scaler 2026</span>
         </div>
       </nav>
@@ -150,7 +150,7 @@ function App() {
         <div className="hero-content">
           <h1 className="hero-title title-gradient">The AI That Knows When It Doesn't Know</h1>
           <p className="hero-sub">
-            DebateFloor trains LLM agents to declare <strong>calibrated confidence</strong> before every insurance decision.
+            ClaimCourt trains LLM agents to declare <strong>calibrated confidence</strong> before every insurance decision.
             Overconfident? <span style={{ color: 'var(--error)' }}>Penalised −0.8.</span>&nbsp;
             Wrong but humble? <span style={{ color: 'var(--success)' }}>Rewarded.</span>
           </p>
@@ -407,7 +407,7 @@ function App() {
 
       {/* ── FOOTER ──────────────────────────────────── */}
       <footer className="site-footer">
-        <span>DebateFloor · Meta PyTorch × Scaler Hackathon 2026 · Based on <a href="https://arxiv.org/abs/2603.05881" target="_blank" rel="noreferrer">CoCA arXiv:2603.05881</a></span>
+        <span>ClaimCourt · Meta PyTorch × Scaler Hackathon 2026 · Based on <a href="https://arxiv.org/abs/2604.12632" target="_blank" rel="noreferrer">CAPO arXiv:2604.12632</a></span>
         <span>Aniket Aslaliya · Mitali Mehta · Aditya Sharma</span>
       </footer>
     </>
