@@ -20,9 +20,16 @@ REPO_ID    = "AniketAsla/debatefloor"
 REPO_TYPE  = "space"
 LOCAL_ROOT = Path(__file__).parent.parent  # repo root
 
-HF_TOKEN = os.getenv("HF_TOKEN", "")
+HF_TOKEN = os.getenv("HF_TOKEN", "").strip()
 if not HF_TOKEN:
-    print("ERROR: HF_TOKEN env var not set. Export it and re-run.")
+    try:
+        from huggingface_hub import get_token
+
+        HF_TOKEN = (get_token() or "").strip()
+    except Exception:
+        HF_TOKEN = ""
+if not HF_TOKEN:
+    print("ERROR: No HF token. Set HF_TOKEN or run `hf auth login`.")
     sys.exit(1)
 
 api = HfApi(token=HF_TOKEN)
@@ -37,6 +44,7 @@ UPLOAD_PATTERNS = [
     "reports",
     "train/train_minimal.py",
     "train/real_model_eval.py",
+    "train/post_training_eval.py",
     "train/requirements.txt",
     "train/jobs_run.py",
     "openenv.yaml",
