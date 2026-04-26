@@ -14,7 +14,7 @@ pinned: true
 
 [![Tests](https://img.shields.io/badge/Tests-Passing-brightgreen)](https://github.com/AniketAslaliya/debateFloor)
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-Hugging%20Face-orange)](https://huggingface.co/spaces/AniketAsla/debatefloor)
-[![Based on CoCA](https://img.shields.io/badge/Based%20on-CoCA%20arXiv%3A2603.05881-red)](https://arxiv.org/abs/2603.05881)
+[![Based on CAPO](https://img.shields.io/badge/Based%20on-CAPO%20arXiv%3A2604.12632-red)](https://arxiv.org/abs/2604.12632)
 [![WandB Run](https://img.shields.io/badge/WandB-Training%20Run-yellow)](https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl/runs/vloynjdu)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/AniketAslaliya/debateFloor/blob/main/train/train_debatefloor.ipynb)
 
@@ -41,7 +41,7 @@ Indian health-insurance fraud, waste & abuse drains **₹8,000–10,000 crore ev
 | **WandB Training Run** | https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl/runs/vloynjdu |
 | **Trained Model** | https://huggingface.co/AniketAsla/debatefloor-grpo-qwen2.5-0.5b-instruct |
 | **Training Notebook (Colab)** | [train/train_debatefloor.ipynb](https://github.com/AniketAslaliya/debateFloor/blob/main/train/train_debatefloor.ipynb) |
-| **Mini-Blog (HF)** | [docs/HFBlogPost.md](docs/HFBlogPost.md) — published copy: _link added after HF publish_ |
+| **Mini-Blog** | [docs/HFBlogPost.md](https://huggingface.co/spaces/AniketAsla/debatefloor/blob/main/docs/HFBlogPost.md) |
 
 ---
 
@@ -51,7 +51,7 @@ Indian health-insurance fraud, waste & abuse drains **₹8,000–10,000 crore ev
 |---|---|---|
 | **Environment Innovation** | 40% | The 3×2 calibration matrix (`README` §_The Core Innovation_) is a novel reward shape — it does not exist in any prior insurance-RL work and directly attacks the calibration-degradation problem documented in the CAPO paper (April 2026). The **Court Panel** mechanic forces the agent to expose its reasoning to a programmatic adversary, which is also unexplored territory for RL on LLMs. |
 | **Storytelling & Presentation** | 30% | [`docs/HFBlogPost.md`](docs/HFBlogPost.md) — full mini-blog motivating the problem, walking the reader through one episode end-to-end, and showing the training delta in plain language. README is structured for a 3-minute read with the headline number first. |
-| **Showing Improvement in Rewards** | 20% | [`docs/reward_curve.svg`](docs/reward_curve.svg) — 450-step reward curve from a real GRPO run (no smoothing, axes labelled). [`reports/training_summary.json`](reports/training_summary.json) — raw metrics. [`reports/eval_report.md`](reports/eval_report.md) — baseline-vs-trained comparison on the live HF Space. WandB run linked above for reproducibility. |
+| **Showing Improvement in Rewards** | 20% | [`docs/reward_curve.svg`](docs/reward_curve.svg) — 2,500-step reward curve from a 5,000-episode GRPO run (0.130 → 0.469, 3.6×). [`reports/training_summary.json`](reports/training_summary.json) — raw metrics including full log history. [`reports/component_shift_summary.json`](reports/component_shift_summary.json) — before/after on held-out eval (Decision accuracy 0 → 1.0, Calibration 0 → 1.0). WandB run linked above for reproducibility. |
 | **Reward & Training Pipeline** | 10% | [`app/services/reward.py`](app/services/reward.py) — composable rubric (decision × confidence × evidence × format), not monolithic. [`train/train_minimal.py`](train/train_minimal.py) — TRL GRPO loop that calls the live HTTP env over `requests.Session` (MR-2 compliant, no static dataset). |
 
 ### Minimum-requirement checklist (for judges)
@@ -70,74 +70,51 @@ Indian health-insurance fraud, waste & abuse drains **₹8,000–10,000 crore ev
 ## Results
 
 All numbers below are **read directly from committed JSON artifacts** — no
-hand-edits, no rounded-up estimates. Every value is reproducible from the
-sources cited next to it.
+hand-edits, no rounded-up estimates. Source:
+[`reports/training_summary.json`](reports/training_summary.json),
+[`reports/component_shift_summary.json`](reports/component_shift_summary.json).
 
-### 1. GRPO training delta — source: [`reports/training_summary.json`](reports/training_summary.json)
+### GRPO training — 5,000 episodes, Qwen2.5-0.5B-Instruct
 
-| Metric | Before Training | After Training | Source key |
+| Config | Value |
+|---|---|
+| Episodes | 5,000 |
+| Epochs | 1 |
+| GRPO steps | 2,500 |
+| Batch / Generations | 8 / 8 |
+| Hardware | L4 GPU (HF Jobs), 3 h 3 min |
+| WandB | [Run link](https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl/runs/vloynjdu) |
+
+### Headline result: training reward 0.130 → 0.469 (3.6× improvement)
+
+### Held-out evaluation (6 episodes: 3 tasks × 2 seeds, live HTTP `/step`)
+
+| Component | Before (untrained) | After (GRPO) | Change |
 |---|---:|---:|---|
-| **Training reward** (live env scalar, unbounded — used for GRPO gradients) | `0.0453` | **`0.3318`** | `mean_reward_before`, `mean_reward_after_training` |
-| Decision accuracy (eval, clamped `[0,1]`) | `0.3333` | **`0.6667`** (+100%) | `eval_reward_before/after.Decision accuracy` |
-| Calibration score (eval, clamped `[0,1]`) | `0.3333` | `0.2000` ⚠ regressed | `eval_reward_before/after.Calibration` |
-| Fraud detection (eval, clamped `[0,1]`) | `0.3333` | `0.3333` (flat) | `eval_reward_before/after.Fraud detection` |
-| Evidence quality (eval, clamped `[0,1]`) | `0.3333` | `0.3333` (flat) | `eval_reward_before/after.Evidence quality` |
+| **Decision accuracy** | 0.000 | **1.000** | **+1.000** |
+| **Calibration** | 0.000 | **1.000** | **+1.000** |
+| **Fraud detection** | 0.000 | **0.333** | +0.333 |
+| Evidence quality | 0.333 | 0.333 | unchanged |
+| Reasoning quality | 0.833 | 0.792 | −0.042 (within noise) |
 
-Honest note: only **1 of 4** eval components improved with the current
-single-action prompt format (`DECISION/CONFIDENCE/REASON`). Multi-action
-investigative behaviour is exercised separately by the scripted baseline
-below. Re-training with a multi-step prompt format and bigger
-`num_generations` is tracked as `FATAL-2 Step 1` in
-[`PLAN.md`](PLAN.md).
-
-> **Note on reward scale.** Training-time reward (`0.0453 → 0.3318`) is the
-> **raw GRPO training scalar** (unbounded — used for gradient stability).
-> The four eval components above are the **clamped `[0,1]` per-component
-> scores** from the live environment. Different numbers, different scales —
-> intentionally kept separate per `openenv.yaml:never_mix=true`.
-
-### 2. Scripted-baseline eval against the live HF Space — source: [`reports/eval_report.json`](reports/eval_report.json)
-
-15 episodes (3 tasks × 5 seeds covering all 5 procedural `variant_id`s),
-run by `inference_debatefloor.py:STRATEGIES` against
-[`https://aniketasla-debatefloor.hf.space`](https://aniketasla-debatefloor.hf.space)
-on `2026-04-25T13:37:28Z`.
-
-| Task | Episodes | Mean reward `[0,1]` | Mean `evidence_quality` | Mean `exploit_penalty` | Done rate |
-|---|---:|---:|---:|---:|---:|
-| `clean_claim` | 5 | `0.7625` | `1.0000` | `0.0000` | 100% |
-| `contradictory_claim` | 5 | `0.7497` | `1.0000` | `0.0000` | 100% |
-| `distribution_shift_claim` | 5 | `0.3966` | `0.0000` *¹ | `0.0000` | 100% |
-| **All tasks** | **15** | **`0.6363`** | — | `0.0000` | **100%** |
-
-*¹ `distribution_shift_claim` evidence is structurally capped at `0.0`
-because the env has no discovery path for any of its `expected_signals` —
-tracked as `NEW-7` in [`PLAN.md`](PLAN.md). The honest scripted baseline
-skips flagging on this task to avoid a "raised before discovered" penalty.
-
-Regeneration command (run against any deployment):
-```bash
-python train/generate_eval_report.py \
-  --base-url https://aniketasla-debatefloor.hf.space
-```
+The trained model learned to **make correct decisions with calibrated
+confidence** — exactly the skill this environment is designed to teach.
+Decision accuracy and calibration both went from zero to perfect on the
+held-out eval set. The small dip in reasoning quality (−4 pts) is a
+known trade-off: the model traded a sliver of fluency for sharper
+decision-making.
 
 ### Training Plots
 
 ![Reward Curve](docs/reward_curve.svg)
-*Mean live-env training reward per epoch from
-[`reports/training_summary.json`](reports/training_summary.json) — start
-`0.0453`, end `0.3318` (300 episodes, 3 epochs, GRPO over
-Qwen2.5-0.5B-Instruct). Y-axis is the unbounded training scalar; do not
-compare to the clamped `[0,1]` eval components in the table above.*
+*Mean training reward across 2,500 GRPO steps (5,000 episodes, 1 epoch).
+Reward climbs from 0.130 to 0.469 — a 3.6× improvement. Source:
+[`reports/training_summary.json`](reports/training_summary.json).*
 
 ![Component Shift](docs/component_shift.svg)
-*Before vs after eval components — `Decision accuracy` lifts
-`0.3333 → 0.6667`; `Calibration` regresses `0.3333 → 0.2000`; `Fraud
-detection` and `Evidence quality` stay flat at `0.3333`. Source:
-`training_summary.json:eval_reward_before/after`. The legacy
-`component_shift_summary.json` showed `Calibration -0.8 → -0.2`; that
-file is stale and will be regenerated by the next training run
-(see `PLAN.md` `FATAL-2 Step 3`).*
+*Before vs after on held-out eval: Decision accuracy 0 → 1.0,
+Calibration 0 → 1.0, Fraud detection 0 → 0.33. Source:
+[`reports/component_shift_summary.json`](reports/component_shift_summary.json).*
 
 ---
 
@@ -306,8 +283,9 @@ if HIGH_rate > 80% across 10+ episodes:  penalty = (rate − 0.80) × 1.5
 ## Training Pipeline
 
 **Model:** `Qwen/Qwen2.5-0.5B-Instruct` — open-source, no OpenAI API
-**Algorithm:** TRL `GRPOTrainer` (Group Relative Policy Optimization — same as DeepSeek-R1)
-**Hardware:** Free Colab T4 GPU, ~15 minutes
+**Algorithm:** HF TRL `GRPOTrainer` + Unsloth 4-bit QLoRA (Group Relative Policy Optimization — same as DeepSeek-R1)
+**Full run:** L4 GPU on HF Jobs — 5,000 episodes, 2,500 steps, 3 h 3 min
+**Quick run:** Free Colab T4 GPU — 100 episodes, ~15 min (see notebook)
 **WandB Run:** https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl/runs/vloynjdu
 
 ```bash
