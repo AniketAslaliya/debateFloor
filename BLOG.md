@@ -29,6 +29,8 @@ Nobody had built a training *environment* specifically designed for that — one
 
 The agent cannot just say `deny_claim`. It must say `deny_claim` + `MED` (medium confidence), and the reward is determined by whether the confidence matched reality.
 
+> **Hackathon theme alignment.** Primary: **Theme #3.1 — World Modeling (Professional Tasks)** — claim adjudication is a textbook enterprise workflow with 11 investigative tools, partial observability, and explicit anti-gaming pressure. Secondary: **Theme #1 — Multi-Agent Interactions** — the Court Panel spins up an adversarial Prosecutor + Defender pair the Judge must reason about before committing.
+
 ## Why This Is the Right RL Task
 
 We followed the simple hackathon rule: choose a task the model can solve step by step, verify programmatically, and still fail often enough to learn from.

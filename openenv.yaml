@@ -29,6 +29,11 @@ metadata:
     - uncertainty-quantification
     - grpo
     - rl-training
+    - world-modeling-professional   # hackathon theme #3.1 (primary)
+    - multi-agent                   # hackathon theme #1 (secondary, via Court Panel)
+  hackathon_themes:
+    primary: "Theme 3.1 — World Modeling (Professional Tasks)"
+    secondary: "Theme 1 — Multi-Agent Interactions (Court Panel)"
   citation: "CoCA: arXiv:2603.05881 — Co-optimising Confidence and Accuracy via GRPO"
 
 tasks:

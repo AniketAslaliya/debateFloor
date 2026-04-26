@@ -45,6 +45,15 @@ pinned: true
 
 ---
 
+## Hackathon theme alignment
+
+| Theme | Fit | Why |
+|---|---|---|
+| **#3.1 World Modeling — Professional Tasks** *(primary)* | ✅✅✅ | Insurance claim adjudication is a textbook enterprise workflow: 11 investigative tool-calls (`validate_document`, `query_historical_data`, `verify_identity`, …), partially observable state where fraud signals are hidden until queried, multi-step orchestration (10–28 steps per episode), and an explicit **anti-gaming detector** that prevents shortcuts. The agent must maintain consistent internal state, update beliefs as evidence arrives, and orchestrate the workflow toward a calibrated terminal decision. |
+| **#1 Multi-Agent Interactions** *(secondary)* | ✅✅ | The **Court Panel** (`convene_debate_panel`) spins up an adversarial Prosecutor + Defender pair from the existing evidence base. The Judge must model both adversaries' incentives and weigh their competing arguments before declaring HIGH/MED/LOW confidence — Fleet AI Scalable Oversight applied to claims work. |
+
+---
+
 ## 1. The Problem
 
 LLMs in high-stakes domains suffer from a documented failure mode: **overconfidence**. A model that approves or denies an insurance claim with 100 % certainty — but is wrong — causes real harm. The [CAPO paper (arXiv:2604.12632, 2026)](https://arxiv.org/abs/2604.12632) measures up to a 15 % AUC drop in standard GRPO training. [DCPO (arXiv:2603.09117, 2026)](https://arxiv.org/abs/2603.09117) shows a 71 % Expected-Calibration-Error reduction is achievable when calibration is treated as a first-class objective.
