@@ -12,6 +12,9 @@ Prerequisites:
 Match training episode count so eval episodes are drawn from the same pool as train_minimal:
   EPISODES=10000 EPOCHS=2 BATCH_SIZE=4 python train/post_training_eval.py
 
+Optional: larger held-out eval (more stable headline numbers):
+  EVAL_EPISODES=18 python train/post_training_eval.py
+
 Usage:
   cd repo-root
   set PYTHONPATH=.
@@ -50,19 +53,27 @@ def _parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-def main() -> None:
-    args = _parse_args()
-    ckpt = Path(args.checkpoint).resolve()
+def run_eval(
+    checkpoint: str | Path,
+    *,
+    fresh_summary: bool = False,
+    stop_env_server: bool | None = None,
+) -> None:
+    """
+    Run before/after component eval and write reports + docs plots.
+
+    stop_env_server: if True, terminate subprocess uvicorn started here.
+        If False, leave running. If None (default), stop only if we started it
+        (same as CLI behaviour).
+    """
+    ckpt = Path(checkpoint).resolve()
     if not ckpt.is_dir():
-        print(f"ERROR: checkpoint directory not found: {ckpt}")
-        print("Train first (saves ./debatefloor_checkpoint) or pass --checkpoint /path/to/model")
-        sys.exit(1)
+        raise FileNotFoundError(f"checkpoint directory not found: {ckpt}")
 
     import torch
 
     import train.train_minimal as tm
 
-    # Align with jobs_run / local training overrides
     tm.EPISODES = int(os.environ.get("EPISODES", str(tm.EPISODES)))
     tm.EPOCHS = int(os.environ.get("EPOCHS", str(tm.EPOCHS)))
     tm.BATCH_SIZE = int(os.environ.get("BATCH_SIZE", str(tm.BATCH_SIZE)))
@@ -73,14 +84,16 @@ def main() -> None:
     tm.DTYPE = torch.bfloat16 if tm.HAS_BF16 else torch.float16
 
     server_proc = tm._start_env_server_if_needed(tm.ENV_BASE_URL)
+    _we_started_env = server_proc is not None
+    if stop_env_server is None:
+        stop_env_server = _we_started_env
+
     print(f"[OK] Env: {tm.ENV_BASE_URL} | EPISODES={tm.EPISODES} EVAL_EPISODES={tm.EVAL_EPISODES}")
 
-    # Same pool layout as train_minimal.main()
     episode_pool = tm.generate_episode_pool(count=tm.EPISODES + (tm.EVAL_EPISODES * 4))
     eval_episodes = tm._select_eval_episodes(episode_pool[tm.EPISODES :])
     print(f"  Eval pool: {len(eval_episodes)} episodes")
 
-    # ── Base model (before) ───────────────────────────────────────────────
     if tm.USE_UNSLOTH:
         print(f"Loading base via Unsloth: {tm.MODEL_NAME}")
         model, tok = tm.FastLanguageModel.from_pretrained(
@@ -112,7 +125,6 @@ def main() -> None:
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
-    # ── Fine-tuned checkpoint (after) ─────────────────────────────────────
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     print(f"Loading checkpoint: {ckpt}")
@@ -130,12 +142,11 @@ def main() -> None:
     after_eval = tm.evaluate_component_shift(model_ft, tok_ft, eval_episodes)
     print(f"  After: {after_eval['means']}")
 
-    # ── Training curves: keep prior JSON if available ─────────────────────
     log_history: list = []
     global_step = 0
     training_loss = 0.0
     summary_path = Path("reports/training_summary.json")
-    if not args.fresh_summary and summary_path.exists():
+    if not fresh_summary and summary_path.exists():
         try:
             prev = json.loads(summary_path.read_text(encoding="utf-8"))
             log_history = list(prev.get("log_history") or [])
@@ -156,13 +167,27 @@ def main() -> None:
     )
     print("[OK] Updated reports/training_summary.json, docs/*.svg, reports/component_shift_summary.json")
 
-    if server_proc is not None:
+    if stop_env_server and server_proc is not None:
         server_proc.terminate()
         try:
             server_proc.wait(timeout=5)
         except Exception:
             server_proc.kill()
         print("[STOP] Stopped subprocess env server.")
+
+
+def main() -> None:
+    args = _parse_args()
+    ckpt = Path(args.checkpoint).resolve()
+    if not ckpt.is_dir():
+        print(f"ERROR: checkpoint directory not found: {ckpt}")
+        print("Train first (saves ./debatefloor_checkpoint) or pass --checkpoint /path/to/model")
+        sys.exit(1)
+    try:
+        run_eval(ckpt, fresh_summary=args.fresh_summary)
+    except Exception as exc:
+        print(f"ERROR: {type(exc).__name__}: {exc}")
+        raise
 
 
 if __name__ == "__main__":

@@ -105,6 +105,9 @@ if SMOKE_MODE:
         f"episodes={EPISODES} eval_episodes_const={EVAL_EPISODES} "
         f"epochs={EPOCHS} batch_size={BATCH_SIZE}"
     )
+elif os.getenv("EVAL_EPISODES", "").strip():
+    # Larger held-out eval (e.g. 18) = more stable component means for README / judges.
+    EVAL_EPISODES = int(os.environ["EVAL_EPISODES"])
 
 # ── Try Unsloth; fall back gracefully to standard transformers ──────────────
 try:

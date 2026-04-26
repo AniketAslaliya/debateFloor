@@ -24,6 +24,15 @@ Phases (each one logs a clear banner so you can grep the log):
     [5/6] Push checkpoint + reports/ + docs/ to the HF model repo
     [6/6] Cleanly exit (kills env server so billing stops)
 
+Eval-only job (fast — refresh README metrics from Hub checkpoint, no GRPO):
+
+    hf jobs run ... \\
+        --env JOBS_EVAL_ONLY=1 \\
+        --env EPISODES=10000 \\
+        --env EVAL_EPISODES=18 \\
+        --secret HF_TOKEN=hf_xxx \\
+        python train/jobs_run.py
+
 If training finished but reports/ were not updated, run locally (with checkpoint + env):
     EPISODES=<same as job> python train/post_training_eval.py
 
@@ -44,6 +53,9 @@ Environment variables consumed:
         DISABLE_VARIANCE_GUARD — bypass CF-1 guard (default: 1)
         HF_MODEL_REPO      — where to push the trained model
                              (default: AniketAsla/debatefloor-grpo-qwen2.5-0.5b-instruct)
+        JOBS_EVAL_ONLY     — if 1: skip training; download checkpoint from HF_MODEL_REPO,
+                             run post-training eval, upload reports + docs only (fast).
+        EVAL_EPISODES      — optional; larger = more stable eval means (e.g. 18).
 """
 from __future__ import annotations
 
@@ -296,28 +308,75 @@ tm.DTYPE = torch.bfloat16 if tm.HAS_BF16 else torch.float16
 print(f"  GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}")
 print(f"  dtype: {tm.DTYPE} | Unsloth: {tm.USE_UNSLOTH}\n")
 
-train_exit_code = 0
-try:
-    tm.main()
-    print("  Training completed.")
-except Exception as exc:  # don't crash the whole job — we still want artifacts
-    train_exit_code = 1
-    print(f"  Training raised: {type(exc).__name__}: {exc}")
-    import traceback
-
-    traceback.print_exc()
-
-
-# ── [5/6] Push artifacts to the HF Hub model repo ───────────────────────────
-print("\n" + "=" * 70)
-print("[5/6] Uploading artifacts to HF Hub")
-print("=" * 70)
+_ee = os.getenv("EVAL_EPISODES", "").strip()
+if _ee:
+    tm.EVAL_EPISODES = int(_ee)
+    print(f"  EVAL_EPISODES={tm.EVAL_EPISODES} (env override)\n")
 
 HF_TOKEN = os.environ.get("HF_TOKEN", "")
 HF_MODEL_REPO = os.environ.get(
     "HF_MODEL_REPO",
     "AniketAsla/debatefloor-grpo-qwen2.5-0.5b-instruct",
 )
+
+train_exit_code = 0
+EVAL_ONLY = os.getenv("JOBS_EVAL_ONLY", "").strip().lower() in ("1", "true", "yes")
+
+if EVAL_ONLY:
+    print("\n" + "=" * 70)
+    print("[4/6] JOBS_EVAL_ONLY=1 — skip GRPO; Hub checkpoint + post-training eval")
+    print("=" * 70)
+    if not HF_TOKEN:
+        print("  ERROR: JOBS_EVAL_ONLY requires HF_TOKEN (download checkpoint).")
+        train_exit_code = 1
+    else:
+        try:
+            import shutil
+
+            from huggingface_hub import snapshot_download
+
+            ckpt_dl = REPO_ROOT / "debatefloor_checkpoint"
+            if ckpt_dl.exists():
+                shutil.rmtree(ckpt_dl)
+            print(f"  snapshot_download {HF_MODEL_REPO} -> {ckpt_dl}")
+            snapshot_download(
+                repo_id=HF_MODEL_REPO,
+                repo_type="model",
+                local_dir=str(ckpt_dl),
+                token=HF_TOKEN,
+                ignore_patterns=[
+                    "reports/**",
+                    "docs/**",
+                    "*.md",
+                    ".gitattributes",
+                ],
+            )
+            from train.post_training_eval import run_eval  # noqa: E402
+
+            run_eval(ckpt_dl, fresh_summary=False, stop_env_server=False)
+            print("  Eval-only run completed.")
+        except Exception as exc:
+            train_exit_code = 1
+            print(f"  JOBS_EVAL_ONLY raised: {type(exc).__name__}: {exc}")
+            import traceback
+
+            traceback.print_exc()
+else:
+    try:
+        tm.main()
+        print("  Training completed.")
+    except Exception as exc:  # don't crash the whole job — we still want artifacts
+        train_exit_code = 1
+        print(f"  Training raised: {type(exc).__name__}: {exc}")
+        import traceback
+
+        traceback.print_exc()
+
+
+# ── [5/6] Push artifacts to the HF Hub model repo ───────────────────────────
+print("\n" + "=" * 70)
+print("[5/6] Uploading artifacts to HF Hub")
+print("=" * 70)
 
 if not HF_TOKEN:
     print("  HF_TOKEN not set — skipping upload (artifacts remain in job storage).")
@@ -330,7 +389,9 @@ else:
         api.create_repo(repo_id=HF_MODEL_REPO, repo_type="model", exist_ok=True)
 
         ckpt_dir = Path("./debatefloor_checkpoint")
-        if ckpt_dir.exists() and any(ckpt_dir.iterdir()):
+        if EVAL_ONLY:
+            print("  JOBS_EVAL_ONLY: skipping checkpoint upload (weights already on Hub).")
+        elif ckpt_dir.exists() and any(ckpt_dir.iterdir()):
             print(f"  Uploading checkpoint folder -> {HF_MODEL_REPO}")
             api.upload_folder(
                 folder_path=str(ckpt_dir),
