@@ -15,7 +15,7 @@ pinned: true
 [![Tests](https://img.shields.io/badge/Tests-Passing-brightgreen)](https://github.com/AniketAslaliya/debateFloor)
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-Hugging%20Face-orange)](https://huggingface.co/spaces/AniketAsla/debatefloor)
 [![Based on CAPO](https://img.shields.io/badge/Based%20on-CAPO%20arXiv%3A2604.12632-red)](https://arxiv.org/abs/2604.12632)
-[![WandB Run](https://img.shields.io/badge/WandB-Training%20Run-yellow)](https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl/runs/vloynjdu)
+[![WandB](https://img.shields.io/badge/WandB-Project%20workspace-yellow)](https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/AniketAslaliya/debateFloor/blob/main/train/train_debatefloor.ipynb)
 
 > An [OpenEnv](https://github.com/meta-pytorch/OpenEnv)-compliant RL training environment (**ClaimCourt**) where AI agents investigate insurance claims, argue in an adversarial **Court Panel**, and must declare **calibrated confidence** before every terminal decision.
@@ -38,7 +38,7 @@ Indian health-insurance fraud, waste & abuse drains **₹8,000–10,000 crore ev
 | Artifact | Link |
 |---|---|
 | **Live Environment (HF Space)** | https://huggingface.co/spaces/AniketAsla/debatefloor |
-| **WandB Training Run** | https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl/runs/vloynjdu |
+| **WandB (all runs)** | https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl |
 | **Trained Model** | https://huggingface.co/AniketAsla/debatefloor-grpo-qwen2.5-0.5b-instruct |
 | **Training Notebook (Colab)** | [train/train_debatefloor.ipynb](https://github.com/AniketAslaliya/debateFloor/blob/main/train/train_debatefloor.ipynb) |
 | **Mini-Blog** | [docs/HFBlogPost.md](https://huggingface.co/spaces/AniketAsla/debatefloor/blob/main/docs/HFBlogPost.md) |
@@ -83,7 +83,7 @@ hand-edits, no rounded-up estimates. Source:
 | GRPO steps | 2,500 |
 | Batch / Generations | 8 / 8 |
 | Hardware | L4 GPU (HF Jobs), 3 h 3 min |
-| WandB | [Run link](https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl/runs/vloynjdu) |
+| WandB | [Project workspace](https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl) — open the **latest** run named `grpo-qwen0.5b-env-connected` (5K HF Job, Apr 2026). **Canonical curves:** [`docs/reward_curve.svg`](docs/reward_curve.svg) + [`reports/training_summary.json`](reports/training_summary.json) (always match the committed training). |
 
 ### Headline result: training reward 0.130 → 0.469 (3.6× improvement)
 
@@ -286,7 +286,7 @@ if HIGH_rate > 80% across 10+ episodes:  penalty = (rate − 0.80) × 1.5
 **Algorithm:** HF TRL `GRPOTrainer` + Unsloth 4-bit QLoRA (Group Relative Policy Optimization — same as DeepSeek-R1)
 **Full run:** L4 GPU on HF Jobs — 5,000 episodes, 2,500 steps, 3 h 3 min
 **Quick run:** Free Colab T4 GPU — 100 episodes, ~15 min (see notebook)
-**WandB Run:** https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl/runs/vloynjdu
+**WandB:** https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl — pick the latest `grpo-qwen0.5b-env-connected` run. Plots in this README come from committed `reports/training_summary.json` (not from a pinned WandB run ID).
 
 ```bash
 # Reproduce the training run

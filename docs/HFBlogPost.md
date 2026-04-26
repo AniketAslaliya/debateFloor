@@ -209,7 +209,7 @@ This produces a stable learning curve. The complex eval reward runs separately f
 
 ### Training Signals (WandB + held-out eval)
 
-The GRPO training run tracks both the reward curve and a held-out component-shift summary. The reward curve is tracked at [wandb.ai/aniketaslaliya/debatefloor-insurance-rl](https://wandb.ai/aniketaslaliya/debatefloor-insurance-rl), while the component shift plot is saved to [docs/component_shift.svg](docs/component_shift.svg).
+The GRPO training run tracks both the reward curve and a held-out component-shift summary. Live metrics go to the [WandB project workspace](https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl) (entity `aniketaslaliya-lnmiit` — open the latest run named `grpo-qwen0.5b-env-connected`). **Canonical plots for judges** are always the committed files [docs/reward_curve.svg](docs/reward_curve.svg) and [docs/component_shift.svg](docs/component_shift.svg), backed by [reports/training_summary.json](../reports/training_summary.json).
 
 ![WandB reward curve - training reward rises as calibration improves](docs/reward_curve.svg)
 
