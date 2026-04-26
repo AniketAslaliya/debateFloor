@@ -14,7 +14,7 @@ const CALIB_MATRIX = {
 
 const TASK_STEPS_HINT = {
   clean_claim:             'approve_claim + HIGH confidence',
-  contradictory_claim:     'deny_claim + MED confidence + Debate Panel',
+  contradictory_claim:     'deny_claim + MED confidence + Court Panel',
   distribution_shift_claim:'escalate_to_human + LOW confidence',
 };
 
@@ -155,7 +155,7 @@ function App() {
             Wrong but humble? <span style={{ color: 'var(--success)' }}>Rewarded.</span>
           </p>
           <p className="hero-sub" style={{ fontSize: '0.875rem', marginTop: '0.5rem', color: 'var(--text-tertiary)' }}>
-            The <strong>Debate Panel</strong> below is unique — no other OpenEnv environment has it. Watch it unfold.
+            The <strong>Court Panel</strong> (adversarial debate) below is unique — no other OpenEnv environment has it. Watch it unfold.
           </p>
         </div>
       </section>
@@ -342,8 +342,8 @@ function App() {
               <Gavel size={20} color={debate ? 'var(--warning)' : 'var(--text-tertiary)'} />
               <h2 style={{ fontSize: '1rem' }}>
                 {debate
-                  ? `⚖ Debate Panel Convened — Step ${debate.step_convened}`
-                  : 'Multi-Agent Debate Panel'}
+                  ? `⚖ Court Panel Convened — Step ${debate.step_convened}`
+                  : 'Multi-Agent Court Panel'}
               </h2>
               {!debate && (
                 <span className="text-xs text-secondary ml-2">(appears when agent calls <code>convene_debate_panel</code>)</span>

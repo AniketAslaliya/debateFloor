@@ -1,6 +1,6 @@
-# React + Vite
+# ClaimCourt — React UI
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Vite + React UI for the **ClaimCourt** insurance-calibration environment (served from `frontend/dist` by FastAPI). Repository and deployment URLs still use the legacy slug `debatefloor` where required.
 
 Currently, two official plugins are available:
 
