@@ -24,6 +24,9 @@ Phases (each one logs a clear banner so you can grep the log):
     [5/6] Push checkpoint + reports/ + docs/ to the HF model repo
     [6/6] Cleanly exit (kills env server so billing stops)
 
+If training finished but reports/ were not updated, run locally (with checkpoint + env):
+    EPISODES=<same as job> python train/post_training_eval.py
+
 Environment variables consumed:
 
     Required:
