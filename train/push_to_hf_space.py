@@ -31,6 +31,8 @@ api = HfApi(token=HF_TOKEN)
 UPLOAD_PATTERNS = [
     "app",
     "server",
+    # React UI built with: cd frontend && npm run build  (outputs frontend/dist)
+    "frontend/dist",
     "docs",
     "reports",
     "train/train_minimal.py",
