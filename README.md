@@ -10,16 +10,16 @@ pinned: true
 
 # ClaimCourt — Insurance Calibration RL Environment
 
-> *Codename in the repo & URLs: `debatefloor` — all GitHub, Hugging Face Space, and model-repo slugs use the original codename so existing links continue to resolve. The product is **ClaimCourt** everywhere it faces a human reader.*
+> *Repository codename `debatefloor` — all GitHub, Hugging Face Space, and model-repo URLs use the original codename so existing links resolve. The product is **ClaimCourt** everywhere it faces a human reader.*
 
-[![Tests](https://img.shields.io/badge/Tests-Passing-brightgreen)](https://github.com/AniketAslaliya/debateFloor)
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-Hugging%20Face-orange)](https://huggingface.co/spaces/AniketAsla/debatefloor)
+[![Demo Video](https://img.shields.io/badge/Demo%20Video-YouTube-red)](https://www.youtube.com/watch?v=Uk8sSLywEpE)
 [![Based on CAPO](https://img.shields.io/badge/Based%20on-CAPO%20arXiv%3A2604.12632-red)](https://arxiv.org/abs/2604.12632)
-[![WandB](https://img.shields.io/badge/WandB-Project%20workspace-yellow)](https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl)
+[![WandB](https://img.shields.io/badge/WandB-Run%20workspace-yellow)](https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/AniketAslaliya/debateFloor/blob/main/train/train_debatefloor.ipynb)
 
-> An [OpenEnv](https://github.com/meta-pytorch/OpenEnv)-compliant RL training environment (**ClaimCourt**) where AI agents investigate insurance claims, argue in an adversarial **Court Panel**, and must declare **calibrated confidence** before every terminal decision.
-> Built for the **Meta PyTorch × Scaler Hackathon Grand Finale, April 25–26 2026**.
+> An [OpenEnv](https://github.com/meta-pytorch/OpenEnv)-compliant RL training environment where AI agents investigate insurance claims, argue in an adversarial **Court Panel**, and must declare **calibrated confidence** before every terminal decision.
+> Built for the **Meta PyTorch × Scaler OpenEnv Hackathon Grand Finale, April 25–26 2026**.
 
 > ### 🎯 Headline result — Calibration score 0.000 → 1.000 on held-out claims
 >
@@ -27,466 +27,182 @@ pinned: true
 
 ---
 
-## The story (~3 minutes — not an API doc)
+## 📺 Watch the 2-minute demo first
 
-**Problem — what capability gap?** In insurance (and in GRPO-trained LLMs generally), models can be **wrong and overconfident**. That is unsafe for approve/deny. [CAPO](https://arxiv.org/abs/2604.12632) shows GRPO can make miscalibration worse. We built an environment where **calibration is part of the task**, not an afterthought.
+▶️ **[YouTube — ClaimCourt demo](https://www.youtube.com/watch?v=Uk8sSLywEpE)** — see the full Court Panel sequence and the calibration matrix lighting up in real time.
 
-**Environment — what does the agent see, do, and get rewarded for?** Each episode is a **synthetic claim**: documents, fraud hints, sometimes linked cases. The agent **investigates** (validate, compare, flag signals, query history), may **convene a Court Panel** (adversarial prosecutor vs defender), then submits a **terminal decision** (`approve_claim` / `deny_claim` / `escalate_to_human`) plus **HIGH / MED / LOW** confidence. The live server scores **decision correctness**, **evidence**, and a **3×2 calibration matrix** so “confident but wrong” hurts more than “unsure and wrong.” Anti-gaming stops trivial policies like “always LOW.”
-
-**Results — what changed after training?** One full run: mean training reward **0.130 → 0.469** (see **Figure 1** below); held-out eval **decision accuracy 0 → 1.0** and **calibration 0 → 1.0** (**Figure 2** — before vs after on the **same** components so the comparison is obvious). Numbers tie to committed JSON, not screenshots.
-
-**Why it matters — who cares?** **Insurers and regulators** under pressure on fraud and new IRDAI rules; **RL / LLM researchers** who need a reproducible place to study **confidence-aware** policies instead of accuracy-only rewards.
-
-**Try it in one minute:** [Open the Space](https://huggingface.co/spaces/AniketAsla/debatefloor) → task **`contradictory_claim`** → **Run Episode** → watch the Court Panel and the calibration matrix.
-
-**Longer narrative:** [BLOG.md](BLOG.md) · **Demo video (script + checklist):** [docs/VideoScript_ClaimCourt.md](docs/VideoScript_ClaimCourt.md) — *when your walkthrough is on YouTube or Loom, add that public URL at the top of this README (Submission Artifacts) and in the script file so judges can click through.*
-
----
-
-## Problem Statement
-
-LLMs deployed in high-stakes domains suffer from a well-documented failure mode: **overconfidence**. A model that approves or denies an insurance claim with 100 % certainty — but is wrong — causes real harm. The [CAPO paper (arXiv:2604.12632, 2026)](https://arxiv.org/abs/2604.12632) measures up to a 15 % AUC drop in standard GRPO training, and [DCPO (arXiv:2603.09117, 2026)](https://arxiv.org/abs/2603.09117) shows a 71 % Expected-Calibration-Error reduction is achievable when calibration is treated as a first-class objective.
-
-**ClaimCourt is the direct fix.** It trains LLMs to declare *calibrated* confidence before every decision, using a reward surface that penalises overconfident wrong answers more severely than uncertain ones. This teaches models **when** to be confident, not just what to say.
-
-Indian health-insurance fraud, waste & abuse drains **₹8,000–10,000 crore every year** ([BCG × Medi Assist, Nov 2025](https://www.business-standard.com/industry/news/insurance-fwa-drains-rs10000cr-each-year-bcg-mediassist-report-125112101199_1.html)) — about 8 % of all claim payouts. From April 2026, the [IRDAI Insurance Fraud Monitoring Framework Guidelines, 2025](https://irdai.gov.in/) make every insurer legally responsible for detecting it. AI is the obvious tool, but recent research ([CAPO, arXiv:2604.12632](https://arxiv.org/abs/2604.12632); [DCPO, arXiv:2603.09117](https://arxiv.org/abs/2603.09117)) proves standard GRPO training makes models *more* overconfident as they get more accurate — exactly the wrong direction for high-stakes claims work.
-
----
-
-## Submission Artifacts
+## All artifacts in one table
 
 | Artifact | Link |
 |---|---|
+| **Demo Video (≤2 min)** | https://www.youtube.com/watch?v=Uk8sSLywEpE |
 | **Live Environment (HF Space)** | https://huggingface.co/spaces/AniketAsla/debatefloor |
-| **WandB (all runs)** | https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl |
+| **Mini-Blog (full writeup)** | [BLOG.md](BLOG.md) |
 | **Trained Model** | https://huggingface.co/AniketAsla/debatefloor-grpo-qwen2.5-0.5b-instruct |
-| **Training Notebook (Colab)** | [train/train_debatefloor.ipynb](https://github.com/AniketAslaliya/debateFloor/blob/main/train/train_debatefloor.ipynb) |
-| **Mini-Blog** | [BLOG.md](https://huggingface.co/spaces/AniketAsla/debatefloor/blob/main/BLOG.md) |
-| **Demo walkthrough (video)** | *[Script / shot list](docs/VideoScript_ClaimCourt.md)* — add your **public** YouTube or Loom URL here when published (hackathon asks for a link from the README). |
+| **Training Notebook (Colab)** | [train/train_debatefloor.ipynb](train/train_debatefloor.ipynb) |
+| **WandB workspace** (training curves) | https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl |
+| **GitHub repo** | https://github.com/AniketAslaliya/debateFloor |
 
 ---
 
-## How This Submission Maps to the Judging Rubric
+## 1. The Problem
 
-| Criterion | Weight | Where to find the evidence |
+LLMs in high-stakes domains suffer from a documented failure mode: **overconfidence**. A model that approves or denies an insurance claim with 100 % certainty — but is wrong — causes real harm. The [CAPO paper (arXiv:2604.12632, 2026)](https://arxiv.org/abs/2604.12632) measures up to a 15 % AUC drop in standard GRPO training. [DCPO (arXiv:2603.09117, 2026)](https://arxiv.org/abs/2603.09117) shows a 71 % Expected-Calibration-Error reduction is achievable when calibration is treated as a first-class objective.
+
+**Why this matters now.** Indian health-insurance fraud, waste & abuse drains **₹8,000–10,000 crore every year** ([BCG × Medi Assist, Nov 2025](https://www.business-standard.com/industry/news/insurance-fwa-drains-rs10000cr-each-year-bcg-mediassist-report-125112101199_1.html)) — about 8 % of all claim payouts. From April 2026, the [IRDAI Insurance Fraud Monitoring Framework Guidelines, 2025](https://irdai.gov.in/) make every insurer legally responsible for catching it. The obvious tool is AI — but standard RL training pushes models in exactly the wrong direction.
+
+**ClaimCourt is the direct fix.** A reward surface that penalises overconfident wrong answers more severely than uncertain ones, teaching models *when* to be confident, not just what to say.
+
+---
+
+## 2. The Environment — what the agent sees, does, and gets rewarded for
+
+### What the agent sees
+A claim object: claimant identity, incident details, policy history, attached documents, and the list of available actions. After every action: updated documents, discovered fraud signals, action history, and a partial reward breakdown.
+
+### What the agent does
+The agent investigates step-by-step before committing.
+
+| Action class | Examples | Confidence required? |
 |---|---|---|
-| **Environment Innovation** | 40% | The 3×2 calibration matrix (`README` §_The Core Innovation_) is a novel reward shape — it does not exist in any prior insurance-RL work and directly attacks the calibration-degradation problem documented in the CAPO paper (April 2026). The **Court Panel** mechanic forces the agent to expose its reasoning to a programmatic adversary, which is also unexplored territory for RL on LLMs. |
-| **Storytelling & Presentation** | 30% | [`BLOG.md`](BLOG.md) — full mini-blog motivating the problem, walking the reader through one episode end-to-end, and showing the training delta in plain language. README is structured for a 3-minute read with the headline number first. |
-| **Showing Improvement in Rewards** | 20% | [`docs/reward_curve.png`](docs/reward_curve.png) — 2,500-step reward curve from a 5,000-episode GRPO run (0.130 → 0.469, 3.6×). [`reports/training_summary.json`](reports/training_summary.json) — raw metrics including full log history. [`reports/component_shift_summary.json`](reports/component_shift_summary.json) — before/after on held-out eval (Decision accuracy 0 → 1.0, Calibration 0 → 1.0). WandB run linked above for reproducibility. |
-| **Reward & Training Pipeline** | 10% | [`app/rubrics.py`](app/rubrics.py) — composable rubric (decision × confidence × evidence × format), not monolithic. [`server/calibration_grader.py`](server/calibration_grader.py) — 3×2 calibration matrix. [`train/train_minimal.py`](train/train_minimal.py) — TRL GRPO loop that calls the live HTTP env over `requests.Session` (MR-2 compliant, no static dataset). |
+| **Investigative** | `validate_document`, `flag_fraud_signal`, `query_historical_data`, `query_linked_claim`, `verify_identity`, `convene_debate_panel` | No |
+| **Terminal** | `approve_claim`, `deny_claim`, `escalate_to_human`, `request_investigation` | **Yes — HIGH / MED / LOW** |
 
-### Minimum-requirement checklist (for judges)
+### What the agent gets rewarded for — the 3×2 Calibration Matrix (the core innovation)
 
-- [x] Built on **OpenEnv `0.2.3`** (latest at submission time) — see `requirements.txt`
-- [x] Working **TRL training script in a Colab notebook** — [`train/train_debatefloor.ipynb`](train/train_debatefloor.ipynb)
-- [x] **Real reward + loss plots** committed to the repo — [`docs/reward_curve.png`](docs/reward_curve.png), [`docs/component_shift.png`](docs/component_shift.png)
-- [x] **Mini-blog** at [`BLOG.md`](BLOG.md)
-- [x] **OpenEnv-compliant env hosted on HF Spaces** — https://huggingface.co/spaces/AniketAsla/debatefloor
-- [x] **README** motivates the problem, explains the env, and shows results (this file)
-- [x] **`openenv.yaml`** manifest valid — see repo root
-- [x] **Gym-style API** (`reset` / `step` / `state`) and **client/server separation** — see `app/` and `server/`
+Before every terminal action, the agent must declare a confidence level. The reward is determined by this matrix:
+
+| Confidence | Correct Decision | Wrong Decision |
+|---|---|---|
+| **HIGH** | **+1.0** | **−0.8** ← worst outcome |
+| **MED**  | +0.6     | −0.2 |
+| **LOW**  | +0.1     | 0.0 ← safe |
+
+An agent that always says HIGH to maximise reward is catastrophically punished when wrong. An agent that always says LOW is caught by the **anti-gaming detector** (LOW-rate > 70 % across 10+ episodes triggers a progressive penalty). **The only winning strategy is accurate calibration** — based on the [CoCA framework (arXiv:2603.05881)](https://arxiv.org/abs/2603.05881).
+
+### The Court Panel — the demo centrepiece
+
+> **No other environment in the OpenEnv hub has this mechanic.** Run `contradictory_claim` in the live Space to see it.
+
+When evidence is mixed, the agent calls `convene_debate_panel`. Two adversarial sub-agents spin up from the existing evidence base:
+
+```
+INVESTIGATOR
+├── validate_document      → discovers fraud signals
+├── query_historical_data  → reveals cross-claim patterns
+└── convene_debate_panel
+        ↓
+┌──────────────────┐    ┌──────────────────┐
+│  PROSECUTOR      │    │  DEFENDER        │
+│  Strength: STRONG│    │  Strength: WEAK  │
+└──────────────────┘    └──────────────────┘
+        ↓
+    PANEL VERDICT → recommendation
+        ↓
+    JUDGE: approve / deny / escalate
+    + confidence: HIGH / MED / LOW
+```
+
+The Court Panel forces the agent to expose its reasoning to a programmatic adversary before declaring confidence — Fleet AI Scalable Oversight, applied to claims work.
+
+### Procedural generation
+Episodes are generated procedurally — **5 fraud types × 4 coverage types × 3 jurisdictions × seed variation = 500+ unique episodes**. Same seed → same episode, so reviewers can reproduce exactly what the model saw.
 
 ---
 
-## Results
+## 3. Results
 
-All numbers below are **read directly from committed JSON artifacts** — no
-hand-edits, no rounded-up estimates. Source:
-[`reports/training_summary.json`](reports/training_summary.json),
-[`reports/component_shift_summary.json`](reports/component_shift_summary.json).
+### 5,000-episode GRPO run — Qwen2.5-0.5B-Instruct, L4 GPU, 3 h 3 min
 
-### GRPO training — 5,000 episodes, Qwen2.5-0.5B-Instruct
+All numbers below are read directly from committed JSON artifacts ([`reports/training_summary.json`](reports/training_summary.json), [`reports/component_shift_summary.json`](reports/component_shift_summary.json)) — no hand-edits.
 
-| Config | Value |
-|---|---|
-| Episodes | 5,000 |
-| Epochs | 1 |
-| GRPO steps | 2,500 |
-| Batch / Generations | 8 / 8 |
-| Hardware | L4 GPU (HF Jobs), 3 h 3 min |
-| WandB | [Project workspace](https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl) — open the **latest** run named `grpo-qwen0.5b-env-connected` (5K HF Job, Apr 2026). **Canonical curves:** [`docs/reward_curve.png`](docs/reward_curve.png) + [`reports/training_summary.json`](reports/training_summary.json) (always match the committed training). |
+#### Three headline numbers
 
-### Headline result
+- **Training reward: 0.130 → 0.469 (3.6× improvement)** across 2,500 GRPO steps
+- **Held-out decision accuracy: 0.000 → 1.000** — the trained model gets every held-out claim right
+- **Held-out calibration score: 0.000 → 1.000** — confidence now matches correctness on every terminal action
 
-- **Training reward: 0.130 → 0.469 (3.6× improvement)** across 2,500 GRPO steps.
-- **Held-out decision accuracy: 0.000 → 1.000** — the trained model gets every held-out claim right.
-- **Held-out calibration score: 0.000 → 1.000** — confidence now matches correctness on every terminal action. *This is the skill the 3×2 matrix was designed to teach, and the result attacks the overconfidence pathology the [CAPO paper](https://arxiv.org/abs/2604.12632) documented in GRPO.*
-
-All three numbers are read directly from [`reports/training_summary.json`](reports/training_summary.json) and [`reports/component_shift_summary.json`](reports/component_shift_summary.json) — no hand-edits.
-
-### Held-out evaluation (6 episodes: 3 tasks × 2 seeds, live HTTP `/step`)
+#### Held-out evaluation (n = 6 episodes: 3 tasks × 2 seeds, live HTTP `/step`)
 
 | Component | Before (untrained) | After (GRPO) | Change |
 |---|---:|---:|---|
 | **Decision accuracy** | 0.000 | **1.000** | **+1.000** |
-| **Calibration** | 0.000 | **1.000** | **+1.000** |
-| **Fraud detection** | 0.000 | **0.333** | +0.333 |
-| Evidence quality | 0.333 | 0.333 | unchanged |
-| Reasoning quality | 0.833 | 0.792 | −0.042 (within noise) |
+| **Calibration**       | 0.000 | **1.000** | **+1.000** |
+| **Fraud detection**   | 0.000 | **0.333** | +0.333 |
+| Evidence quality      | 0.333 | 0.333     | unchanged |
+| Reasoning quality     | 0.833 | 0.792     | −0.042 (within noise) |
 
-The trained model learned to **make correct decisions with calibrated
-confidence** — exactly the skill this environment is designed to teach.
-Decision accuracy and calibration both went from zero to perfect on the
-held-out eval set. The small dip in reasoning quality (−4 pts) is a
-known trade-off: the model traded a sliver of fluency for sharper
-decision-making.
+#### Training plots
 
-### Training Plots
+![Reward Curve](docs/reward_curve.png)
+*X: training step. Y-left: training loss. Y-right: mean reward (training scalar, unbounded). Mean training reward climbs from 0.130 → 0.469 across 2,500 GRPO steps (5,000 episodes, 1 epoch).*
 
-**Figure 1 — GRPO training curve** ([`docs/reward_curve.png`](docs/reward_curve.png), committed PNG). **X-axis:** training step (0–2,500). **Left Y-axis:** training loss (unitless). **Right Y-axis:** mean GRPO training reward (TRL scalar from the live env — unbounded, *not* the 0–1 eval score). **What to see:** reward rising from ~0.13 to ~0.47 over the run. **Source:** [`reports/training_summary.json`](reports/training_summary.json). **WandB:** interactive curves in the [project workspace](https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl) — open the **5K-episode** run named `grpo-qwen0.5b-env-connected`; README figures always match the committed JSON + PNGs.
+![Component Shift](docs/component_shift.png)
+*Same axes, before vs after on held-out eval (n=6 episodes). Decision accuracy 0 → 1.0, Calibration 0 → 1.0, Fraud detection 0 → 0.33. The lift on the trained metrics is unmissable.*
 
-![Figure 1: training loss and mean reward vs training step](docs/reward_curve.png)
+The trained model learned to **make correct decisions with calibrated confidence** — exactly the skill this environment is designed to teach. The small dip in reasoning quality (−4 pts) is the only trade-off: the model traded a sliver of fluency for sharper decision-making.
 
-**Figure 2 — Held-out eval: same components, before vs after** ([`docs/component_shift.png`](docs/component_shift.png)). **X-axis:** rubric component (decision, calibration, fraud, evidence, reasoning). **Y-axis:** score in **[0, 1]** (clamped eval). **What to see:** **gray = before GRPO**, **green = after** on the **same** axes so the comparison is immediate. **Source:** [`reports/component_shift_summary.json`](reports/component_shift_summary.json).
+---
 
-![Figure 2: component scores before vs after training (same axes)](docs/component_shift.png)
+## 4. Why It Matters
 
-### Environment baseline — 25 episodes against the live HF Space
+Calibration failure is universal. Every high-stakes domain where an AI must know the limits of its own knowledge has it: medical diagnosis, legal analysis, financial advice, autonomous systems. ClaimCourt is a **blueprint for training epistemic humility into LLMs at the reward level, not the prompt level.**
 
-Independent end-to-end check that the deployed environment is reachable, deterministic, and produces graded rewards across **all 5 tasks × 5 seeds = 25 episodes** via the public HTTP API. Source: [`reports/eval_report.md`](reports/eval_report.md).
-
-| Task | Reward | Evidence Quality | Exploit Penalty | Steps |
-|---|---:|---:|---:|---:|
-| `clean_claim` | 0.8725 | 1.0000 | 0.0000 | 4 |
-| `contradictory_claim` | 0.7497 | 1.0000 | 0.0000 | 8 |
-| `coordinated_fraud` | 0.8230 | 1.0000 | 0.0000 | 12 |
-| `distribution_shift_claim` | 0.7827 | 1.0000 | 0.0000 | 12 |
-| `identity_fraud` | 0.8180 | 1.0000 | 0.0000 | 10 |
-| **Average** | **0.8092** | **1.0000** | **0.0000** | — |
-
-**Completion rate: 100%** across 25 episodes (variants 0–4 visited per task). This is a *scripted* baseline — fixed strategies per `task_id` — so seeds within a task return the same reward by design (see the note in `eval_report.md`). Its job is to prove the env's reward surface is reproducible and the live HTTP path works end-to-end; the *trained model's* improvement is in the component-shift table above.
+Insurance is just the first domain. The 3×2 matrix transfers anywhere a model must commit a binary decision and own the confidence behind it.
 
 ---
 
 ## Quick Start for Reviewers (3 minutes)
 
-1. **Open the live UI:** https://huggingface.co/spaces/AniketAsla/debatefloor
-2. **Select `contradictory_claim`** and click **Run Episode**.
-3. Watch the agent: validate documents → flag fraud signals → **convene the Court Panel (Prosecutor vs Defender)** → declare MED confidence → deny claim.
-4. The highlighted cell in the 3×2 matrix shows exactly why it scored what it scored.
+1. **Watch the demo** — [▶️ YouTube (≤2 min)](https://www.youtube.com/watch?v=Uk8sSLywEpE)
+2. **Open the live UI** — https://huggingface.co/spaces/AniketAsla/debatefloor
+3. **Select `contradictory_claim`** → click **Run Episode**.
+4. Watch the agent: validate documents → flag fraud signals → **convene the Court Panel** → declare MED confidence → deny claim.
+5. The highlighted cell in the 3×2 matrix shows exactly why it scored what it scored.
 
----
-
-## What Makes This Novel
-
-- **Training environment, not a benchmark.** Episodes are procedurally generated from seeds — the agent cannot memorise answers.
-- **Teaches calibration, not just accuracy.** Overconfident wrong answers are penalised harder than uncertain ones. No other OpenEnv environment has this.
-- **Multi-agent by design.** The final decision is informed by the adversarial **Court Panel** (Prosecutor vs Defender) before the Judge commits. This is Fleet AI Scalable Oversight.
-- **Anti-gaming system.** An agent cannot win by always saying LOW confidence or always saying HIGH. It must learn genuine calibration.
-
----
-
-## Theme Coverage
-
-| Theme | Bonus Prize | What We Built |
-|-------|-------------|---------------|
-| **Theme 3.1** — World Modeling (Professional) | Scaler AI Labs: Multi-App RL for Enterprise Workflows | 5 fraud types, multi-doc investigation, IRDAI registry, policy history |
-| **Theme 1** — Multi-Agent Interactions | Fleet AI: Scalable Oversight | 3-agent Court Panel: Prosecutor + Defender + Judge |
-| **Theme 4** — Self-Improvement | Curriculum / difficulty escalation | easy→medium→hard + anti-gaming detector |
-
----
-
-## The Core Innovation: 3×2 Calibration Matrix
-
-Before every terminal action, the agent must declare a confidence level: **HIGH**, **MED**, or **LOW**. The reward is determined by this matrix:
-
-| Confidence | Correct Decision | Wrong Decision |
-|------------|-----------------|----------------|
-| **HIGH**   | +1.0            | **−0.8** ← worst outcome |
-| **MED**    | +0.6            | −0.2 |
-| **LOW**    | +0.1            | 0.0 ← safe |
-
-An agent that always says HIGH to maximise reward is catastrophically punished when wrong. An agent that always says LOW is caught by the anti-gaming system. **The only winning strategy is accurate calibration.**
-
-Based on the [CoCA framework (arXiv:2603.05881)](https://arxiv.org/abs/2603.05881) — co-optimising confidence and accuracy via GRPO.
-
----
-
-## The Court Panel — The Demo Centrepiece
-
-> **No other environment in the OpenEnv hub has this mechanic.** Run `contradictory_claim` in the live UI to see it unfold.
-
-**The 90-second sequence that wins the storytelling criterion:**
-
-1. Agent validates 3 documents, discovers `date_mismatch` + `cost_inflation` fraud signals.
-2. Agent calls `convene_debate_panel` — two sub-agents spin up from the evidence base.
-3. **Prosecutor [STRONG]:** *"2 fraud signals, billing 2.4× standard rate — deny."*
-4. **Defender [WEAK]:** *"Documents internally consistent, burden of proof requires more."*
-5. Panel verdict: **Prosecution substantially outweighs defense.**
-6. Agent reads transcript → declares **MED confidence** → `deny_claim` → scores **+0.6**.
-7. The calibration matrix highlights `MED × correct`. The reviewer sees exactly why.
-
-```
-INVESTIGATOR
-├── validate_document      → discovers fraud signals
-├── flag_fraud_signal      → formally raises grounded signal
-├── query_historical_data  → reveals cross-claim patterns
-└── Builds evidence base over N steps
-                ↓
-        convene_debate_panel
-                ↓
-┌───────────────────┐    ┌────────────────────┐
-│  PROSECUTOR       │    │  DEFENDER          │
-│  • fraud signals  │    │  • doc consistency │
-│  • Strength: STRONG│   │  • Strength: WEAK  │
-└───────────────────┘    └────────────────────┘
-                ↓
-    PANEL VERDICT → recommendation
-                ↓
-    JUDGE: approve / deny / escalate
-    + confidence: HIGH / MED / LOW
-    → calibration_score via 3×2 matrix
-```
-
----
-
-## Why This Is the Right RL Task
-
-ClaimCourt satisfies all three properties of a well-designed RL task:
-
-- **Step-by-step:** The agent validates documents, queries history, flags signals, and uses the Court Panel before committing. Each step changes the information state.
-- **Programmatically verifiable:** Ground truth is embedded in every generated episode (`staged_accident → deny_claim`). No human labeller needed.
-- **Hard enough to matter:** Easy claims are solvable with 2 steps. Hard claims require discovering cross-claim fraud rings across linked sessions. The model must earn its confidence.
-
----
-
-## The 3 Tasks
-
-| Task | Difficulty | Max Steps | Correct Decision | Expected Confidence |
-|------|-----------|-----------|-----------------|---------------------|
-| `clean_claim` | Easy | 10 | `approve_claim` | HIGH |
-| `contradictory_claim` | Medium | 18 | `deny_claim` | MED |
-| `distribution_shift_claim` | Hard | 28 | `escalate_to_human` | LOW |
-
-`distribution_shift_claim` looks clean on the surface. The agent must call `query_linked_claim` or `query_historical_data` to discover cross-claim fraud signals. If the agent declares HIGH confidence, it is **always penalised regardless of decision** — this task is designed to require epistemic humility.
-
----
-
-## Procedural Generation
-
-A benchmark has fixed episodes. ClaimCourt generates them procedurally:
-
-```python
-from server.claim_generator import generate_claim
-
-# Same inputs → same episode (deterministic, reproducible)
-episode = generate_claim(seed=42, fraud_type="medical_inflation",
-                         coverage_type="health", difficulty="medium")
-```
-
-**5 fraud types × 4 coverage types × 3 jurisdictions × seed variation = 500+ unique training episodes**
-
-| Fraud Type | Ground Truth | Key Signal |
-|-----------|-------------|------------|
-| `staged_accident` | `deny_claim` | Cost mismatch between damage and repair estimate |
-| `medical_inflation` | `deny_claim` | Procedure in bill ≠ procedure in discharge summary |
-| `identity_fraud` | `deny_claim` | Ghost claimant, policy opened 5 days before incident |
-| `coordinated_ring` | `escalate_to_human` | Shared broker across 3–5 simultaneous claims |
-| `phantom_provider` | `deny_claim` | Hospital not in IRDAI registry, invalid GST |
-
----
-
-## Reward Design
-
-### Training Reward (use for GRPO — simple scalar for stable gradients)
-
-```python
-def training_reward(decision, confidence, ground_truth, legitimate_flags, step_num, done):
-    r = -0.05                               # step penalty (efficiency)
-    if done:
-        r += 1.0 if correct else -0.5       # decision accuracy
-        r += 0.3 * min(legitimate_flags, 3) # fraud signal detection
-        r += 0.5 * calibration_matrix[(confidence, correct)]  # calibration bonus
-    return r
-```
-
-### Evaluation Reward (for demo and reporting only — do not use for GRPO)
-
-```python
-def eval_reward(episode):
-    return (0.35 * calibration_reward      # confidence accuracy
-          + 0.25 * escalation_reward       # appropriate uncertainty escalation
-          + 0.20 * evidence_quality        # grounded signal citations
-          + 0.10 * efficiency_score        # step efficiency
-          - 0.10 * gaming_penalty)         # anti-gaming deduction
-```
-
-### Anti-Gaming System
-
-```
-if LOW_rate > 70% across 10+ episodes:   penalty = (rate − 0.70) × 2.0
-if HIGH_rate > 80% across 10+ episodes:  penalty = (rate − 0.80) × 1.5
-```
-
----
-
-## Training Pipeline
-
-**Model:** `Qwen/Qwen2.5-0.5B-Instruct` — open-source, no OpenAI API
-**Algorithm:** HF TRL `GRPOTrainer` + Unsloth 4-bit QLoRA (Group Relative Policy Optimization — same as DeepSeek-R1)
-**Full run:** L4 GPU on HF Jobs — 5,000 episodes, 2,500 steps, 3 h 3 min
-**Quick run:** Free Colab T4 GPU — 100 episodes, ~15 min (see notebook)
-**WandB:** https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl — open the **5,000-episode** run named **`grpo-qwen0.5b-env-connected`** (~3 h on L4, Apr 2026) for the raw training curves. **Canonical plots for judges** are the **committed** [`docs/reward_curve.png`](docs/reward_curve.png) and [`docs/component_shift.png`](docs/component_shift.png) (axes labeled on the figure), backed by [`reports/training_summary.json`](reports/training_summary.json).
+### Reproduce the training
 
 ```bash
-# Reproduce the training run
 git clone https://github.com/AniketAslaliya/debateFloor.git && cd debateFloor
-
-# Use the canonical pinned requirements files (every dep verified to
-# import inside train_minimal.py and the env server).
-pip install -r requirements.txt          # env server deps (FastAPI, openenv-core, ...)
-pip install -r train/requirements.txt    # training deps (trl, unsloth, peft, wandb, ...)
-
-# Optional (Colab T4): swap the pinned unsloth for the colab-new wheel
-# pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"
-#
-# If you see: ModuleNotFoundError: No module named 'mergekit' when importing
-# GRPOTrainer — you skipped train/requirements.txt. Re-run: pip install -r train/requirements.txt
-# (mergekit is required by recent TRL for the GRPO import path.)
-
+pip install -r requirements.txt          # env server deps
+pip install -r train/requirements.txt    # training deps (trl, unsloth, peft, wandb)
 PYTHONPATH=. python train/train_minimal.py
 ```
 
-Or open the Colab notebook: [train/train_debatefloor.ipynb](https://github.com/AniketAslaliya/debateFloor/blob/main/train/train_debatefloor.ipynb)
-
-Artifacts generated after training:
-- `docs/reward_curve.png`
-- `docs/component_shift.png`
-- `reports/training_summary.json`
+Or open the [Colab notebook](https://colab.research.google.com/github/AniketAslaliya/debateFloor/blob/main/train/train_debatefloor.ipynb).
 
 ---
 
-## Architecture & Code Map
-
-**ClaimCourt** — after `git clone`, your working directory is `debateFloor/` (GitHub repo name; codename `debatefloor` in HF/WandB URLs).
+## Repo layout
 
 ```
 debateFloor/
-├── openenv.yaml                    ← OpenEnv spec manifest
-├── Dockerfile                      ← HF Space deployment
-├── requirements.txt
-│
-├── app/                            ← FastAPI server (OpenEnv contract)
-│   ├── main.py                     ← /reset /step /state /tasks /health /schema
-│   ├── environment.py              ← InsuranceClaimEnvironment + Court Panel
-│   ├── models.py                   ← Pydantic action/observation models
-│   └── tasks.py                    ← task definitions
-│
-├── server/                         ← ClaimCourt core
-│   ├── calibration_grader.py       ← 3×2 matrix + anti-gaming + training/eval reward
-│   └── claim_generator.py          ← procedural episode generator (500+ episodes)
-│
-├── train/
-│   ├── train_minimal.py            ← Pure TRL GRPOTrainer, T4 in 15 min
-│   └── train_debatefloor.ipynb     ← Colab notebook (dynamic wrapper)
-│
-├── BLOG.md                         ← writeup (root for visibility)
-│
-├── docs/
-│   ├── reward_curve.png            ← training reward curve (embedded above)
-│   └── component_shift.png         ← before/after component scores (embedded above)
-│
-└── reports/
-    ├── training_summary.json
-    └── component_shift_summary.json
+├── openenv.yaml              ← OpenEnv spec manifest (5 tasks, 3×2 matrix)
+├── Dockerfile                ← HF Space deployment
+├── BLOG.md                   ← Mini-blog (full writeup)
+├── app/                      ← FastAPI server: /reset /step /state /tasks /health /schema
+├── server/                   ← ClaimCourt core: calibration_grader.py, claim_generator.py
+├── train/                    ← train_minimal.py + Colab notebook
+├── docs/                     ← reward_curve.png, component_shift.png
+└── reports/                  ← training_summary.json, component_shift_summary.json
 ```
 
----
-
-## Quickstart
-
-### Run locally
-
-```bash
-git clone https://github.com/AniketAslaliya/debateFloor.git
-cd debateFloor
-pip install -r requirements.txt
-PYTHONPATH=. uvicorn app.main:app --host 0.0.0.0 --port 7860 --reload
-```
-
-### Run with Docker
-
-```bash
-docker build -t claimcourt .
-docker run -p 7860:7860 claimcourt
-```
-
----
-
-## API Reference
-
-All endpoints follow the OpenEnv REST contract:
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/reset` | Start new episode. Accepts `task_id`, `seed`, `session_id`. |
-| `POST` | `/step` | Submit action. Requires `session_id` and `action` body. |
-| `GET`  | `/state` | Current episode state. |
-| `GET`  | `/tasks` | Lists all tasks with objectives. |
-| `GET`  | `/schema` | JSON schema for action/observation/state. |
-| `GET`  | `/health` | Returns `{"status": "healthy", "active_sessions": N}`. |
-
-### Example Episode
-
-```python
-import requests
-
-BASE = "https://aniketasla-debatefloor.hf.space"
-
-r = requests.post(f"{BASE}/reset", json={"task_id": "contradictory_claim", "seed": 42})
-session_id = r.json()["session_id"]
-
-def step(action):
-    return requests.post(f"{BASE}/step", json={"action": action, "session_id": session_id}).json()
-
-step({"action_type": "validate_document", "parameters": {"doc_id": "DOC-001"}, "reasoning": "check bill"})
-step({"action_type": "flag_fraud_signal", "parameters": {"flag_id": "procedure_mismatch",
-      "evidence": "discharge says appendectomy, bill says cardiac bypass"}, "reasoning": "billing fraud"})
-
-resp = step({"action_type": "deny_claim", "confidence": "MED", "reason": "procedure mismatch confirmed"})
-print(f"Reward: {resp['reward']}")
-print(f"Calibration: {resp['observation']['reward_breakdown']['calibration_score']}")
-```
-
----
-
-## OpenEnv Spec Compliance
-
-| Requirement | Status |
-|-------------|--------|
-| `spec_version: 1` | ✅ |
-| OpenEnv `Environment` base class | ✅ |
-| `/reset`, `/step`, `/state`, `/tasks`, `/health`, `/schema` | ✅ |
-| `supports_concurrent_sessions: true` | ✅ |
-| `max_concurrent_envs: 64` | ✅ |
-| `confidence_required: true` | ✅ |
-| `procedural_generation: true` | ✅ |
-| `episode_pool_size: 500` | ✅ |
-| Reward in `[0.0, 1.0]` | ✅ |
-| Docker deployment | ✅ |
+OpenEnv compliance: `spec_version: 1`, OpenEnv `Environment` base class, `/reset` `/step` `/state` `/tasks` `/health` `/schema`, `supports_concurrent_sessions: true`, `max_concurrent_envs: 64`, reward in `[0.0, 1.0]`, Docker deployment — full manifest in [`openenv.yaml`](openenv.yaml).
 
 ---
 
 ## Team
 
 - **Aniket Aslaliya** — Environment Core, Claim Generator, Calibration Grader, UI
-- **Mitali Mehta** — Domain Knowledge (Fraud types, IRDAI regulations), Grader Design
+- **Mitali Mehta** — Domain Knowledge (fraud types, IRDAI regulations), Grader Design
 - **Aditya Sharma** — Training Pipeline, GRPO Notebook, WandB Integration
 
 ---
 
-## Citation
+## References
 
-```bibtex
-@article{coca2025,
-  title={Co-optimizing Confidence and Accuracy via Segment-Specific GRPO Rewards},
-  author={...},
-  journal={arXiv:2603.05881},
-  year={2025}
-}
-```
-
-**Related:**
-- CAPO paper (April 2026) — GRPO induces overconfidence; ClaimCourt is the fix
-- OpenEnv: [github.com/meta-pytorch/OpenEnv](https://github.com/meta-pytorch/OpenEnv)
-- TRL GRPOTrainer: [huggingface.co/docs/trl/grpo_trainer](https://huggingface.co/docs/trl/grpo_trainer)
+- **CAPO** — Confidence-Aware Policy Optimization ([arXiv:2604.12632](https://arxiv.org/abs/2604.12632), 2026) — documents the GRPO overconfidence pathology ClaimCourt fixes
+- **DCPO** — Distribution-Calibrated Policy Optimization ([arXiv:2603.09117](https://arxiv.org/abs/2603.09117), 2026) — proves calibration improvement is achievable as a training objective
+- **CoCA** — Co-optimising Confidence and Accuracy via segment-specific GRPO rewards ([arXiv:2603.05881](https://arxiv.org/abs/2603.05881))
+- **OpenEnv** — [github.com/meta-pytorch/OpenEnv](https://github.com/meta-pytorch/OpenEnv)
+- **TRL `GRPOTrainer`** — [huggingface.co/docs/trl/grpo_trainer](https://huggingface.co/docs/trl/grpo_trainer)

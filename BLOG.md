@@ -281,10 +281,11 @@ Supports 64 concurrent sessions — required for GRPO parallel rollouts.
 
 ## Try It
 
-- 🤗 **Live environment:** [huggingface.co/spaces/AniketAsla/debatefloor](https://huggingface.co/spaces/AniketAsla/debatefloor)
+- 📺 **2-min demo video (YouTube):** [youtube.com/watch?v=Uk8sSLywEpE](https://www.youtube.com/watch?v=Uk8sSLywEpE)
+- 🤗 **Live environment (HF Space):** [huggingface.co/spaces/AniketAsla/debatefloor](https://huggingface.co/spaces/AniketAsla/debatefloor)
 - 📓 **Training notebook (Colab):** [train/train_debatefloor.ipynb](https://github.com/AniketAslaliya/debateFloor/blob/main/train/train_debatefloor.ipynb)
 - 💻 **Full code:** [github.com/AniketAslaliya/debateFloor](https://github.com/AniketAslaliya/debateFloor)
-- 📄 **Research basis:** [CoCA arXiv:2603.05881](https://arxiv.org/abs/2603.05881)
+- 📄 **Research basis:** [CAPO arXiv:2604.12632](https://arxiv.org/abs/2604.12632) · [DCPO arXiv:2603.09117](https://arxiv.org/abs/2603.09117) · [CoCA arXiv:2603.05881](https://arxiv.org/abs/2603.05881)
 
 ---
 
