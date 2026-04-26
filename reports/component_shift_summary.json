@@ -3,18 +3,21 @@
     "Fraud detection": 0.0,
     "Decision accuracy": 0.0,
     "Evidence quality": 0.3333333333333333,
-    "Calibration": -0.8
+    "Calibration": 0.0,
+    "Reasoning quality": 0.8333333333333334
   },
   "after": {
-    "Fraud detection": 0.0,
-    "Decision accuracy": 0.0,
+    "Fraud detection": 0.3333333333333333,
+    "Decision accuracy": 1.0,
     "Evidence quality": 0.3333333333333333,
-    "Calibration": -0.2
+    "Calibration": 1.0,
+    "Reasoning quality": 0.7916666666666666
   },
   "delta": {
-    "Fraud detection": 0.0,
-    "Decision accuracy": 0.0,
+    "Fraud detection": 0.3333,
+    "Decision accuracy": 1.0,
     "Evidence quality": 0.0,
-    "Calibration": 0.6
+    "Calibration": 1.0,
+    "Reasoning quality": -0.0417
   }
 }
