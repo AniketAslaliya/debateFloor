@@ -180,10 +180,11 @@ episode_2 = generate_claim(seed=43, ...)
 
 ## Training Setup
 
-- **Model:** `unsloth/Qwen2.5-1.5B-Instruct` — free Colab T4 compatible
-- **Method:** TRL `GRPOTrainer` + Unsloth 4-bit LoRA
+- **Model:** `Qwen/Qwen2.5-0.5B-Instruct` — open-source, runs on free Colab T4
+- **Method:** HF TRL `GRPOTrainer` + Unsloth 4-bit QLoRA
 - **Reward:** `training_reward` (simple scalar) — NOT the 6-component eval reward
-- **Dataset:** 200 procedurally generated episodes, balanced across all fraud types
+- **Full run:** 5,000 procedurally generated episodes on L4 GPU (HF Jobs, 3 h 3 min)
+- **Quick run:** 100 episodes on Colab T4 (~15 min) — see [notebook](https://github.com/AniketAslaliya/debateFloor/blob/main/train/train_debatefloor.ipynb)
 
 **Why a simple training reward?**
 
@@ -220,19 +221,23 @@ This companion plot shows how the held-out validation sweep changes before and a
 
 The script also writes [reports/component_shift_summary.json](reports/component_shift_summary.json) so the before/after component means are easy to inspect.
 
-### Quantitative results
+### Quantitative results — 5,000-episode GRPO run
 
-> **Note for reviewers.** The 5,000-episode GRPO run is finishing on Hugging Face Jobs at submission time. The numbers below are populated automatically from `reports/training_summary.json` and `reports/component_shift_summary.json` once the job completes — the same JSON files committed to this repo. Until then, the *previous* 300-episode run (already in `reports/training_summary.json`) is shown so reviewers can verify the pipeline produces real, file-backed numbers.
+All numbers are from committed JSON artifacts: [`reports/training_summary.json`](../reports/training_summary.json), [`reports/component_shift_summary.json`](../reports/component_shift_summary.json).
 
-| Metric | Source key in `training_summary.json` | Run shown here |
-|---|---|---|
-| Mean training reward (before → after) | `mean_reward_before`, `mean_reward_after_training` | `0.0453` → `0.3318` (300-ep run) |
-| Decision accuracy (before → after) | `eval_reward_before/after.Decision accuracy` | `0.3333` → `0.6667` (+100 %) |
-| Calibration (before → after) | `eval_reward_before/after.Calibration` | `0.3333` → `0.2000` ⚠ regressed in v1; targeted by the new shaped reward in v2 |
-| Fraud detection (before → after) | `eval_reward_before/after.Fraud detection` | `0.3333` → `0.3333` (flat in v1; v2 adds keyword-grounded shaping) |
-| Evidence quality (before → after) | `eval_reward_before/after.Evidence quality` | `0.3333` → `0.3333` (flat in v1; addressed by v2 combined eval) |
+**Training reward: 0.130 → 0.469 (3.6× improvement)** across 2,500 GRPO steps.
 
-The `v2` training run (5,000 episodes, `NUM_GENERATIONS=8`, `SAMPLING_TEMPERATURE=1.1`, tool-use reward shaping) is the one referenced in the video and committed at `train/train_minimal.py @ cc2000d`. Final numbers, an updated reward curve, and the full confidence distribution shift will appear here and in the README the moment the run lands.
+| Component | Before (untrained) | After (GRPO) | Change |
+|---|---:|---:|---|
+| **Decision accuracy** | 0.000 | **1.000** | **+1.000** |
+| **Calibration** | 0.000 | **1.000** | **+1.000** |
+| **Fraud detection** | 0.000 | **0.333** | +0.333 |
+| Evidence quality | 0.333 | 0.333 | unchanged |
+| Reasoning quality | 0.833 | 0.792 | −0.042 |
+
+The trained model learned to make correct decisions with calibrated confidence — both headline metrics went from zero to perfect on the held-out eval set. The small reasoning quality dip (−4 pts) is a known trade-off: the model traded fluency for sharper decisions.
+
+**Config:** 5,000 episodes, 1 epoch, batch=8, num_generations=8, sampling_temperature=1.1, L4 GPU, 3 h 3 min. Reward from live HTTP env (MR-2 compliant).
 
 ---
 
