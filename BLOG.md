@@ -209,21 +209,21 @@ This produces a stable learning curve. The complex eval reward runs separately f
 
 ### Training Signals (WandB + held-out eval)
 
-The GRPO training run tracks both the reward curve and a held-out component-shift summary. Live metrics go to the [WandB project workspace](https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl) (entity `aniketaslaliya-lnmiit` — open the latest run named `grpo-qwen0.5b-env-connected`). **Canonical plots for judges** are always the committed files [reward_curve.svg](reward_curve.svg) and [component_shift.svg](component_shift.svg), backed by [reports/training_summary.json](../reports/training_summary.json).
+The GRPO training run tracks both the reward curve and a held-out component-shift summary. Live metrics go to the [WandB project workspace](https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl) (entity `aniketaslaliya-lnmiit` — open the latest run named `grpo-qwen0.5b-env-connected`). **Canonical plots for judges** are always the committed files [docs/reward_curve.svg](docs/reward_curve.svg) and [docs/component_shift.svg](docs/component_shift.svg), backed by [reports/training_summary.json](reports/training_summary.json).
 
-![WandB reward curve - training reward rises as calibration improves](reward_curve.svg)
+![WandB reward curve - training reward rises as calibration improves](docs/reward_curve.svg)
 
 ### Component score shift
 
-![Component score shift before vs after training](component_shift.svg)
+![Component score shift before vs after training](docs/component_shift.svg)
 
 This companion plot shows how the held-out validation sweep changes before and after training across fraud detection, decision accuracy, evidence grounding, and calibration.
 
-The script also writes [reports/component_shift_summary.json](../reports/component_shift_summary.json) so the before/after component means are easy to inspect.
+The script also writes [reports/component_shift_summary.json](reports/component_shift_summary.json) so the before/after component means are easy to inspect.
 
 ### Quantitative results — 5,000-episode GRPO run
 
-All numbers are from committed JSON artifacts: [`reports/training_summary.json`](../reports/training_summary.json), [`reports/component_shift_summary.json`](../reports/component_shift_summary.json).
+All numbers are from committed JSON artifacts: [`reports/training_summary.json`](reports/training_summary.json), [`reports/component_shift_summary.json`](reports/component_shift_summary.json).
 
 Three headline numbers tell the story:
 

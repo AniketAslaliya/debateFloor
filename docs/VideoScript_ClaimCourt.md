@@ -139,7 +139,7 @@ Click **Run Episode** once on **clean claim** so the audience sees the flow star
 
 - **Try it:** https://huggingface.co/spaces/AniketAsla/debatefloor  
 - **Code:** https://github.com/AniketAslaliya/debateFloor  
-- **Mini-blog (markdown):** https://huggingface.co/spaces/AniketAsla/debatefloor/blob/main/docs/HFBlogPost.md  
+- **Mini-blog (markdown):** https://huggingface.co/spaces/AniketAsla/debatefloor/blob/main/BLOG.md  
 - **Weights & Biases (all training runs):** https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl  
 
 ---
