@@ -1,5 +1,5 @@
 ---
-title: DebateFloor — Insurance Calibration RL Environment
+title: ClaimCourt — Insurance Calibration RL Environment
 emoji: ⚖️
 colorFrom: indigo
 colorTo: purple
@@ -8,7 +8,9 @@ app_port: 7860
 pinned: true
 ---
 
-# DebateFloor — Insurance Calibration RL Environment
+# ClaimCourt — Insurance Calibration RL Environment
+
+> *Codename in the repo & URLs: `debatefloor` — all GitHub, Hugging Face Space, and model-repo slugs use the original codename so existing links continue to resolve. The product is **ClaimCourt** everywhere it faces a human reader.*
 
 [![Tests](https://img.shields.io/badge/Tests-Passing-brightgreen)](https://github.com/AniketAslaliya/debateFloor)
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-Hugging%20Face-orange)](https://huggingface.co/spaces/AniketAsla/debatefloor)
@@ -23,11 +25,11 @@ pinned: true
 
 ## Problem Statement
 
-LLMs deployed in high-stakes domains suffer from a well-documented failure mode: **overconfidence**. A model that approves or denies an insurance claim with 100% certainty — but is wrong — causes real harm. The [CAPO paper (April 2026)](https://arxiv.org/abs/2603.05881) shows GRPO training actively induces this overconfidence.
+LLMs deployed in high-stakes domains suffer from a well-documented failure mode: **overconfidence**. A model that approves or denies an insurance claim with 100 % certainty — but is wrong — causes real harm. The [CAPO paper (arXiv:2604.12632, 2026)](https://arxiv.org/abs/2604.12632) measures up to a 15 % AUC drop in standard GRPO training, and [DCPO (arXiv:2603.09117, 2026)](https://arxiv.org/abs/2603.09117) shows a 71 % Expected-Calibration-Error reduction is achievable when calibration is treated as a first-class objective.
 
-**DebateFloor is the direct fix.** It trains LLMs to declare *calibrated* confidence before every decision, using a reward surface that penalises overconfident wrong answers more severely than uncertain ones. This teaches models **when** to be confident, not just what to say.
+**ClaimCourt is the direct fix.** It trains LLMs to declare *calibrated* confidence before every decision, using a reward surface that penalises overconfident wrong answers more severely than uncertain ones. This teaches models **when** to be confident, not just what to say.
 
-Insurance fraud costs India **₹30,000+ crore annually** (IRDAI 2023). Deploying uncalibrated AI in this domain is not just inaccurate — it is dangerous.
+Indian health-insurance fraud, waste & abuse drains **₹8,000–10,000 crore every year** ([BCG × Medi Assist, Nov 2025](https://www.business-standard.com/industry/news/insurance-fwa-drains-rs10000cr-each-year-bcg-mediassist-report-125112101199_1.html)) — about 8 % of all claim payouts. From April 2026, the [IRDAI Insurance Fraud Monitoring Framework Guidelines, 2025](https://irdai.gov.in/) make every insurer legally responsible for detecting it. AI is the obvious tool, but recent research ([CAPO, arXiv:2604.12632](https://arxiv.org/abs/2604.12632); [DCPO, arXiv:2603.09117](https://arxiv.org/abs/2603.09117)) proves standard GRPO training makes models *more* overconfident as they get more accurate — exactly the wrong direction for high-stakes claims work.
 
 ---
 
@@ -223,7 +225,7 @@ INVESTIGATOR
 
 ## Why This Is the Right RL Task
 
-DebateFloor satisfies all three properties of a well-designed RL task:
+ClaimCourt satisfies all three properties of a well-designed RL task:
 
 - **Step-by-step:** The agent validates documents, queries history, flags signals, and debates before committing. Each step changes the information state.
 - **Programmatically verifiable:** Ground truth is embedded in every generated episode (`staged_accident → deny_claim`). No human labeller needed.
@@ -245,7 +247,7 @@ DebateFloor satisfies all three properties of a well-designed RL task:
 
 ## Procedural Generation
 
-A benchmark has fixed episodes. DebateFloor generates them procedurally:
+A benchmark has fixed episodes. ClaimCourt generates them procedurally:
 
 ```python
 from server.claim_generator import generate_claim
@@ -350,7 +352,7 @@ debatefloor/
 │   ├── models.py                   ← Pydantic action/observation models
 │   └── tasks.py                    ← task definitions
 │
-├── server/                         ← DebateFloor core
+├── server/                         ← ClaimCourt core
 │   ├── calibration_grader.py       ← 3×2 matrix + anti-gaming + training/eval reward
 │   └── claim_generator.py          ← procedural episode generator (500+ episodes)
 │
@@ -464,6 +466,6 @@ print(f"Calibration: {resp['observation']['reward_breakdown']['calibration_score
 ```
 
 **Related:**
-- CAPO paper (April 2026) — GRPO induces overconfidence; DebateFloor is the fix
+- CAPO paper (April 2026) — GRPO induces overconfidence; ClaimCourt is the fix
 - OpenEnv: [github.com/meta-pytorch/OpenEnv](https://github.com/meta-pytorch/OpenEnv)
 - TRL GRPOTrainer: [huggingface.co/docs/trl/grpo_trainer](https://huggingface.co/docs/trl/grpo_trainer)

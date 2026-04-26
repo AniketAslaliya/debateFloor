@@ -5,7 +5,7 @@ runtime: fastapi
 app: app.main:app
 port: 7860
 
-# DebateFloor additions — required for GRPO parallel rollouts
+# ClaimCourt (codename: DebateFloor) additions — required for GRPO parallel rollouts
 supports_concurrent_sessions: true
 max_concurrent_envs: 64
 confidence_required: true
@@ -13,7 +13,7 @@ procedural_generation: true
 episode_pool_size: 500
 
 metadata:
-  title: DebateFloor — Insurance Calibration RL Environment
+  title: ClaimCourt — Insurance Calibration RL Environment (codename DebateFloor)
   description: >-
     An OpenEnv training environment where agents must make insurance claim decisions
     AND declare calibrated confidence (HIGH/MED/LOW) simultaneously.

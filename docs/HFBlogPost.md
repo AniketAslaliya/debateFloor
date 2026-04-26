@@ -1,31 +1,31 @@
 ---
-title: "DebateFloor: Training Insurance AI That Knows When It Doesn't Know"
-thumbnail: /blog/assets/debatefloor/thumbnail.png
+title: "ClaimCourt: Training Insurance AI That Knows When It Doesn't Know"
+thumbnail: /blog/assets/claimcourt/thumbnail.png
 authors:
   - user: AniketAsla
   - user: mehtamitali284
   - user: sharmaaditya2965
 ---
 
-# DebateFloor: Training Insurance AI That Knows When It Doesn't Know
+# ClaimCourt: Training Insurance AI That Knows When It Doesn't Know
 
-*Meta PyTorch × Scaler Hackathon Grand Finale, April 2026*
+*Meta PyTorch × Scaler Hackathon Grand Finale, April 2026 — repository codename `debatefloor`*
 
 ---
 
 ## The Problem in One Number
 
-Insurance AI systems that start at 87% accuracy degrade to 40% within 12 months of production deployment — not because the model gets less accurate, but because it **makes wrong decisions with identical confidence to right ones**. It has no way to say *I don't know*.
+Indian health insurance loses **₹8,000–10,000 crore every year** to fraud, waste and abuse — roughly 8 % of all claim payouts ([BCG × Medi Assist, Nov 2025](https://www.business-standard.com/industry/news/insurance-fwa-drains-rs10000cr-each-year-bcg-mediassist-report-125112101199_1.html)). And from **April 2026**, IRDAI's new [Insurance Fraud Monitoring Framework Guidelines, 2025](https://irdai.gov.in/) make every insurer legally accountable for catching it. AI is the obvious answer.
 
-A paper published this month (CAPO, April 2026) proved that standard GRPO training makes this worse: as models get more accurate on training data, calibration progressively deteriorates. The model becomes more confident and less trustworthy simultaneously.
+But the [CAPO paper (arXiv:2604.12632, 2026)](https://arxiv.org/abs/2604.12632) just proved the leading reinforcement-learning method for LLMs — GRPO — actively induces *overconfidence*: incorrect answers get higher probability than correct ones, with AUC dropping by up to 15 % during training. [DCPO (arXiv:2603.09117, 2026)](https://arxiv.org/abs/2603.09117) showed a 71 % drop in Expected Calibration Error is achievable when calibration is treated as a first-class objective.
 
-Nobody had built a training environment specifically designed to fix this. So we did.
+Nobody had built a training *environment* specifically designed for that — one where the reward forces the agent to learn *when to be uncertain*, not just what to say. So we did.
 
 ---
 
-## What DebateFloor Does
+## What ClaimCourt Does
 
-**DebateFloor** is an [OpenEnv](https://github.com/meta-pytorch/OpenEnv)-compliant RL training environment where an LLM agent must investigate insurance claims **and** declare calibrated confidence before every terminal decision.
+**ClaimCourt** is an [OpenEnv](https://github.com/meta-pytorch/OpenEnv)-compliant RL training environment where an LLM agent must investigate insurance claims **and** declare calibrated confidence before every terminal decision.
 
 The agent cannot just say `deny_claim`. It must say `deny_claim` + `MED` (medium confidence), and the reward is determined by whether the confidence matched reality.
 
@@ -149,7 +149,7 @@ The agent must call `query_historical_data` or `query_linked_claim` to find the 
 
 ## Procedural Generation: 500+ Unique Training Episodes
 
-A benchmark has fixed episodes — the model can memorise answers. DebateFloor generates episodes procedurally:
+A benchmark has fixed episodes — the model can memorise answers. ClaimCourt generates episodes procedurally:
 
 ```python
 from server.claim_generator import generate_claim
@@ -220,19 +220,19 @@ This companion plot shows how the held-out validation sweep changes before and a
 
 The script also writes [reports/component_shift_summary.json](reports/component_shift_summary.json) so the before/after component means are easy to inspect.
 
-### Confidence distribution shift (before → after GRPO training)
+### Quantitative results
 
-| Confidence | Before Training | After Training |
+> **Note for reviewers.** The 5,000-episode GRPO run is finishing on Hugging Face Jobs at submission time. The numbers below are populated automatically from `reports/training_summary.json` and `reports/component_shift_summary.json` once the job completes — the same JSON files committed to this repo. Until then, the *previous* 300-episode run (already in `reports/training_summary.json`) is shown so reviewers can verify the pipeline produces real, file-backed numbers.
+
+| Metric | Source key in `training_summary.json` | Run shown here |
 |---|---|---|
-| HIGH | ~82% | ~44% |
-| MED | ~12% | ~36% |
-| LOW | ~6% | ~20% |
+| Mean training reward (before → after) | `mean_reward_before`, `mean_reward_after_training` | `0.0453` → `0.3318` (300-ep run) |
+| Decision accuracy (before → after) | `eval_reward_before/after.Decision accuracy` | `0.3333` → `0.6667` (+100 %) |
+| Calibration (before → after) | `eval_reward_before/after.Calibration` | `0.3333` → `0.2000` ⚠ regressed in v1; targeted by the new shaped reward in v2 |
+| Fraud detection (before → after) | `eval_reward_before/after.Fraud detection` | `0.3333` → `0.3333` (flat in v1; v2 adds keyword-grounded shaping) |
+| Evidence quality (before → after) | `eval_reward_before/after.Evidence quality` | `0.3333` → `0.3333` (flat in v1; addressed by v2 combined eval) |
 
-The model learns to reserve HIGH confidence for easy cases and express genuine uncertainty on hard cases — without being coached which case is which.
-
-### Task 3 behaviour shift
-- **Before:** `approve_claim` with HIGH confidence 71% of the time (wrong decision, worst calibration penalty)
-- **After:** `escalate_to_human` with LOW confidence 68% of the time (correct decision, correct calibration)
+The `v2` training run (5,000 episodes, `NUM_GENERATIONS=8`, `SAMPLING_TEMPERATURE=1.1`, tool-use reward shaping) is the one referenced in the video and committed at `train/train_minimal.py @ cc2000d`. Final numbers, an updated reward curve, and the full confidence distribution shift will appear here and in the README the moment the run lands.
 
 ---
 
@@ -281,9 +281,9 @@ Supports 64 concurrent sessions — required for GRPO parallel rollouts.
 
 ## Why This Matters Beyond Insurance
 
-Calibration failure is universal. Any high-stakes domain where an AI must know the limits of its own knowledge — medical diagnosis, legal analysis, financial advice, autonomous systems — has this problem. DebateFloor is a blueprint for training epistemic humility into LLMs at the reward level, not the prompt level.
+Calibration failure is universal. Any high-stakes domain where an AI must know the limits of its own knowledge — medical diagnosis, legal analysis, financial advice, autonomous systems — has this problem. ClaimCourt is a blueprint for training epistemic humility into LLMs at the reward level, not the prompt level.
 
-The CAPO paper showed GRPO training makes models overconfident. DebateFloor is the direct fix: a reward surface where overconfidence costs more than being wrong.
+The CAPO paper showed GRPO training makes models overconfident. ClaimCourt is the direct fix: a reward surface where overconfidence costs more than being wrong.
 
 ---
 
