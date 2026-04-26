@@ -110,7 +110,7 @@ Click **Run Episode** once on **clean claim** so the audience sees the flow star
 
 ## ACT 3 — “Yes, we actually trained it” (~20 s) — keep light
 
-**Visual:** Quick montage: **WandB** project page (reward climbing) **or** `docs/reward_curve.svg` in GitHub; optional 1 clip of HF Jobs log line.
+**Visual:** Quick montage: **WandB** project page (reward climbing) **or** `docs/reward_curve.png` in GitHub; optional 1 clip of HF Jobs log line.
 
 **Say (one breath, then slow on numbers):**
 

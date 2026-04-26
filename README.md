@@ -55,14 +55,14 @@ Indian health-insurance fraud, waste & abuse drains **₹8,000–10,000 crore ev
 |---|---|---|
 | **Environment Innovation** | 40% | The 3×2 calibration matrix (`README` §_The Core Innovation_) is a novel reward shape — it does not exist in any prior insurance-RL work and directly attacks the calibration-degradation problem documented in the CAPO paper (April 2026). The **Court Panel** mechanic forces the agent to expose its reasoning to a programmatic adversary, which is also unexplored territory for RL on LLMs. |
 | **Storytelling & Presentation** | 30% | [`BLOG.md`](BLOG.md) — full mini-blog motivating the problem, walking the reader through one episode end-to-end, and showing the training delta in plain language. README is structured for a 3-minute read with the headline number first. |
-| **Showing Improvement in Rewards** | 20% | [`docs/reward_curve.svg`](docs/reward_curve.svg) — 2,500-step reward curve from a 5,000-episode GRPO run (0.130 → 0.469, 3.6×). [`reports/training_summary.json`](reports/training_summary.json) — raw metrics including full log history. [`reports/component_shift_summary.json`](reports/component_shift_summary.json) — before/after on held-out eval (Decision accuracy 0 → 1.0, Calibration 0 → 1.0). WandB run linked above for reproducibility. |
+| **Showing Improvement in Rewards** | 20% | [`docs/reward_curve.png`](docs/reward_curve.png) — 2,500-step reward curve from a 5,000-episode GRPO run (0.130 → 0.469, 3.6×). [`reports/training_summary.json`](reports/training_summary.json) — raw metrics including full log history. [`reports/component_shift_summary.json`](reports/component_shift_summary.json) — before/after on held-out eval (Decision accuracy 0 → 1.0, Calibration 0 → 1.0). WandB run linked above for reproducibility. |
 | **Reward & Training Pipeline** | 10% | [`app/rubrics.py`](app/rubrics.py) — composable rubric (decision × confidence × evidence × format), not monolithic. [`server/calibration_grader.py`](server/calibration_grader.py) — 3×2 calibration matrix. [`train/train_minimal.py`](train/train_minimal.py) — TRL GRPO loop that calls the live HTTP env over `requests.Session` (MR-2 compliant, no static dataset). |
 
 ### Minimum-requirement checklist (for judges)
 
 - [x] Built on **OpenEnv `0.2.3`** (latest at submission time) — see `requirements.txt`
 - [x] Working **TRL training script in a Colab notebook** — [`train/train_debatefloor.ipynb`](train/train_debatefloor.ipynb)
-- [x] **Real reward + loss plots** committed to the repo — [`docs/reward_curve.svg`](docs/reward_curve.svg), [`docs/component_shift.svg`](docs/component_shift.svg)
+- [x] **Real reward + loss plots** committed to the repo — [`docs/reward_curve.png`](docs/reward_curve.png), [`docs/component_shift.png`](docs/component_shift.png)
 - [x] **Mini-blog** at [`BLOG.md`](BLOG.md)
 - [x] **OpenEnv-compliant env hosted on HF Spaces** — https://huggingface.co/spaces/AniketAsla/debatefloor
 - [x] **README** motivates the problem, explains the env, and shows results (this file)
@@ -87,7 +87,7 @@ hand-edits, no rounded-up estimates. Source:
 | GRPO steps | 2,500 |
 | Batch / Generations | 8 / 8 |
 | Hardware | L4 GPU (HF Jobs), 3 h 3 min |
-| WandB | [Project workspace](https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl) — open the **latest** run named `grpo-qwen0.5b-env-connected` (5K HF Job, Apr 2026). **Canonical curves:** [`docs/reward_curve.svg`](docs/reward_curve.svg) + [`reports/training_summary.json`](reports/training_summary.json) (always match the committed training). |
+| WandB | [Project workspace](https://wandb.ai/aniketaslaliya-lnmiit/debatefloor-insurance-rl) — open the **latest** run named `grpo-qwen0.5b-env-connected` (5K HF Job, Apr 2026). **Canonical curves:** [`docs/reward_curve.png`](docs/reward_curve.png) + [`reports/training_summary.json`](reports/training_summary.json) (always match the committed training). |
 
 ### Headline result
 
@@ -116,12 +116,12 @@ decision-making.
 
 ### Training Plots
 
-![Reward Curve](docs/reward_curve.svg)
+![Reward Curve](docs/reward_curve.png)
 *Mean training reward across 2,500 GRPO steps (5,000 episodes, 1 epoch).
 Reward climbs from 0.130 to 0.469 — a 3.6× improvement. Source:
 [`reports/training_summary.json`](reports/training_summary.json).*
 
-![Component Shift](docs/component_shift.svg)
+![Component Shift](docs/component_shift.png)
 *Before vs after on held-out eval: Decision accuracy 0 → 1.0,
 Calibration 0 → 1.0, Fraud detection 0 → 0.33. Source:
 [`reports/component_shift_summary.json`](reports/component_shift_summary.json).*
@@ -335,8 +335,8 @@ PYTHONPATH=. python train/train_minimal.py
 Or open the Colab notebook: [train/train_debatefloor.ipynb](https://github.com/AniketAslaliya/debateFloor/blob/main/train/train_debatefloor.ipynb)
 
 Artifacts generated after training:
-- `docs/reward_curve.svg`
-- `docs/component_shift.svg`
+- `docs/reward_curve.png`
+- `docs/component_shift.png`
 - `reports/training_summary.json`
 
 ---
@@ -368,8 +368,8 @@ debateFloor/
 ├── BLOG.md                         ← writeup (root for visibility)
 │
 ├── docs/
-│   ├── reward_curve.svg            ← training reward curve (embedded above)
-│   └── component_shift.svg         ← before/after component scores (embedded above)
+│   ├── reward_curve.png            ← training reward curve (embedded above)
+│   └── component_shift.png         ← before/after component scores (embedded above)
 │
 └── reports/
     ├── training_summary.json
